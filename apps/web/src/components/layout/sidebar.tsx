@@ -43,6 +43,7 @@ const NAV_ITEMS = [
   { label: "Calls", href: "/calls", icon: "Phone", roles: ["AE", "SA", "MANAGER"] },
   { label: "Analyze", href: "/analyze", icon: "AudioWaveform", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
   { label: "Observations", href: "/observations", icon: "Sparkles", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
+  { label: "Intelligence", href: "/intelligence", icon: "BarChart3", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Team", href: "/team", icon: "UsersRound", roles: ["MANAGER"] },
   { label: "Analytics", href: "/analytics", icon: "BarChart3", roles: ["AE", "MANAGER"] },
   { label: "Agent Config", href: "/agent-config", icon: "Bot", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },

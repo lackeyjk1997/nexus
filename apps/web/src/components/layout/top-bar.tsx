@@ -1,17 +1,18 @@
 "use client";
 
 import { Bell, ChevronDown, User, X, Undo2, Clock } from "lucide-react";
-import { usePersona } from "@/components/providers";
+import { usePersona, type TeamMemberInfo } from "@/components/providers";
 import { useState, useRef, useEffect } from "react";
 import type { Role } from "@nexus/shared";
 import { cn } from "@/lib/utils";
 
-const ROLE_LABELS: Record<Role, string> = {
+const ROLE_LABELS: Record<string, string> = {
   AE: "Account Executive",
   BDR: "Business Development Rep",
   SA: "Solutions Architect",
   CSM: "Customer Success Manager",
   MANAGER: "Sales Manager",
+  SUPPORT: "Support Function",
 };
 
 const VERTICAL_SHORT: Record<string, string> = {
@@ -126,45 +127,23 @@ export function TopBar() {
                           </p>
                         </div>
                         {roleGroups[r]!.map((user) => (
-                          <button
-                            key={user.id}
-                            onClick={() => {
-                              setCurrentUser(user);
-                              setUserOpen(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center justify-between",
-                              currentUser?.id === user.id &&
-                                "bg-primary-light text-primary"
-                            )}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="text-[10px] font-medium text-primary">
-                                  {user.name
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">
-                                  {user.name}
-                                </p>
-                                {user.verticalSpecialization !== "general" && (
-                                  <p className="text-[10px] text-muted-foreground">
-                                    {user.verticalSpecialization.replace("_", " ")}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                            {currentUser?.id === user.id && (
-                              <div className="h-2 w-2 rounded-full bg-primary" />
-                            )}
-                          </button>
+                          <UserButton key={user.id} user={user} currentUser={currentUser} setCurrentUser={setCurrentUser} setUserOpen={setUserOpen} />
                         ))}
                       </div>
                     )
+                )}
+                {/* Support Functions */}
+                {roleGroups["SUPPORT"] && roleGroups["SUPPORT"].length > 0 && (
+                  <div>
+                    <div className="px-3 pt-3 pb-1 border-t border-border mt-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Support Functions
+                      </p>
+                    </div>
+                    {roleGroups["SUPPORT"]!.map((user) => (
+                      <UserButton key={user.id} user={user} currentUser={currentUser} setCurrentUser={setCurrentUser} setUserOpen={setUserOpen} />
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -282,5 +261,47 @@ export function TopBar() {
         </div>
       )}
     </>
+  );
+}
+
+function UserButton({ user, currentUser, setCurrentUser, setUserOpen }: {
+  user: TeamMemberInfo;
+  currentUser: TeamMemberInfo | null;
+  setCurrentUser: (u: TeamMemberInfo) => void;
+  setUserOpen: (v: boolean) => void;
+}) {
+  const FUNCTION_LABELS: Record<string, string> = {
+    enablement: "Enablement",
+    product_marketing: "Product Marketing",
+    deal_desk: "Deal Desk",
+  };
+
+  return (
+    <button
+      onClick={() => { setCurrentUser(user); setUserOpen(false); }}
+      className={cn(
+        "w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center justify-between",
+        currentUser?.id === user.id && "bg-primary-light text-primary"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="text-[10px] font-medium text-primary">
+            {user.name.split(" ").map((n) => n[0]).join("")}
+          </span>
+        </div>
+        <div>
+          <p className="font-medium text-sm">{user.name}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {(user.role as string) === "SUPPORT"
+              ? FUNCTION_LABELS[user.verticalSpecialization] || user.verticalSpecialization
+              : user.verticalSpecialization !== "general"
+                ? user.verticalSpecialization.replace("_", " ")
+                : ""}
+          </p>
+        </div>
+      </div>
+      {currentUser?.id === user.id && <div className="h-2 w-2 rounded-full bg-primary" />}
+    </button>
   );
 }

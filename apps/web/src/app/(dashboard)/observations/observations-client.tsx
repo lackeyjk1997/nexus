@@ -14,8 +14,9 @@ import {
   Zap,
   Clock,
   Check,
+  DollarSign,
 } from "lucide-react";
-import { cn, getVerticalColor } from "@/lib/utils";
+import { cn, getVerticalColor, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
 
 type Observation = {
@@ -27,6 +28,9 @@ type Observation = {
   aiGiveback: unknown;
   clusterId: string | null;
   lifecycleEvents: unknown;
+  followUpQuestion: string | null;
+  followUpResponse: string | null;
+  arrImpact: unknown;
   createdAt: Date;
   observerName: string | null;
   observerRole: string | null;
@@ -45,6 +49,8 @@ type Cluster = {
   resolutionStatus: string | null;
   resolutionNotes: string | null;
   effectivenessScore: number | null;
+  arrImpactTotal: string | null;
+  unstructuredQuotes: unknown;
   pipelineImpact: unknown;
   firstObserved: Date | null;
   lastObserved: Date | null;
@@ -262,6 +268,35 @@ function MyObservationsTab({ observations }: { observations: Observation[] }) {
                   </div>
                 )}
 
+                {/* Follow-up Q&A */}
+                {obs.followUpQuestion && (
+                  <div className="space-y-2">
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Follow-up</p>
+                      <p className="text-sm text-foreground">{obs.followUpQuestion}</p>
+                    </div>
+                    {obs.followUpResponse && (
+                      <div className="bg-primary-light/30 rounded-lg p-3 ml-4">
+                        <p className="text-xs font-medium text-primary mb-1">Your response</p>
+                        <p className="text-sm text-foreground">{obs.followUpResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ARR Impact */}
+                {obs.arrImpact != null && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <DollarSign className="h-3.5 w-3.5 text-danger" />
+                    <span className="font-medium text-danger">
+                      Pipeline impact: €{((obs.arrImpact as { total_value: number }).total_value / 1000).toFixed(0)}K
+                    </span>
+                    <span className="text-muted-foreground">
+                      across {(obs.arrImpact as { deal_count: number }).deal_count} deal(s)
+                    </span>
+                  </div>
+                )}
+
                 {/* Giveback */}
                 {obs.aiGiveback != null && (
                   <div className="bg-primary-light/30 rounded-lg p-3">
@@ -294,7 +329,8 @@ function PatternsTab({ clusters }: { clusters: Cluster[] }) {
     <div className="space-y-4">
       {clusters.map((cluster) => {
         const Icon = SIGNAL_ICONS[cluster.signalType] || Sparkles;
-        const impact = cluster.pipelineImpact as { deals_affected?: number; total_value?: number } | null;
+        const arrTotal = Number(cluster.arrImpactTotal || 0);
+        const quotes = (cluster.unstructuredQuotes as { quote: string; role: string; vertical: string; date: string }[]) || [];
 
         return (
           <div key={cluster.id} className="bg-card rounded-xl border border-border p-5">
@@ -307,12 +343,13 @@ function PatternsTab({ clusters }: { clusters: Cluster[] }) {
                   <h3 className="text-sm font-semibold text-foreground">{cluster.title}</h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">
-                      {cluster.observerCount} team members
+                      {cluster.observerCount} team members · {cluster.observationCount} observations
                     </span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs text-muted-foreground">
-                      {cluster.observationCount} observations
-                    </span>
+                    {arrTotal > 0 && (
+                      <span className="text-xs font-semibold text-danger">
+                        · {formatCurrency(arrTotal)} at risk
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -334,17 +371,24 @@ function PatternsTab({ clusters }: { clusters: Cluster[] }) {
               <p className="text-sm text-muted-foreground mb-3">{cluster.summary}</p>
             )}
 
+            {/* Field Voices */}
+            {quotes.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {quotes.slice(0, 2).map((q, i) => (
+                  <div key={i} className="pl-3 border-l-2 border-primary/20">
+                    <p className="text-xs text-foreground italic">&ldquo;{q.quote.slice(0, 120)}...&rdquo;</p>
+                    <p className="text-[10px] text-muted-foreground">— {q.role}, {q.vertical}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-4 flex-wrap">
               {cluster.verticalsAffected?.map((v) => (
                 <span key={v} className="text-[10px] px-2 py-0.5 rounded-full bg-primary-light text-primary">
                   {v}
                 </span>
               ))}
-              {impact && (
-                <span className="text-xs text-danger font-medium">
-                  {impact.deals_affected} deals affected · €{((impact.total_value || 0) / 1000).toFixed(0)}K at risk
-                </span>
-              )}
               {cluster.resolutionNotes && (
                 <span className="text-xs text-success flex items-center gap-1">
                   <Check className="h-3 w-3" />

@@ -2,7 +2,7 @@ import { PersonaProvider, type TeamMemberInfo } from "@/components/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { db } from "@/lib/db";
-import { teamMembers } from "@nexus/db";
+import { teamMembers, supportFunctionMembers } from "@nexus/db";
 import type { Role } from "@nexus/shared";
 
 export const dynamic = "force-dynamic";
@@ -12,17 +12,28 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const members = await db.select().from(teamMembers);
+  const [members, supportMembers] = await Promise.all([
+    db.select().from(teamMembers),
+    db.select().from(supportFunctionMembers),
+  ]);
 
-  const users: TeamMemberInfo[] = members.map((m) => ({
-    id: m.id,
-    name: m.name,
-    role: m.role as Role,
-    email: m.email,
-    verticalSpecialization: m.verticalSpecialization ?? "general",
-  }));
+  const users: TeamMemberInfo[] = [
+    ...members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role as Role,
+      email: m.email,
+      verticalSpecialization: m.verticalSpecialization ?? "general",
+    })),
+    ...supportMembers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: "SUPPORT" as Role,
+      email: m.email || "",
+      verticalSpecialization: m.function ?? "general",
+    })),
+  ];
 
-  // Default to Sarah Chen
   const sortedUsers = users.sort((a, b) => {
     if (a.name === "Sarah Chen") return -1;
     if (b.name === "Sarah Chen") return 1;

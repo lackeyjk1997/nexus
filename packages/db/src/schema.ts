@@ -521,6 +521,10 @@ export const observationClusters = pgTable("observation_clusters", {
   resolutionStatus: text("resolution_status").default("emerging"),
   resolutionNotes: text("resolution_notes"),
   effectivenessScore: integer("effectiveness_score"),
+  arrImpactTotal: decimal("arr_impact_total", { precision: 12, scale: 2 }),
+  arrImpactDetails: jsonb("arr_impact_details"),
+  unstructuredQuotes: jsonb("unstructured_quotes"),
+  structuredSummary: jsonb("structured_summary"),
   firstObserved: timestamp("first_observed").defaultNow(),
   lastObserved: timestamp("last_observed").defaultNow(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -539,8 +543,25 @@ export const observations = pgTable("observations", {
   status: text("status").default("submitted"),
   lifecycleEvents: jsonb("lifecycle_events"),
   clusterId: uuid("cluster_id").references(() => observationClusters.id),
+  followUpQuestion: text("follow_up_question"),
+  followUpResponse: text("follow_up_response"),
+  followUpChips: text("follow_up_chips").array(),
+  structuredData: jsonb("structured_data"),
+  arrImpact: jsonb("arr_impact"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const supportFunctionMembers = pgTable("support_function_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  role: text("role").notNull(),
+  function: text("function").notNull(),
+  email: text("email"),
+  avatarInitials: text("avatar_initials"),
+  avatarColor: text("avatar_color"),
+  verticalsCovered: text("verticals_covered").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ── Relations ──────────────────────────────────────
