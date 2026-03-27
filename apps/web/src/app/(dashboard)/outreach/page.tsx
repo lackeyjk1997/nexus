@@ -1,10 +1,34 @@
-export default function Page() {
-  return (
-    <div className="flex items-center justify-center h-[60vh]">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold text-foreground mb-2">Coming Soon</h1>
-        <p className="text-sm text-muted-foreground">This section will be built in a future session.</p>
-      </div>
-    </div>
-  );
+export const dynamic = "force-dynamic";
+
+import { db } from "@/lib/db";
+import { emailSequences, emailSteps, deals, companies, contacts, teamMembers } from "@nexus/db";
+import { eq, desc } from "drizzle-orm";
+import { OutreachClient } from "./outreach-client";
+
+export default async function OutreachPage() {
+  const sequences = await db
+    .select({
+      id: emailSequences.id,
+      name: emailSequences.name,
+      status: emailSequences.status,
+      dealId: emailSequences.dealId,
+      contactId: emailSequences.contactId,
+      assignedAeId: emailSequences.assignedAeId,
+      createdAt: emailSequences.createdAt,
+      dealName: deals.name,
+      companyName: companies.name,
+      contactFirstName: contacts.firstName,
+      contactLastName: contacts.lastName,
+      aeName: teamMembers.name,
+    })
+    .from(emailSequences)
+    .leftJoin(deals, eq(emailSequences.dealId, deals.id))
+    .leftJoin(companies, eq(deals.companyId, companies.id))
+    .leftJoin(contacts, eq(emailSequences.contactId, contacts.id))
+    .leftJoin(teamMembers, eq(emailSequences.assignedAeId, teamMembers.id))
+    .orderBy(desc(emailSequences.createdAt));
+
+  const steps = await db.select().from(emailSteps).orderBy(emailSteps.stepNumber);
+
+  return <OutreachClient sequences={sequences} steps={steps} />;
 }
