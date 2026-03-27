@@ -14,6 +14,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  AudioWaveform,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   BarChart3,
   Bot,
   Settings,
+  AudioWaveform,
 };
 
 const NAV_ITEMS = [
@@ -37,6 +39,7 @@ const NAV_ITEMS = [
   { label: "Prospects", href: "/prospects", icon: "Users", roles: ["AE", "BDR", "MANAGER"] },
   { label: "Outreach", href: "/outreach", icon: "Mail", roles: ["AE", "BDR", "MANAGER"] },
   { label: "Calls", href: "/calls", icon: "Phone", roles: ["AE", "SA", "MANAGER"] },
+  { label: "Analyze", href: "/analyze", icon: "AudioWaveform", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
   { label: "Team", href: "/team", icon: "UsersRound", roles: ["MANAGER"] },
   { label: "Analytics", href: "/analytics", icon: "BarChart3", roles: ["AE", "MANAGER"] },
   { label: "Agent Config", href: "/agent-config", icon: "Bot", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
