@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { CoachingTip } from "@/lib/analysis/types";
+import { AgentFeedback } from "@/components/feedback/agent-feedback";
 
 const CATEGORY_COLORS: Record<string, string> = {
   discovery: "bg-blue-50 text-blue-700",
@@ -19,7 +20,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   presentation: "Presentation",
 };
 
-export function CoachingTips({ tips }: { tips: CoachingTip[] }) {
+export function CoachingTips({
+  tips,
+  agentConfigId,
+}: {
+  tips: CoachingTip[];
+  agentConfigId?: string;
+}) {
   return (
     <div className="bg-card rounded-xl border border-border p-5">
       <h3 className="text-sm font-semibold text-foreground mb-4">
@@ -53,6 +60,11 @@ export function CoachingTips({ tips }: { tips: CoachingTip[] }) {
           </div>
         ))}
       </div>
+      {agentConfigId && (
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <AgentFeedback agentConfigId={agentConfigId} sourceType="coaching_tip" />
+        </div>
+      )}
     </div>
   );
 }

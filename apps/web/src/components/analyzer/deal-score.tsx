@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { AgentFeedback } from "@/components/feedback/agent-feedback";
 
 export function DealScore({
   score,
   rationale,
+  agentConfigId,
 }: {
   score: number;
   rationale: string;
+  agentConfigId?: string;
 }) {
   const [animatedScore, setAnimatedScore] = useState(0);
   const [showRationale, setShowRationale] = useState(false);
@@ -109,6 +112,9 @@ export function DealScore({
         >
           {rationale}
         </p>
+        {agentConfigId && (
+          <AgentFeedback agentConfigId={agentConfigId} sourceType="deal_score" />
+        )}
       </div>
     </div>
   );
