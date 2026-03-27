@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { ArrowLeft, RotateCcw, FileText } from "lucide-react";
 import Link from "next/link";
 import { TranscriptInput } from "@/components/analyzer/transcript-input";
+import { ObservationInput } from "@/components/observation-input";
 import { AnalysisStream } from "@/components/analyzer/analysis-stream";
 import { parseAnalysisJson } from "@/lib/analysis/parse-stream";
 import type { AnalysisResult } from "@/lib/analysis/types";
@@ -150,6 +151,15 @@ export default function AnalyzePage() {
           isStreaming={phase === "analyzing"}
           streamedText={streamedText}
           error={error}
+        />
+      )}
+
+      {phase === "complete" && result && (
+        <ObservationInput
+          context={{ page: "analyze", trigger: "post_call" }}
+          variant="post-action"
+          autoOpen
+          placeholder="Anything the analysis missed, or patterns you're seeing?"
         />
       )}
     </div>

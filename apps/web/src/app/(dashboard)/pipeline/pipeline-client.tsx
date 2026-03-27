@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Kanban, Table, BarChart3, Filter, ChevronDown } from "lucide-react";
 import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@/lib/utils";
 import { STAGE_LABELS, type PipelineStage } from "@nexus/shared";
+import { ObservationInput } from "@/components/observation-input";
 
 type Deal = {
   id: string;
@@ -137,6 +138,9 @@ export function PipelineClient({ deals, teamMembers }: { deals: Deal[]; teamMemb
       {view === "kanban" && <KanbanView deals={filteredDeals} />}
       {view === "table" && <TableView deals={filteredDeals} />}
       {view === "forecast" && <ForecastView deals={filteredDeals} aes={aes} />}
+
+      {/* Observation Input */}
+      <ObservationInput context={{ page: "pipeline", trigger: "pipeline_review" }} />
     </div>
   );
 }

@@ -507,6 +507,42 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const observationClusters = pgTable("observation_clusters", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  signalType: text("signal_type").notNull(),
+  targetFunction: text("target_function"),
+  observationCount: integer("observation_count").default(1),
+  observerCount: integer("observer_count").default(1),
+  verticalsAffected: text("verticals_affected").array(),
+  pipelineImpact: jsonb("pipeline_impact"),
+  severity: text("severity").default("informational"),
+  resolutionStatus: text("resolution_status").default("emerging"),
+  resolutionNotes: text("resolution_notes"),
+  effectivenessScore: integer("effectiveness_score"),
+  firstObserved: timestamp("first_observed").defaultNow(),
+  lastObserved: timestamp("last_observed").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const observations = pgTable("observations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  observerId: uuid("observer_id")
+    .references(() => teamMembers.id)
+    .notNull(),
+  rawInput: text("raw_input").notNull(),
+  sourceContext: jsonb("source_context"),
+  aiClassification: jsonb("ai_classification"),
+  aiGiveback: jsonb("ai_giveback"),
+  status: text("status").default("submitted"),
+  lifecycleEvents: jsonb("lifecycle_events"),
+  clusterId: uuid("cluster_id").references(() => observationClusters.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ── Relations ──────────────────────────────────────
 
 export const companiesRelations = relations(companies, ({ many }) => ({

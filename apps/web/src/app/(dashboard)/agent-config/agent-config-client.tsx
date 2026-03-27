@@ -545,8 +545,37 @@ function NetworkTab({
   const sdrs = members.filter((m) => m.role === "BDR");
   const csms = members.filter((m) => m.role === "CSM");
 
-  // Compute cross-agent edges from version history
-  const edges: { from: string; to: string; label: string }[] = [];
+  // Build org structure edges (VP→AE, AE↔SC, SDR→AE, CSM→AE)
+  const orgEdges: { from: string; to: string; label: string; type: "org" | "feedback" }[] = [];
+  const edgeKey = (a: string, b: string) => [a, b].sort().join("-");
+  const seenEdges = new Set<string>();
+
+  function addEdge(from: string, to: string, label: string, type: "org" | "feedback") {
+    const key = edgeKey(from, to);
+    if (seenEdges.has(key)) return;
+    seenEdges.add(key);
+    orgEdges.push({ from, to, label, type });
+  }
+
+  // VP → all AEs
+  for (const v of vp) {
+    for (const ae of aes) {
+      addEdge(v.id, ae.id, "Reports to", "org");
+    }
+  }
+
+  // SC/SDR/CSM connections to AEs based on vertical overlap
+  for (const support of [...scs, ...sdrs, ...csms]) {
+    for (const ae of aes) {
+      const supVert = support.verticalSpecialization;
+      const aeVert = ae.verticalSpecialization;
+      if (supVert === aeVert || supVert === "general" || aeVert === "general") {
+        addEdge(support.id, ae.id, "Supports", "org");
+      }
+    }
+  }
+
+  // Cross-agent feedback edges from version history
   for (const v of versions) {
     const vPrefs = v.outputPreferences as OutputPrefs | null;
     if (vPrefs?.crossAgentUpdate && vPrefs.fromUser) {
@@ -555,15 +584,13 @@ function NetworkTab({
       if (fromMember && configOwner) {
         const toMember = members.find((m) => m.id === configOwner.teamMemberId);
         if (toMember && fromMember.id !== toMember.id) {
-          edges.push({
-            from: fromMember.id,
-            to: toMember.id,
-            label: v.changeReason?.slice(0, 60) || "Cross-agent update",
-          });
+          addEdge(fromMember.id, toMember.id, v.changeReason?.slice(0, 60) || "Cross-agent update", "feedback");
         }
       }
     }
   }
+
+  const edges = orgEdges;
 
   // Position nodes
   const width = 900;
@@ -612,25 +639,23 @@ function NetworkTab({
             const to = positions[edge.to];
             if (!from || !to) return null;
             const isHovered = hoveredId === edge.from || hoveredId === edge.to;
+            const isFeedback = edge.type === "feedback";
             const midY = (from.y + to.y) / 2;
+            const strokeColor = isHovered ? "#8B5CF6" : isFeedback ? "#0C7489" : "#E8E5E0";
             return (
               <g key={i}>
                 <path
                   d={`M ${from.x} ${from.y + 20} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y - 20}`}
                   fill="none"
-                  stroke={isHovered ? "#8B5CF6" : "#E8E5E0"}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
-                  strokeDasharray={isHovered ? "none" : "6 4"}
+                  stroke={strokeColor}
+                  strokeWidth={isHovered ? 2.5 : isFeedback ? 2 : 1}
+                  strokeDasharray={isFeedback ? "none" : "4 4"}
+                  opacity={isHovered ? 1 : isFeedback ? 0.7 : 0.4}
                   className="transition-all duration-200"
                 />
-                {/* Arrow */}
-                <circle
-                  cx={to.x}
-                  cy={to.y - 22}
-                  r={3}
-                  fill={isHovered ? "#8B5CF6" : "#E8E5E0"}
-                  className="transition-all duration-200"
-                />
+                {isFeedback && (
+                  <circle cx={to.x} cy={to.y - 22} r={3} fill={strokeColor} opacity={isHovered ? 1 : 0.7} />
+                )}
               </g>
             );
           })}
@@ -690,11 +715,11 @@ function NetworkTab({
                   x={pos.x}
                   y={pos.y + 36}
                   textAnchor="middle"
-                  fontSize={10}
+                  fontSize={9}
                   fill="#1A1A1A"
                   fontWeight={500}
                 >
-                  {m.name.split(" ")[0]}
+                  {m.name}
                 </text>
                 {/* Role badge */}
                 <text
