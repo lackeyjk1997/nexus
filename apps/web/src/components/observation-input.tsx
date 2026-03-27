@@ -31,6 +31,7 @@ export function ObservationInput({
   const [result, setResult] = useState<{
     acknowledgment: string;
     related_observations_hint?: string;
+    routing?: string;
   } | null>(null);
   const { currentUser } = usePersona();
 
@@ -73,16 +74,26 @@ export function ObservationInput({
     }
   }
 
-  // Submitted state — show give back, then auto-dismiss
+  // Submitted state — show give back
   if (result) {
     return (
       <div className="sticky bottom-0 z-30 bg-background/80 backdrop-blur-sm border-t border-border px-4 py-3">
-        <div className="max-w-4xl mx-auto bg-primary-light/50 border border-primary/20 rounded-xl p-3">
-          <div className="flex items-center gap-3">
-            <Check className="h-4 w-4 text-primary shrink-0" />
-            <p className="text-sm text-foreground flex-1">
-              {result.acknowledgment}
-            </p>
+        <div className="max-w-4xl mx-auto bg-primary-light/50 border border-primary/20 rounded-xl p-4 animate-slideUp">
+          <div className="flex items-start gap-3">
+            <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1.5">
+              <p className="text-sm font-medium text-foreground">
+                {result.acknowledgment}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {result.related_observations_hint}
+              </p>
+              {result.routing && (
+                <p className="text-xs text-primary">
+                  {result.routing}
+                </p>
+              )}
+            </div>
             <button
               onClick={() => {
                 setResult(null);
@@ -93,11 +104,6 @@ export function ObservationInput({
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          {result.related_observations_hint && (
-            <p className="text-xs text-muted-foreground mt-1 ml-7">
-              {result.related_observations_hint}
-            </p>
-          )}
         </div>
       </div>
     );

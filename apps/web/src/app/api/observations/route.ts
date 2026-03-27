@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import { observations, observationClusters, teamMembers } from "@nexus/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ne, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -48,6 +48,18 @@ export async function GET(request: Request) {
   return NextResponse.json(results);
 }
 
+// Signal type to human-readable routing target
+const SIGNAL_ROUTES: Record<string, string> = {
+  competitive_intel: "Product Marketing (competitive intel)",
+  content_gap: "Enablement (content gap)",
+  deal_blocker: "Deal Page (blocker flagged)",
+  win_pattern: "Enablement + Leadership (win pattern)",
+  process_friction: "Deal Desk (process friction)",
+  agent_tuning: "Your Agent (config updated)",
+  cross_agent: "Team Agents (cross-agent update)",
+  field_intelligence: "Leadership (field intelligence)",
+};
+
 export async function POST(request: Request) {
   const { rawInput, context, observerId } = await request.json();
 
@@ -58,39 +70,95 @@ export async function POST(request: Request) {
     );
   }
 
-  // For demo: generate a simple classification without calling Claude
-  // (Claude API may not be configured)
+  const inputLower = rawInput.toLowerCase();
+
+  // Classify the signal type
+  const signalType = inputLower.includes("competitor") || inputLower.includes("pricing") || inputLower.includes("price")
+    ? "competitive_intel"
+    : inputLower.includes("doc") || inputLower.includes("content") || inputLower.includes("battlecard") || inputLower.includes("template")
+      ? "content_gap"
+      : inputLower.includes("block") || inputLower.includes("stuck") || inputLower.includes("blocking")
+        ? "deal_blocker"
+        : inputLower.includes("working") || inputLower.includes("great") || inputLower.includes("win") || inputLower.includes("good response")
+          ? "win_pattern"
+          : inputLower.includes("slow") || inputLower.includes("legal") || inputLower.includes("process") || inputLower.includes("approval")
+            ? "process_friction"
+            : inputLower.includes("agent") || inputLower.includes("email draft") || inputLower.includes("call prep")
+              ? "agent_tuning"
+              : "field_intelligence";
+
   const classification = {
     signals: [
       {
-        type: rawInput.toLowerCase().includes("competitor")
-          ? "competitive_intel"
-          : rawInput.toLowerCase().includes("doc") || rawInput.toLowerCase().includes("content")
-            ? "content_gap"
-            : rawInput.toLowerCase().includes("block") || rawInput.toLowerCase().includes("stuck")
-              ? "deal_blocker"
-              : rawInput.toLowerCase().includes("working") || rawInput.toLowerCase().includes("great")
-                ? "win_pattern"
-                : "field_intelligence",
+        type: signalType,
         confidence: 0.8,
         summary: rawInput.slice(0, 100),
       },
     ],
-    sentiment: rawInput.includes("!") || rawInput.toLowerCase().includes("frustrat")
+    sentiment: inputLower.includes("!") || inputLower.includes("frustrat") || inputLower.includes("terrible")
       ? "frustrated"
-      : rawInput.toLowerCase().includes("great") || rawInput.toLowerCase().includes("good")
+      : inputLower.includes("great") || inputLower.includes("good") || inputLower.includes("love")
         ? "positive"
         : "neutral",
-    urgency: rawInput.toLowerCase().includes("block") || rawInput.toLowerCase().includes("losing")
+    urgency: inputLower.includes("block") || inputLower.includes("losing") || inputLower.includes("urgent")
       ? "high"
       : "medium",
   };
 
+  // Search for related observations from OTHER team members
+  const allRecent = await db
+    .select({
+      id: observations.id,
+      rawInput: observations.rawInput,
+      observerId: observations.observerId,
+      aiClassification: observations.aiClassification,
+    })
+    .from(observations)
+    .where(ne(observations.observerId, observerId))
+    .orderBy(desc(observations.createdAt))
+    .limit(50);
+
+  // Find related by matching signal type or keyword overlap
+  const keywords = inputLower
+    .split(/\s+/)
+    .filter((w: string) => w.length > 4)
+    .slice(0, 10);
+
+  const related = allRecent.filter((obs) => {
+    const obsClassification = obs.aiClassification as { signals?: { type: string }[] } | null;
+    const sameType = obsClassification?.signals?.some((s) => s.type === signalType);
+    if (sameType) return true;
+    const obsLower = obs.rawInput.toLowerCase();
+    const matchCount = keywords.filter((k: string) => obsLower.includes(k)).length;
+    return matchCount >= 2;
+  });
+
+  const uniqueObservers = new Set(related.map((r) => r.observerId)).size;
+
+  // Build the acknowledgment based on what was shared
+  const acknowledgments: Record<string, string> = {
+    competitive_intel: "Competitive signal captured.",
+    content_gap: "Content gap flagged.",
+    deal_blocker: "Deal blocker identified and flagged.",
+    win_pattern: "Win pattern noted — this helps the whole team.",
+    process_friction: "Process friction logged.",
+    agent_tuning: "Agent feedback received — your config will be refined.",
+    cross_agent: "Cross-team insight captured.",
+    field_intelligence: "Field intelligence logged.",
+  };
+
+  // Build routing line
+  const routingTarget = SIGNAL_ROUTES[signalType] || "Field Intelligence";
+
+  // Build related observations line
+  const relatedLine = related.length > 0
+    ? `${uniqueObservers} other rep${uniqueObservers === 1 ? " has" : "s have"} flagged similar patterns this quarter.`
+    : "You're the first to flag this. We'll watch for similar signals from the team.";
+
   const giveback = {
-    acknowledgment: "Got it — your observation has been classified and routed.",
-    related_observations_hint: "Checking for similar patterns across the team...",
-    suggested_resource: null,
-    cross_team_context: null,
+    acknowledgment: acknowledgments[signalType] || "Observation captured.",
+    related_observations_hint: relatedLine,
+    routing: `Routed to: ${routingTarget}`,
   };
 
   const [inserted] = await db
