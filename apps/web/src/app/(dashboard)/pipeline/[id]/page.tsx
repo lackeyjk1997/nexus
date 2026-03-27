@@ -12,8 +12,10 @@ import {
   callTranscripts,
   callAnalyses,
   dealStageHistory,
+  observations,
+  observationClusters,
 } from "@nexus/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { DealDetailClient } from "./deal-detail-client";
 
@@ -69,6 +71,7 @@ export default async function DealDetailPage({
     dealActivities,
     transcripts,
     stageHistory,
+    dealObservations,
   ] = await Promise.all([
     db
       .select()
@@ -123,6 +126,22 @@ export default async function DealDetailPage({
       .from(dealStageHistory)
       .where(eq(dealStageHistory.dealId, id))
       .orderBy(desc(dealStageHistory.createdAt)),
+    // Observations linked to this deal (via sourceContext.dealId or structuredData.affected_deal_ids)
+    db
+      .select({
+        id: observations.id,
+        rawInput: observations.rawInput,
+        status: observations.status,
+        aiClassification: observations.aiClassification,
+        arrImpact: observations.arrImpact,
+        clusterId: observations.clusterId,
+        createdAt: observations.createdAt,
+        observerName: teamMembers.name,
+      })
+      .from(observations)
+      .leftJoin(teamMembers, eq(observations.observerId, teamMembers.id))
+      .where(sql`${observations.sourceContext}->>'dealId' = ${id}`)
+      .orderBy(desc(observations.createdAt)),
   ]);
 
   return (
@@ -134,6 +153,7 @@ export default async function DealDetailPage({
       activities={dealActivities}
       transcripts={transcripts}
       stageHistory={stageHistory}
+      dealObservations={dealObservations}
     />
   );
 }

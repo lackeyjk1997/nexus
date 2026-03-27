@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Swords,
   FileX,
@@ -14,6 +14,9 @@ import {
   TrendingUp,
   MessageSquare,
   ChevronDown,
+  Sparkles,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -103,9 +106,11 @@ function timeAgo(d: Date | string | null): string {
 export function IntelligenceClient({
   clusters,
   observations,
+  avgResponseTime = "No data",
 }: {
   clusters: Cluster[];
   observations: Observation[];
+  avgResponseTime?: string;
 }) {
   const { currentUser } = usePersona();
   const [signalFilter, setSignalFilter] = useState("all");
@@ -165,9 +170,19 @@ export function IntelligenceClient({
         <MetricCard icon={Eye} label="Active Patterns" value={activeClusters.length.toString()} />
         <MetricCard icon={DollarSign} label="Total ARR at Risk" value={formatCurrency(totalArrAtRisk)} color="text-danger" />
         <MetricCard icon={MessageSquare} label="Observations" value={obsThisMonth.toString()} subtitle="this month" />
-        <MetricCard icon={Clock} label="Avg Response" value="2.3d" />
+        <MetricCard icon={Clock} label="Avg Response" value={avgResponseTime} />
         <MetricCard icon={CheckCircle} label="Resolution Rate" value={`${resolutionRate}%`} color="text-success" />
       </div>
+
+      {/* Ask Your Team — visible to MANAGER and SUPPORT only */}
+      {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
+        <AskTeamInput currentUser={currentUser} />
+      )}
+
+      {/* Your Queries — visible to MANAGER and SUPPORT only */}
+      {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
+        <YourQueries currentUser={currentUser} />
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-2">
@@ -378,6 +393,240 @@ function MetricCard({ icon: Icon, label, value, subtitle, color }: {
       </div>
       <p className={cn("text-xl font-bold", color || "text-foreground")}>{value}</p>
       {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+    </div>
+  );
+}
+
+// ── Ask Your Team Input ──
+
+type AskPhase = "idle" | "submitting" | "sent" | "answered";
+
+function AskTeamInput({ currentUser }: { currentUser: { id: string; name: string; role: string; verticalSpecialization: string } | null }) {
+  const [input, setInput] = useState("");
+  const [phase, setPhase] = useState<AskPhase>("idle");
+  const [result, setResult] = useState<{ status: string; questions_sent?: number; immediate_answer?: string } | null>(null);
+
+  const placeholders: Record<string, string> = {
+    MANAGER: 'e.g. "Are any of the CompetitorX deals recoverable if we adjust pricing?"',
+    enablement: 'e.g. "Which reps are struggling most with the new competitive battlecard?"',
+    product_marketing: 'e.g. "Is CompetitorX\'s free pilot actually winning deals or just delaying decisions?"',
+    deal_desk: 'e.g. "Is the legal review delay specific to healthcare or happening everywhere?"',
+  };
+
+  const placeholderKey = currentUser?.role === "MANAGER" ? "MANAGER" : currentUser?.verticalSpecialization || "MANAGER";
+  const placeholder = placeholders[placeholderKey] || placeholders.MANAGER!;
+
+  async function handleSubmit() {
+    if (!input.trim() || !currentUser) return;
+    setPhase("submitting");
+
+    try {
+      const res = await fetch("/api/field-queries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rawQuestion: input.trim(),
+          initiatedBy: currentUser.id,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setResult(data);
+        setPhase(data.status === "answered" ? "answered" : "sent");
+        setTimeout(() => {
+          setPhase("idle");
+          setInput("");
+          setResult(null);
+        }, 8000);
+      } else {
+        setPhase("idle");
+      }
+    } catch {
+      setPhase("idle");
+    }
+  }
+
+  return (
+    <div
+      className="bg-card rounded-xl border border-border p-5"
+      style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="h-4 w-4" style={{ color: "#E07A5F" }} />
+        <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+          Ask about what you&apos;re seeing
+        </span>
+      </div>
+
+      {phase === "submitting" && (
+        <div className="flex items-center gap-2.5 py-3">
+          <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#E07A5F" }} />
+          <span className="text-[13px] animate-pulse" style={{ color: "#8A8078" }}>
+            Checking existing data…
+          </span>
+        </div>
+      )}
+
+      {phase === "sent" && result && (
+        <div className="py-3">
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle className="h-4 w-4" style={{ color: "#2D8A4E" }} />
+            <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+              Questions sent to {result.questions_sent} rep{result.questions_sent !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <p className="text-[12px]" style={{ color: "#8A8078" }}>
+            Responses will appear below as they come in. Questions expire in 24 hours.
+          </p>
+        </div>
+      )}
+
+      {phase === "answered" && result?.immediate_answer && (
+        <div className="py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="h-4 w-4" style={{ color: "#2D8A4E" }} />
+            <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+              Answered from existing data
+            </span>
+          </div>
+          <p className="text-[13px] leading-[1.55]" style={{ color: "#3D3833" }}>
+            {result.immediate_answer}
+          </p>
+        </div>
+      )}
+
+      {phase === "idle" && (
+        <>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.metaKey) handleSubmit();
+            }}
+            placeholder={placeholder}
+            rows={2}
+            className="w-full px-3 py-2.5 rounded-lg text-sm resize-none focus:outline-none focus:ring-2"
+            style={{
+              border: "1px solid #E8E5E0",
+              background: "#FFFFFF",
+              color: "#3D3833",
+              maxHeight: "120px",
+            }}
+          />
+          <div className="flex justify-end mt-2">
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+              style={{
+                background: input.trim() ? "#E07A5F" : "#D4C9BD",
+                color: input.trim() ? "#FFFFFF" : "#8A8078",
+                opacity: input.trim() ? 1 : 0.6,
+                cursor: input.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              <Send className="h-3.5 w-3.5" />
+              Ask
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Your Queries Section ──
+
+type QueryResult = {
+  id: string;
+  rawQuestion: string;
+  status: string;
+  aggregatedAnswer: {
+    summary?: string;
+    response_count?: number;
+    target_count?: number;
+    updated_at?: string;
+  } | null;
+  createdAt: string;
+  targetCount: number;
+  responseCount: number;
+};
+
+function YourQueries({ currentUser }: { currentUser: { id: string } | null }) {
+  const [queries, setQueries] = useState<QueryResult[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    async function fetchQueries() {
+      try {
+        const res = await fetch(`/api/field-queries?initiatedBy=${currentUser!.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setQueries(data);
+        }
+      } catch {}
+    }
+    fetchQueries();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchQueries, 30000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
+  if (queries.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-base font-semibold text-foreground">Your Queries</h2>
+      {queries.map((q) => (
+        <QueryCard key={q.id} query={q} />
+      ))}
+    </div>
+  );
+}
+
+function QueryCard({ query }: { query: QueryResult }) {
+  const hasResponses = query.responseCount > 0;
+  const allResponded = query.responseCount >= query.targetCount && query.targetCount > 0;
+  const age = timeAgo(query.createdAt);
+  const answer = query.aggregatedAnswer;
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4" style={{ boxShadow: "0 2px 8px rgba(107,79,57,0.04)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-medium" style={{ color: "#3D3833" }}>
+            &ldquo;{query.rawQuestion}&rdquo;
+          </p>
+
+          <div className="flex items-center gap-2 mt-2">
+            <span
+              className="inline-block h-2 w-2 rounded-full shrink-0"
+              style={{
+                background: allResponded ? "#2D8A4E" : hasResponses ? "#D4A843" : "#D4C9BD",
+                animation: !allResponded && query.targetCount > 0 ? "pulse 2s infinite" : "none",
+              }}
+            />
+            <span className="text-[12px]" style={{ color: "#8A8078" }}>
+              {query.targetCount === 0
+                ? "Answered from existing data"
+                : hasResponses
+                  ? `${query.responseCount} of ${query.targetCount} responded`
+                  : `Waiting for responses (${query.targetCount} sent)`}
+            </span>
+          </div>
+
+          {answer?.summary && (
+            <p className="text-[13.5px] leading-[1.5] mt-3" style={{ color: "#3D3833" }}>
+              {answer.summary}
+            </p>
+          )}
+        </div>
+
+        <span className="text-[12px] shrink-0" style={{ color: "#8A8078" }}>
+          {age}
+        </span>
+      </div>
     </div>
   );
 }

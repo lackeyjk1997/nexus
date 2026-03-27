@@ -48,3 +48,6 @@ Technology: #06B6D4 (cyan)
 
 ## Pipeline Stages
 New Lead → Qualified → Discovery → Technical Validation → Proposal → Negotiation → Closing → Closed Won / Closed Lost
+
+## Session History
+- Follow-up fix: Removed keyword gating for follow-up decisions. Claude API now controls whether to ask follow-ups. Strengthened prompt to skip follow-ups on highly specific observations (named deal + competitor + dollar amount). Added isHighDetail fallback heuristic. Confirmed restyled inline UI was already in place — chat bubbles, numbered follow-up card, sparkle give-back card all rendering correctly. No toasts.

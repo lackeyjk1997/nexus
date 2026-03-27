@@ -10,6 +10,7 @@ import {
   CheckCircle,
   FileText,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   stage_changed: ArrowRight,
   task_completed: CheckCircle,
   document_shared: Share2,
+  observation: Sparkles,
 };
 
 const ACTIVITY_COLORS: Record<string, string> = {
@@ -47,6 +49,7 @@ const ACTIVITY_COLORS: Record<string, string> = {
   stage_changed: "bg-primary-light text-primary",
   task_completed: "bg-emerald-50 text-emerald-600",
   document_shared: "bg-cyan-50 text-cyan-600",
+  observation: "bg-orange-50 text-orange-600",
 };
 
 const FILTER_OPTIONS = [

@@ -6,6 +6,7 @@ import { Kanban, Table, BarChart3, Filter, ChevronDown } from "lucide-react";
 import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@/lib/utils";
 import { STAGE_LABELS, type PipelineStage } from "@nexus/shared";
 import { ObservationInput } from "@/components/observation-input";
+import { QuickQuestions } from "@/components/quick-questions";
 
 type Deal = {
   id: string;
@@ -133,6 +134,9 @@ export function PipelineClient({ deals, teamMembers }: { deals: Deal[]; teamMemb
           ]}
         />
       </div>
+
+      {/* Quick Questions for AEs */}
+      <QuickQuestions />
 
       {/* View */}
       {view === "kanban" && <KanbanView deals={filteredDeals} />}

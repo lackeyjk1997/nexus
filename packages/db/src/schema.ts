@@ -611,3 +611,103 @@ export const teamMembersRelations = relations(teamMembers, ({ many }) => ({
   agentConfigs: many(agentConfigs),
   notifications: many(notifications),
 }));
+
+// ── Observation Routing ───────────────────────────
+
+export const observationRoutingStatusEnum = pgEnum("observation_routing_status", [
+  "sent",
+  "acknowledged",
+  "in_progress",
+  "resolved",
+]);
+
+export const observationRouting = pgTable("observation_routing", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  observationId: uuid("observation_id")
+    .references(() => observations.id)
+    .notNull(),
+  targetFunction: text("target_function").notNull(),
+  targetMemberId: uuid("target_member_id"), // supportFunctionMembers ID (no FK since different table)
+  signalType: text("signal_type").notNull(),
+  status: observationRoutingStatusEnum("status").notNull().default("sent"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ── Field Query Engine ────────────────────────────
+
+export const fieldQueryStatusEnum = pgEnum("field_query_status", [
+  "active",
+  "answered",
+  "expired",
+]);
+
+export const fieldQueryQuestionStatusEnum = pgEnum("field_query_question_status", [
+  "pending",
+  "answered",
+  "skipped",
+  "expired",
+]);
+
+export const fieldQueries = pgTable("field_queries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  initiatedBy: uuid("initiated_by").notNull(), // Can be teamMembers or supportFunctionMembers
+  rawQuestion: text("raw_question").notNull(),
+  aiAnalysis: jsonb("ai_analysis"),
+  clusterId: uuid("cluster_id").references(() => observationClusters.id),
+  aggregatedAnswer: jsonb("aggregated_answer"),
+  status: fieldQueryStatusEnum("status").notNull().default("active"),
+  expiresAt: timestamp("expires_at").notNull(),
+  initiatedAt: timestamp("initiated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const fieldQueryQuestions = pgTable("field_query_questions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  queryId: uuid("query_id")
+    .references(() => fieldQueries.id)
+    .notNull(),
+  targetMemberId: uuid("target_member_id")
+    .references(() => teamMembers.id)
+    .notNull(),
+  questionText: text("question_text").notNull(),
+  chips: text("chips").array().notNull(),
+  dealId: uuid("deal_id").references(() => deals.id),
+  accountId: uuid("account_id").references(() => companies.id),
+  responseText: text("response_text"),
+  responseType: text("response_type"),
+  respondedAt: timestamp("responded_at"),
+  giveBack: jsonb("give_back"),
+  recordsUpdated: jsonb("records_updated"),
+  status: fieldQueryQuestionStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const fieldQueriesRelations = relations(fieldQueries, ({ one, many }) => ({
+  cluster: one(observationClusters, {
+    fields: [fieldQueries.clusterId],
+    references: [observationClusters.id],
+  }),
+  questions: many(fieldQueryQuestions),
+}));
+
+export const fieldQueryQuestionsRelations = relations(fieldQueryQuestions, ({ one }) => ({
+  query: one(fieldQueries, {
+    fields: [fieldQueryQuestions.queryId],
+    references: [fieldQueries.id],
+  }),
+  targetMember: one(teamMembers, {
+    fields: [fieldQueryQuestions.targetMemberId],
+    references: [teamMembers.id],
+  }),
+  deal: one(deals, {
+    fields: [fieldQueryQuestions.dealId],
+    references: [deals.id],
+  }),
+  account: one(companies, {
+    fields: [fieldQueryQuestions.accountId],
+    references: [companies.id],
+  }),
+}));

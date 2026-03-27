@@ -146,6 +146,17 @@ const STAGES_ORDER: PipelineStage[] = [
 
 // ── Main Component ──
 
+type DealObservation = {
+  id: string;
+  rawInput: string;
+  status: string | null;
+  aiClassification: unknown;
+  arrImpact: unknown;
+  clusterId: string | null;
+  createdAt: Date;
+  observerName: string | null;
+};
+
 export function DealDetailClient({
   deal,
   meddpicc,
@@ -154,6 +165,7 @@ export function DealDetailClient({
   activities,
   transcripts,
   stageHistory,
+  dealObservations = [],
 }: {
   deal: Deal;
   meddpicc: Meddpicc;
@@ -162,7 +174,28 @@ export function DealDetailClient({
   activities: ActivityItem[];
   transcripts: Transcript[];
   stageHistory: StageHistoryItem[];
+  dealObservations?: DealObservation[];
 }) {
+  // Merge observations into the activity list
+  const observationActivities: ActivityItem[] = dealObservations.map((obs) => {
+    const classification = obs.aiClassification as { signals?: Array<{ type: string }> } | null;
+    const signalType = classification?.signals?.[0]?.type || "field_intelligence";
+    const arrData = obs.arrImpact as { total_value?: number } | null;
+    const arrText = arrData?.total_value ? ` — €${(arrData.total_value / 1000).toFixed(0)}K at risk` : "";
+
+    return {
+      id: `obs-${obs.id}`,
+      type: "observation" as string,
+      subject: `Field Intel: ${obs.rawInput.slice(0, 80)}${obs.rawInput.length > 80 ? "…" : ""}`,
+      description: `Signal: ${signalType.replace(/_/g, " ")}${arrText}`,
+      createdAt: obs.createdAt,
+      teamMemberName: obs.observerName,
+    };
+  });
+
+  const mergedActivities = [...activities, ...observationActivities].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [stageModalOpen, setStageModalOpen] = useState(false);
 
@@ -359,7 +392,7 @@ export function DealDetailClient({
       {activeTab === "stakeholders" && <StakeholdersTab contacts={contacts} />}
       {activeTab === "activity" && (
         <div className="bg-card rounded-xl border border-border p-5">
-          <ActivityFeed activities={activities} showFilters maxItems={50} />
+          <ActivityFeed activities={mergedActivities} showFilters maxItems={50} />
         </div>
       )}
       {activeTab === "calls" && <CallsTab transcripts={transcripts} />}
