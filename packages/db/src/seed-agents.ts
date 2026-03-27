@@ -329,7 +329,7 @@ async function seedAgents() {
       approvedByMemberId:
         fb.status === "approved" ? kate?.id ?? sarah.id : null,
       resolvedAt:
-        fb.status !== "pending" ? new Date(fb.createdAt.getTime() + 3600000) : null,
+        (fb.status as string) !== "pending" ? new Date(fb.createdAt.getTime() + 3600000) : null,
     });
   }
   console.log("  ✓ Created 10 feedback entries");
