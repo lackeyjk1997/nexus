@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Mail, MessageSquare, Phone, Clock, ChevronDown, CheckCircle2, Circle, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ObservationInput } from "@/components/observation-input";
 
 type Sequence = {
   id: string;
@@ -156,6 +157,8 @@ export function OutreachClient({ sequences, steps }: { sequences: Sequence[]; st
           )}
         </div>
       )}
+
+      <ObservationInput context={{ page: "outreach", trigger: "manual" }} />
     </div>
   );
 }
