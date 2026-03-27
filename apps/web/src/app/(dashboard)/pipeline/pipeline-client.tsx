@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { Kanban, Table, BarChart3, Filter, ChevronDown } from "lucide-react";
 import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@/lib/utils";
 import { STAGE_LABELS, type PipelineStage } from "@nexus/shared";
@@ -220,7 +221,7 @@ function DealCard({ deal }: { deal: Deal }) {
   const vertColor = getVerticalColor(deal.vertical);
 
   return (
-    <div className="bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden">
+    <Link href={`/pipeline/${deal.id}`} className="block bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden">
       {/* Vertical color stripe */}
       <div
         className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
@@ -277,7 +278,7 @@ function DealCard({ deal }: { deal: Deal }) {
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -357,7 +358,7 @@ function TableView({ deals }: { deals: Deal[] }) {
               const days = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
               const health = getHealthColor(days, deal.stage);
               return (
-                <tr key={deal.id} className="hover:bg-muted/30 transition-colors cursor-pointer">
+                <tr key={deal.id} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => window.location.href = `/pipeline/${deal.id}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div

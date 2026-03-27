@@ -8,17 +8,16 @@ import {
   Mail,
   Phone,
   MessageSquare,
-  FileText,
   ArrowRight,
   AlertTriangle,
   Bell,
-  CheckCircle,
   Bot,
   Users,
   Zap,
 } from "lucide-react";
 import { usePersona } from "@/components/providers";
 import { cn, formatCurrency, formatCompactNumber } from "@/lib/utils";
+import { ActivityFeed } from "@/components/activity-feed";
 import Link from "next/link";
 
 type Deal = {
@@ -63,18 +62,6 @@ type TeamMember = {
   id: string;
   name: string;
   role: string;
-};
-
-const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  email_sent: Mail,
-  email_received: Mail,
-  call_completed: Phone,
-  meeting_scheduled: Calendar,
-  meeting_completed: Calendar,
-  note_added: MessageSquare,
-  stage_changed: ArrowRight,
-  task_completed: CheckCircle,
-  document_shared: FileText,
 };
 
 const NOTIFICATION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -198,43 +185,8 @@ export function CommandCenterClient({
               View all
             </Link>
           </div>
-          <div className="divide-y divide-border">
-            {activities.slice(0, 8).map((activity) => {
-              const Icon = ACTIVITY_ICONS[activity.type] || MessageSquare;
-              return (
-                <div
-                  key={activity.id}
-                  className="px-4 py-3 flex items-start gap-3 hover:bg-muted/30 transition-colors"
-                >
-                  <div className="h-8 w-8 rounded-lg bg-primary-light flex items-center justify-center shrink-0 mt-0.5">
-                    <Icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">
-                      {activity.subject}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-muted-foreground">
-                        {activity.teamMemberName}
-                      </span>
-                      {activity.companyName && (
-                        <>
-                          <span className="text-xs text-muted-foreground">
-                            ·
-                          </span>
-                          <span className="text-xs text-primary">
-                            {activity.companyName}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {timeAgo(activity.createdAt)}
-                  </span>
-                </div>
-              );
-            })}
+          <div className="px-3 py-1">
+            <ActivityFeed activities={activities} showCompany maxItems={8} />
           </div>
         </div>
 
