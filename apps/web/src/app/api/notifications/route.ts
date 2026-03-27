@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { db } from "@/lib/db";
 import { notifications, teamMembers } from "@nexus/db";
 import { eq, desc } from "drizzle-orm";

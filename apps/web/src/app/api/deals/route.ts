@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { db } from "@/lib/db";
 import { deals, companies, teamMembers, contacts } from "@nexus/db";
 import { eq } from "drizzle-orm";
