@@ -163,6 +163,7 @@ type CallBrief = {
   risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
   team_intelligence: string[];
   competitive_context: string | null;
+  suggested_resources?: Array<{ title: string; type: string; why: string }>;
   suggested_next_steps: string[];
 };
 
@@ -251,6 +252,17 @@ export function DealDetailClient({
   const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
   const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
   const [briefCopied, setBriefCopied] = useState(false);
+  const [briefSaved, setBriefSaved] = useState(false);
+
+  // Email draft state
+  const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result">("hidden");
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
+  const [editedSubject, setEditedSubject] = useState("");
+  const [editedBody, setEditedBody] = useState("");
+  const [emailCopied, setEmailCopied] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+  const [draftContext, setDraftContext] = useState("");
+
   const { currentUser } = usePersona();
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
@@ -284,7 +296,7 @@ export function DealDetailClient({
   }
 
   async function saveBriefToDeal() {
-    if (!currentUser || !callBrief) return;
+    if (!currentUser || !callBrief || briefSaved) return;
     await fetch("/api/agent/save-to-deal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -295,6 +307,102 @@ export function DealDetailClient({
         description: `Call brief generated. Key focus: ${callBrief.headline}`,
       }),
     }).catch(() => {});
+    setBriefSaved(true);
+  }
+
+  async function handleDraftFollowUp(additionalCtx?: string) {
+    if (!currentUser) return;
+    setDraftPhase("loading");
+    setEmailSaved(false);
+
+    // Build context from the most recent transcript analysis
+    const latestTranscript = transcripts[0];
+    const analysisContext = latestTranscript?.analysisSummary
+      ? `Call: ${latestTranscript.title}. Summary: ${latestTranscript.analysisSummary}. Pain points: ${JSON.stringify(latestTranscript.painPoints || [])}. Next steps: ${JSON.stringify(latestTranscript.nextSteps || [])}`
+      : undefined;
+
+    try {
+      const res = await fetch("/api/agent/draft-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "follow_up",
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+          additionalContext: [analysisContext, additionalCtx].filter(Boolean).join(". ") || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailDraft(data.draft);
+        setEditedSubject(data.draft.subject);
+        setEditedBody(data.draft.body);
+        setDraftPhase("result");
+        setDraftContext("");
+      } else {
+        setDraftPhase("hidden");
+      }
+    } catch {
+      setDraftPhase("hidden");
+    }
+  }
+
+  async function handleDraftForTranscript(transcript: Transcript) {
+    if (!currentUser) return;
+    setDraftPhase("loading");
+    setEmailSaved(false);
+
+    const analysisContext = transcript.analysisSummary
+      ? `Call: ${transcript.title}. Summary: ${transcript.analysisSummary}. Pain points: ${JSON.stringify(transcript.painPoints || [])}. Next steps: ${JSON.stringify(transcript.nextSteps || [])}`
+      : `Call: ${transcript.title}`;
+
+    try {
+      const res = await fetch("/api/agent/draft-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "follow_up",
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+          additionalContext: analysisContext,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailDraft(data.draft);
+        setEditedSubject(data.draft.subject);
+        setEditedBody(data.draft.body);
+        setDraftPhase("result");
+        setDraftContext("");
+      } else {
+        setDraftPhase("hidden");
+      }
+    } catch {
+      setDraftPhase("hidden");
+    }
+  }
+
+  async function copyEmail() {
+    await navigator.clipboard.writeText(`Subject: ${editedSubject}\n\n${editedBody}`).catch(() => {});
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  }
+
+  async function saveEmailToDeal() {
+    if (!currentUser || !emailDraft || emailSaved) return;
+    await fetch("/api/agent/save-to-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: deal.id,
+        memberId: currentUser.id,
+        title: `Follow-up email drafted${emailDraft.to ? ` for ${emailDraft.to}` : ""}`,
+        description: `Subject: ${editedSubject}`,
+      }),
+    }).catch(() => {});
+    setEmailSaved(true);
   }
 
   async function copyBrief() {
@@ -433,9 +541,35 @@ export function DealDetailClient({
                 </>
               )}
             </button>
+            <button
+              onClick={() => {
+                if (transcripts.length === 0) return;
+                handleDraftFollowUp();
+              }}
+              disabled={draftPhase === "loading" || transcripts.length === 0}
+              title={transcripts.length === 0 ? "No recent calls to reference" : "Draft a follow-up email"}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: draftPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: transcripts.length === 0 ? "#C4BDB5" : draftPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (draftPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+                cursor: transcripts.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {draftPhase === "loading" ? (
+                <>
+                  <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
+                  Drafting…
+                </>
+              ) : (
+                <>
+                  <Mail className="h-3.5 w-3.5" />
+                  Draft Follow-Up
+                </>
+              )}
+            </button>
             {[
               { icon: Calendar, label: "Schedule Meeting" },
-              { icon: Mail, label: "Draft Email" },
               { icon: MessageSquare, label: "Add Note" },
             ].map((action) => (
               <button
@@ -638,6 +772,23 @@ export function DealDetailClient({
                 </BriefSection>
               )}
 
+              {/* Suggested Resources */}
+              {callBrief.suggested_resources && callBrief.suggested_resources.length > 0 && (
+                <BriefSection title="Suggested Resources">
+                  <div className="space-y-2 mt-1">
+                    {callBrief.suggested_resources.map((r, i) => (
+                      <div key={i} className="flex gap-2.5 items-start">
+                        <FileText className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#0C7489" }} />
+                        <div>
+                          <p className="text-[12.5px] font-medium" style={{ color: "#0C7489" }}>{r.title}</p>
+                          <p className="text-[11px]" style={{ color: "#8A8078" }}>{r.why}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
               {/* Next Steps */}
               {callBrief.suggested_next_steps.length > 0 && (
                 <BriefSection title="Suggested Close">
@@ -669,11 +820,15 @@ export function DealDetailClient({
             </button>
             <button
               onClick={saveBriefToDeal}
+              disabled={briefSaved}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-              style={{ background: "#F3EDE7", color: "#8A8078" }}
+              style={{
+                background: briefSaved ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: briefSaved ? "#2D8A4E" : "#8A8078",
+              }}
             >
               <Check className="h-3 w-3" />
-              Save to timeline
+              {briefSaved ? "Saved ✓" : "Save to timeline"}
             </button>
             <button
               onClick={handlePrepCall}
@@ -682,6 +837,118 @@ export function DealDetailClient({
             >
               <RotateCcw className="h-3 w-3" />
               Refresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Email Draft Panel */}
+      {draftPhase === "result" && emailDraft && (
+        <div
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Mail className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Draft Follow-Up{emailDraft.to ? ` — ${emailDraft.to}` : ""}
+            </span>
+            <button
+              onClick={() => { setDraftPhase("hidden"); setEmailDraft(null); }}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="px-5 pt-4 pb-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] w-14 shrink-0" style={{ color: "#8A8078" }}>To</span>
+              <span className="text-[13px]" style={{ color: "#3D3833" }}>{emailDraft.to}</span>
+            </div>
+            <div className="h-px" style={{ background: "rgba(0,0,0,0.06)" }} />
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] w-14 shrink-0" style={{ color: "#8A8078" }}>Subject</span>
+              <input
+                type="text"
+                value={editedSubject}
+                onChange={(e) => setEditedSubject(e.target.value)}
+                className="flex-1 bg-transparent border-none outline-none text-[13px]"
+                style={{ color: "#3D3833" }}
+              />
+            </div>
+            <div className="h-px" style={{ background: "rgba(0,0,0,0.06)" }} />
+            <textarea
+              value={editedBody}
+              onChange={(e) => setEditedBody(e.target.value)}
+              rows={8}
+              className="w-full bg-transparent border-none outline-none text-[13px] leading-[1.6] resize-none"
+              style={{ color: "#3D3833" }}
+            />
+          </div>
+
+          {emailDraft.notes_for_rep && (
+            <div
+              className="mx-5 mb-3 px-3 py-2 rounded-lg flex items-start gap-2"
+              style={{ background: "rgba(224,122,95,0.05)", border: "1px solid rgba(224,122,95,0.15)" }}
+            >
+              <Lightbulb className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#E07A5F" }} />
+              <p className="text-[11.5px] leading-[1.5]" style={{ color: "#8A8078" }}>{emailDraft.notes_for_rep}</p>
+            </div>
+          )}
+
+          {/* Context input for regeneration */}
+          <div className="mx-5 mb-3">
+            <input
+              type="text"
+              value={draftContext}
+              onChange={(e) => setDraftContext(e.target.value)}
+              placeholder="e.g., mention the security review Tuesday, include the ROI calculator, softer tone..."
+              className="w-full px-3 py-2 rounded-lg text-[12px] outline-none"
+              style={{ background: "#F9F7F4", border: "1px solid rgba(0,0,0,0.06)", color: "#3D3833" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && draftContext.trim()) {
+                  handleDraftFollowUp(draftContext.trim());
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={copyEmail}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: emailCopied ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: emailCopied ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {emailCopied ? "Copied!" : "Copy email"}
+            </button>
+            <button
+              onClick={() => handleDraftFollowUp(draftContext.trim() || undefined)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{ background: "#F3EDE7", color: "#8A8078" }}
+            >
+              <RotateCcw className="h-3 w-3" />
+              {draftContext.trim() ? "Regenerate with context" : "Regenerate"}
+            </button>
+            <button
+              onClick={saveEmailToDeal}
+              disabled={emailSaved}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: emailSaved ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: emailSaved ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Check className="h-3 w-3" />
+              {emailSaved ? "Saved ✓" : "Save to deal"}
             </button>
           </div>
         </div>
@@ -728,7 +995,7 @@ export function DealDetailClient({
           <ActivityFeed activities={mergedActivities} showFilters maxItems={50} />
         </div>
       )}
-      {activeTab === "calls" && <CallsTab transcripts={transcripts} />}
+      {activeTab === "calls" && <CallsTab transcripts={transcripts} onDraftFollowUp={handleDraftForTranscript} />}
 
       {/* Stage Change Modal */}
       <StageChangeModal
@@ -1147,7 +1414,7 @@ function StakeholdersTab({ contacts }: { contacts: Contact[] }) {
 
 // ── Calls Tab ──
 
-function CallsTab({ transcripts }: { transcripts: Transcript[] }) {
+function CallsTab({ transcripts, onDraftFollowUp }: { transcripts: Transcript[]; onDraftFollowUp: (t: Transcript) => void }) {
   if (transcripts.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-border p-8 text-center">
@@ -1300,6 +1567,18 @@ function CallsTab({ transcripts }: { transcripts: Transcript[] }) {
                     </ul>
                   </div>
                 )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                  <button
+                    onClick={() => onDraftFollowUp(t)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                    style={{ background: "rgba(224,122,95,0.08)", color: "#E07A5F", border: "1px solid rgba(224,122,95,0.2)" }}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Draft Follow-Up
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -714,3 +714,17 @@ export const fieldQueryQuestionsRelations = relations(fieldQueryQuestions, ({ on
     references: [companies.id],
   }),
 }));
+
+// ── Resource Hub ────────────────────────────────
+
+export const resources = pgTable("resources", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  type: text("type").notNull(), // one_pager, case_study, whitepaper, faq, battlecard, roi_calculator, security_doc, template
+  description: text("description"),
+  verticals: text("verticals").array(),
+  tags: text("tags").array(),
+  url: text("url"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

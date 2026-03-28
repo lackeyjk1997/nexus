@@ -15,6 +15,7 @@ import {
   agentConfigs,
   callTranscripts,
   callAnalyses,
+  resources,
 } from "@nexus/db";
 import { eq, desc, and, sql, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     agentConfigRow,
     dealTranscripts,
     rep,
+    allResources,
   ] = await Promise.all([
     db
       .select({
@@ -214,6 +216,15 @@ export async function POST(request: Request) {
       .where(eq(teamMembers.id, memberId))
       .limit(1)
       .then((r) => r[0] ?? null),
+
+    db
+      .select({
+        title: resources.title,
+        type: resources.type,
+        description: resources.description,
+        verticals: resources.verticals,
+      })
+      .from(resources),
   ]);
 
   if (!dealRow) {
@@ -234,6 +245,11 @@ export async function POST(request: Request) {
   // ── Filter clusters relevant to this deal's vertical ──
   const verticalClusters = activeClusters.filter(
     (c) => !c.verticalsAffected || c.verticalsAffected.includes(dealRow.vertical || "")
+  );
+
+  // ── Filter resources relevant to this deal's vertical ──
+  const relevantResources = allResources.filter(
+    (r) => !r.verticals || r.verticals.includes(dealRow.vertical || "") || r.verticals.includes("all")
   );
 
   // ── Build context for Claude ──
@@ -323,6 +339,11 @@ Deal stage rules for ${dealRow.stage}: ${outputPrefs?.dealStageRules?.[dealRow.s
 
 DO NOT include anything that violates the guardrails above.` : ""}
 
+AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
+${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
+
+When recommending talking points or next steps, reference specific resources by name. Don't say "send documentation" — say "share the HIPAA Compliance FAQ" or "attach the Claude vs Copilot comparison." Only recommend resources that are genuinely relevant to this deal.
+
 Return ONLY valid JSON with this exact structure:
 {
   "headline": "One sentence — the most important thing to know going into this call",
@@ -368,6 +389,13 @@ Return ONLY valid JSON with this exact structure:
     "Insight from field intelligence relevant to this call"
   ],
   "competitive_context": "1-2 sentences about competitive situation if relevant, null otherwise",
+  "suggested_resources": [
+    {
+      "title": "Exact resource title from the list above",
+      "type": "resource type",
+      "why": "One sentence — why this resource is relevant to this specific call"
+    }
+  ],
   "suggested_next_steps": [
     "What to propose at end of call"
   ]

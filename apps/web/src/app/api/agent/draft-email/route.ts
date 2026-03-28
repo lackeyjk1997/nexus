@@ -13,6 +13,7 @@ import {
   agentConfigs,
   callTranscripts,
   callAnalyses,
+  resources,
 } from "@nexus/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
   }
 
   // ── Gather context ──
-  const [rep, agentConfigRow, dealRow, contactsForDeal, recentEmails, latestAnalysis, dealObs] =
+  const [rep, agentConfigRow, dealRow, contactsForDeal, recentEmails, latestAnalysis, dealObs, allResources] =
     await Promise.all([
       db
         .select({ name: teamMembers.name, role: teamMembers.role })
@@ -176,7 +177,22 @@ export async function POST(request: Request) {
             .orderBy(desc(observations.createdAt))
             .limit(5)
         : Promise.resolve([]),
+
+      db
+        .select({
+          title: resources.title,
+          type: resources.type,
+          description: resources.description,
+          verticals: resources.verticals,
+        })
+        .from(resources),
     ]);
+
+  // ── Filter resources by deal vertical ──
+  const dealVertical = dealRow?.vertical || "";
+  const relevantResources = allResources.filter(
+    (r) => !r.verticals || r.verticals.includes(dealVertical) || r.verticals.includes("all")
+  );
 
   // ── Pick primary contact ──
   const primaryContact = resolvedContactId
@@ -216,6 +232,13 @@ Pain points discussed: ${JSON.stringify(latestAnalysis.painPoints)}
 Next steps identified: ${JSON.stringify(latestAnalysis.nextSteps)}
 ` : ""}
 ${type === "outreach" ? "This is an initial outreach email. The rep has not spoken with this person before." : ""}
+
+AVAILABLE RESOURCES you can reference or suggest attaching:
+${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
+
+If the email calls for sharing documentation, use actual resource names. Instead of "I'll send some info," write "I'm attaching our HIPAA Compliance FAQ" or "I've included our Enterprise ROI Calculator."
+
+${additionalContext ? `ADDITIONAL INSTRUCTIONS FROM THE REP:\n"${additionalContext}"\nIncorporate this naturally into the email. Weave it into the existing flow — don't treat it as a bolted-on paragraph.` : ""}
 
 Return ONLY valid JSON:
 {

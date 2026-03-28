@@ -33,6 +33,8 @@ export default function AnalyzePage() {
   const [editedSubject, setEditedSubject] = useState("");
   const [editedBody, setEditedBody] = useState("");
   const [copied, setCopied] = useState(false);
+  const [draftContext, setDraftContext] = useState("");
+  const [emailSaved, setEmailSaved] = useState(false);
 
   const { currentUser } = usePersona();
 
@@ -120,14 +122,17 @@ export default function AnalyzePage() {
     setEmailDraft(null);
   }
 
-  async function handleDraftFollowUp() {
+  async function handleDraftFollowUp(extraContext?: string) {
     if (!currentUser) return;
     setDraftPhase("loading");
+    setEmailSaved(false);
 
     // Build additional context from analysis result
-    const additionalContext = result
+    const analysisCtx = result
       ? `Call analysis summary: ${(result as { summary?: string }).summary || ""}. Next steps: ${JSON.stringify((result as { nextSteps?: unknown }).nextSteps || [])}. Pain points: ${JSON.stringify((result as { painPoints?: unknown }).painPoints || [])}`
       : undefined;
+
+    const combinedContext = [analysisCtx, extraContext].filter(Boolean).join(". ") || undefined;
 
     try {
       const res = await fetch("/api/agent/draft-email", {
@@ -137,7 +142,7 @@ export default function AnalyzePage() {
           type: "follow_up",
           memberId: currentUser.id,
           rawQuery: "draft a follow-up email from this call analysis",
-          additionalContext,
+          additionalContext: combinedContext,
         }),
       });
 
@@ -147,12 +152,29 @@ export default function AnalyzePage() {
         setEditedSubject(data.draft.subject);
         setEditedBody(data.draft.body);
         setDraftPhase("result");
+        setDraftContext("");
       } else {
         setDraftPhase("hidden");
       }
     } catch {
       setDraftPhase("hidden");
     }
+  }
+
+  async function saveEmailToDeal() {
+    if (!currentUser || !emailDraft || emailSaved) return;
+    // Save to deal via the API — will use the AE's most recent deal
+    await fetch("/api/agent/save-to-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: null, // Will be resolved by the observation context
+        memberId: currentUser.id,
+        title: `Follow-up email drafted${emailDraft.to ? ` for ${emailDraft.to}` : ""}`,
+        description: `Subject: ${editedSubject}`,
+      }),
+    }).catch(() => {});
+    setEmailSaved(true);
   }
 
   async function copyEmail() {
@@ -181,7 +203,7 @@ export default function AnalyzePage() {
             <div className="flex items-center gap-2">
               {phase === "complete" && result && (
                 <button
-                  onClick={handleDraftFollowUp}
+                  onClick={() => handleDraftFollowUp()}
                   disabled={draftPhase === "loading"}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                   style={{
@@ -283,6 +305,23 @@ export default function AnalyzePage() {
             </div>
           )}
 
+          {/* Context input */}
+          <div className="mx-5 mb-3">
+            <input
+              type="text"
+              value={draftContext}
+              onChange={(e) => setDraftContext(e.target.value)}
+              placeholder="e.g., mention the security review Tuesday, include the ROI calculator, softer tone..."
+              className="w-full px-3 py-2 rounded-lg text-[12px] outline-none"
+              style={{ background: "#F9F7F4", border: "1px solid rgba(0,0,0,0.06)", color: "#3D3833" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && draftContext.trim()) {
+                  handleDraftFollowUp(draftContext.trim());
+                }
+              }}
+            />
+          </div>
+
           <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
             <button
               onClick={copyEmail}
@@ -296,12 +335,12 @@ export default function AnalyzePage() {
               {copied ? "Copied!" : "Copy email"}
             </button>
             <button
-              onClick={handleDraftFollowUp}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors"
-              style={{ color: "#8A8078" }}
+              onClick={() => handleDraftFollowUp(draftContext.trim() || undefined)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{ background: "#F3EDE7", color: "#8A8078" }}
             >
               <RotateCcw className="h-3 w-3" />
-              Regenerate
+              {draftContext.trim() ? "Regenerate with context" : "Regenerate"}
             </button>
           </div>
         </div>

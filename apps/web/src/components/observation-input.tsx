@@ -74,6 +74,7 @@ type CallBrief = {
   risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
   team_intelligence: string[];
   competitive_context: string | null;
+  suggested_resources?: Array<{ title: string; type: string; why: string }>;
   suggested_next_steps: string[];
 };
 
@@ -187,7 +188,9 @@ export function ObservationInput({
   const [editedBody, setEditedBody] = useState("");
   const [emailDealId, setEmailDealId] = useState<string | null>(null);
   const [emailContactName, setEmailContactName] = useState<string | null>(null);
+  const [emailContext, setEmailContext] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<"email" | "brief" | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<"email" | "brief" | null>(null);
 
   const followUpRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -234,6 +237,7 @@ export function ObservationInput({
     setHighlightedOption(-1);
     setCallBrief(null);
     setEmailDraft(null);
+    setSaveFeedback(null);
   }
 
   // ── Observation submit ──
@@ -460,7 +464,7 @@ export function ObservationInput({
   }
 
   // ── Save actions ──
-  async function saveToDeals(title: string, description: string, dealId: string | null) {
+  async function saveToDeals(title: string, description: string, dealId: string | null, type: "email" | "brief" = "brief") {
     if (!dealId || !currentUser) return;
     await fetch("/api/agent/save-to-deal", {
       method: "POST",
@@ -472,6 +476,7 @@ export function ObservationInput({
         description,
       }),
     }).catch(() => {});
+    setSaveFeedback(type);
   }
 
   async function copyToClipboard(text: string, type: "email" | "brief") {
@@ -1178,13 +1183,18 @@ export function ObservationInput({
                       onClick={() => saveToDeals(
                         `AI Call Prep — ${callBriefDealName}`,
                         `Call brief generated. Key focus: ${callBrief.headline}`,
-                        callBriefDealId
+                        callBriefDealId,
+                        "brief"
                       )}
+                      disabled={saveFeedback === "brief"}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-                      style={{ background: "#F3EDE7", color: "#8A8078" }}
+                      style={{
+                        background: saveFeedback === "brief" ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                        color: saveFeedback === "brief" ? "#2D8A4E" : "#8A8078",
+                      }}
                     >
                       <Check className="h-3 w-3" />
-                      Save to deal
+                      {saveFeedback === "brief" ? "Saved ✓" : "Save to deal"}
                     </button>
                   )}
                   <button
@@ -1258,6 +1268,45 @@ export function ObservationInput({
                   </div>
                 )}
 
+                {/* Context input for regeneration */}
+                <div className="mx-5 mb-3">
+                  <input
+                    type="text"
+                    value={emailContext}
+                    onChange={(e) => setEmailContext(e.target.value)}
+                    placeholder="e.g., mention the security review Tuesday, include the ROI calculator, softer tone..."
+                    className="w-full px-3 py-2 rounded-lg text-[12px] outline-none"
+                    style={{ background: "#F9F7F4", border: "1px solid rgba(0,0,0,0.06)", color: "#3D3833" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && emailContext.trim()) {
+                        setPhase("draft_loading");
+                        const dealId = emailDealId || context.dealId;
+                        fetch("/api/agent/draft-email", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            type: "follow_up",
+                            memberId: currentUser?.id,
+                            rawQuery: submittedText,
+                            dealId,
+                            additionalContext: emailContext.trim(),
+                          }),
+                        }).then(async (res) => {
+                          if (res.ok) {
+                            const data = await res.json();
+                            setEmailDraft(data.draft);
+                            setEditedSubject(data.draft.subject);
+                            setEditedBody(data.draft.body);
+                            setEmailContext("");
+                            setSaveFeedback(null);
+                          }
+                          setPhase("draft_result");
+                        }).catch(() => setPhase("draft_result"));
+                      }
+                    }}
+                  />
+                </div>
+
                 {/* Actions */}
                 <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
                   <button
@@ -1278,54 +1327,56 @@ export function ObservationInput({
                         await saveToDeals(
                           `Follow-up email drafted${emailContactName ? ` for ${emailContactName}` : ""}`,
                           `Subject: ${editedSubject}`,
-                          dealId
+                          dealId,
+                          "email"
                         );
+                      }
+                    }}
+                    disabled={saveFeedback === "email"}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                    style={{
+                      background: saveFeedback === "email" ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                      color: saveFeedback === "email" ? "#2D8A4E" : "#8A8078",
+                    }}
+                  >
+                    <Check className="h-3 w-3" />
+                    {saveFeedback === "email" ? "Saved ✓" : "Save to deal"}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setPhase("draft_loading");
+                      setSaveFeedback(null);
+                      const dealId = emailDealId || context.dealId;
+                      const extraCtx = emailContext.trim() || undefined;
+                      try {
+                        const res = await fetch("/api/agent/draft-email", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            type: "follow_up",
+                            memberId: currentUser?.id,
+                            rawQuery: submittedText,
+                            dealId,
+                            additionalContext: extraCtx,
+                          }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setEmailDraft(data.draft);
+                          setEditedSubject(data.draft.subject);
+                          setEditedBody(data.draft.body);
+                          setEmailContext("");
+                        }
+                        setPhase("draft_result");
+                      } catch {
+                        setPhase("draft_result");
                       }
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
                     style={{ background: "#F3EDE7", color: "#8A8078" }}
                   >
-                    <Check className="h-3 w-3" />
-                    Save to deal
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const dealId = emailDealId || context.dealId;
-                      if (dealId) {
-                        setPhase("draft_loading");
-                        try {
-                          const res = await fetch("/api/agent/draft-email", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              type: "follow_up",
-                              memberId: currentUser?.id,
-                              rawQuery: submittedText,
-                              dealId: context.dealId,
-                              additionalContext: editedBody ? `The rep started editing and wrote: ${editedBody.slice(0, 200)}` : undefined,
-                            }),
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            setEmailDraft(data.draft);
-                            setEditedSubject(data.draft.subject);
-                            setEditedBody(data.draft.body);
-                          }
-                          setPhase("draft_result");
-                        } catch {
-                          setPhase("draft_result");
-                        }
-                      } else {
-                        // just regenerate without edits
-                        setPhase("draft_loading");
-                        handleDraftEmail(submittedText);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors"
-                    style={{ color: "#8A8078" }}
-                  >
                     <RotateCcw className="h-3 w-3" />
-                    Regenerate
+                    {emailContext.trim() ? "Regenerate with context" : "Regenerate"}
                   </button>
                   <button onClick={reset} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors" style={{ color: "#8A8078" }}>
                     <X className="h-3 w-3" />
