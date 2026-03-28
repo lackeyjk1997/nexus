@@ -126,7 +126,7 @@ export default async function DealDetailPage({
       .from(dealStageHistory)
       .where(eq(dealStageHistory.dealId, id))
       .orderBy(desc(dealStageHistory.createdAt)),
-    // Observations linked to this deal (via sourceContext.dealId or structuredData.affected_deal_ids)
+    // Observations linked to this deal (via sourceContext.dealId OR entity-extracted linkedDealIds)
     db
       .select({
         id: observations.id,
@@ -140,7 +140,9 @@ export default async function DealDetailPage({
       })
       .from(observations)
       .leftJoin(teamMembers, eq(observations.observerId, teamMembers.id))
-      .where(sql`${observations.sourceContext}->>'dealId' = ${id}`)
+      .where(
+        sql`${observations.sourceContext}->>'dealId' = ${id} OR ${id} = ANY(${observations.linkedDealIds})`
+      )
       .orderBy(desc(observations.createdAt)),
   ]);
 

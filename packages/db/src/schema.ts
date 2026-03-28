@@ -548,6 +548,9 @@ export const observations = pgTable("observations", {
   followUpChips: text("follow_up_chips").array(),
   structuredData: jsonb("structured_data"),
   arrImpact: jsonb("arr_impact"),
+  linkedAccountIds: uuid("linked_account_ids").array(),
+  linkedDealIds: uuid("linked_deal_ids").array(),
+  extractedEntities: jsonb("extracted_entities"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

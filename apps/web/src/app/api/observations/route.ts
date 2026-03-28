@@ -3,7 +3,7 @@ export const maxDuration = 30;
 
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
-import { observations, observationClusters, deals, teamMembers, notifications, observationRouting, supportFunctionMembers, agentConfigs, agentConfigVersions } from "@nexus/db";
+import { observations, observationClusters, deals, teamMembers, notifications, observationRouting, supportFunctionMembers, agentConfigs, agentConfigVersions, companies } from "@nexus/db";
 import { eq, desc, ne, sql, inArray, isNull, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -83,6 +83,23 @@ export async function POST(request: Request) {
     .orderBy(desc(observations.createdAt))
     .limit(50);
 
+  // Fetch accounts and observer's deals for entity extraction
+  const [allAccounts, observerDeals] = await Promise.all([
+    db.select({ id: companies.id, name: companies.name }).from(companies),
+    db
+      .select({
+        id: deals.id,
+        name: deals.name,
+        companyId: deals.companyId,
+        companyName: companies.name,
+        dealValue: deals.dealValue,
+        stage: deals.stage,
+      })
+      .from(deals)
+      .leftJoin(companies, eq(deals.companyId, companies.id))
+      .where(eq(deals.assignedAeId, observerId)),
+  ]);
+
   // Try Claude API classification
   const apiKey = process.env.ANTHROPIC_API_KEY;
   let classification: {
@@ -90,6 +107,10 @@ export async function POST(request: Request) {
     sentiment: string;
     urgency: string;
     sensitivity?: string;
+    entities?: Array<{ type: string; text: string; normalized: string; confidence: number; match_hint?: string }>;
+    linked_accounts?: Array<{ name: string; confidence: number }>;
+    linked_deals?: Array<{ name: string; confidence: number }>;
+    needs_clarification?: boolean;
   };
   let followUp: { should_ask: boolean; question: string | null; chips: string[] | null; clarifies: string | null };
   let aiAcknowledgment: string | null = null;
@@ -97,10 +118,23 @@ export async function POST(request: Request) {
   if (apiKey) {
     try {
       const client = new Anthropic({ apiKey });
-      const aiResult = await classifyWithClaude(client, rawInput, context, observer);
+      const aiResult = await classifyWithClaude(client, rawInput, context, observer, allAccounts, observerDeals);
       classification = aiResult.classification;
       followUp = aiResult.followUp;
       aiAcknowledgment = aiResult.acknowledgment;
+
+      // If Claude couldn't determine account/deal and it's deal-specific, override follow-up
+      if (classification.needs_clarification && !context?.dealId && !followUp.should_ask) {
+        const topDeals = observerDeals.sort((a, b) => Number(b.dealValue || 0) - Number(a.dealValue || 0)).slice(0, 4);
+        if (topDeals.length > 0) {
+          followUp = {
+            should_ask: true,
+            question: "Which deal is this about?",
+            chips: topDeals.map((d) => d.companyName ? `${d.companyName} — ${d.name}` : d.name),
+            clarifies: "deal_context",
+          };
+        }
+      }
     } catch (err) {
       console.error("Claude classification failed, falling back:", err);
       const fallback = fallbackClassify(rawInput);
@@ -111,6 +145,23 @@ export async function POST(request: Request) {
     const fallback = fallbackClassify(rawInput);
     classification = fallback.classification;
     followUp = fallback.followUp;
+  }
+
+  // Resolve entities to database IDs
+  const resolved = resolveEntities(
+    classification.entities || [],
+    classification.linked_accounts || [],
+    classification.linked_deals || [],
+    allAccounts,
+    observerDeals
+  );
+
+  // Include deal from page context
+  if (context?.dealId && !resolved.dealIds.includes(context.dealId)) {
+    resolved.dealIds.push(context.dealId);
+  }
+  if (context?.accountId && !resolved.accountIds.includes(context.accountId)) {
+    resolved.accountIds.push(context.accountId);
   }
 
   const primarySignalType = classification.signals[0]?.type || "field_intelligence";
@@ -149,14 +200,16 @@ export async function POST(request: Request) {
     routing: `Routed to: ${routingTarget}`,
   };
 
-  // Calculate initial ARR impact if we have a deal from context
+  // Calculate initial ARR impact from resolved deals
+  const arrDealIds = resolved.dealIds.length > 0 ? resolved.dealIds : (context?.dealId ? [context.dealId] : []);
   let arrImpact: { total_value: number; deal_count: number; deals: Array<{ id: string; name: string; value: number; stage: string }> } | null = null;
-  if (context?.dealId) {
-    arrImpact = await calculateArrImpactFromDeals([context.dealId]);
+  if (arrDealIds.length > 0) {
+    arrImpact = await calculateArrImpactFromDeals(arrDealIds);
   }
 
-  // Try to match to existing cluster
-  const clusterId = await findMatchingCluster(primarySignalType, classification.signals[0]);
+  // Try to match to existing cluster using AI semantic matching
+  const client = apiKey ? new Anthropic({ apiKey }) : null;
+  const clusterId = await findMatchingCluster(rawInput, classification, client);
 
   const [inserted] = await db
     .insert(observations)
@@ -171,6 +224,9 @@ export async function POST(request: Request) {
       followUpChips: followUp.should_ask && followUp.chips ? followUp.chips : null,
       arrImpact: arrImpact,
       clusterId: clusterId,
+      linkedAccountIds: resolved.accountIds.length > 0 ? resolved.accountIds : null,
+      linkedDealIds: resolved.dealIds.length > 0 ? resolved.dealIds : null,
+      extractedEntities: classification.entities || null,
       lifecycleEvents: [
         { status: "submitted", timestamp: new Date().toISOString() },
         { status: "classified", timestamp: new Date().toISOString() },
@@ -194,7 +250,7 @@ export async function POST(request: Request) {
 
   // If no cluster matched, try to create a new one from unclustered observations
   if (!clusterId) {
-    await checkAndCreateCluster(inserted!, classification, context, apiKey ? new Anthropic({ apiKey }) : null);
+    await checkAndCreateCluster(inserted!, classification, context, client);
   } else {
     // Append quote to existing cluster's unstructuredQuotes
     await appendQuoteToCluster(clusterId, rawInput, observer);
@@ -204,8 +260,8 @@ export async function POST(request: Request) {
   await createRoutingRecords(inserted!.id, classification);
 
   // Process agent signals (agent_tuning, cross_agent)
-  if (apiKey) {
-    await processAgentSignals(inserted!, classification, new Anthropic({ apiKey }));
+  if (client) {
+    await processAgentSignals(inserted!, classification, client);
   }
 
   // Include ARR impact in giveback if available
@@ -227,7 +283,9 @@ async function classifyWithClaude(
   client: Anthropic,
   rawInput: string,
   context: { page?: string; dealId?: string; accountId?: string; trigger?: string } | null,
-  observer: { name?: string; role?: string; verticalSpecialization?: string } | null | undefined
+  observer: { name?: string; role?: string; verticalSpecialization?: string } | null | undefined,
+  allAccounts: Array<{ id: string; name: string }>,
+  observerDeals: Array<{ id: string; name: string; companyName: string | null; dealValue: string | null; stage: string }>
 ) {
   const systemPrompt = `You are the AI classification engine for Nexus, a sales intelligence platform. A sales rep has shared an observation. You must:
 
@@ -253,65 +311,93 @@ Ask a follow-up ONLY when:
 - The SCOPE is genuinely ambiguous (one deal vs many vs vertical-wide)
 - The FREQUENCY is unknown AND would change the routing
 - The observation is vague and a nudge would extract key structured data
+- You cannot determine which account/deal this is about AND it's about a specific situation (not a general market trend) — ask which deal
 
 Do NOT ask a follow-up when:
-- The observation names a specific deal, competitor, AND dollar amount — it's already complete
-- The observation describes a specific win/loss with details (who, what, why, how much)
-- All key structured fields (competitor_name, deal context, severity, scope) can be extracted from the input alone
+- The observation names a specific deal, competitor, AND dollar amount
+- The observation describes a specific win/loss with details
+- All key structured fields can be extracted from the input alone
 - The input is a simple positive note or win pattern
-- The observation is very short/vague where follow-up won't help
-- The rep provided the "what happened" AND the "why" — don't ask for more
+- The rep provided the "what happened" AND the "why"
 
-BIAS TOWARD NOT ASKING. Most detailed observations don't need follow-ups. Only ask when the missing information would meaningfully change how the signal is routed or prioritized. If in doubt, don't ask.
+When asking about which account/deal, use the rep's deals as chip options. Only include top 4 deals by value.
 
-5. Generate a brief, warm acknowledgment (1 sentence, like a helpful colleague — NOT a generic system message).
+BIAS TOWARD NOT ASKING. If in doubt, don't ask.
 
-Return JSON exactly like this:
+5. Generate a brief, warm acknowledgment (1 sentence, like a helpful colleague).
+
+6. EXTRACT ENTITIES from the text. For each entity found, return:
+{ "type": "account"|"deal"|"competitor"|"amount"|"timeline", "text": "exact text", "normalized": "cleaned version", "confidence": 0.0-1.0, "match_hint": "likely full name" }
+
+Match partial references to known accounts: "MedCore" → "MedCore Health Systems", "the Atlas deal" → "Atlas Capital"
+
+7. DETERMINE which accounts and deals this observation is about:
+- Explicitly named accounts/deals
+- Infer from the rep's deals if they say "my biggest deal" or "the enterprise deal"
+- The page context deal is always relevant if present
+
+Return JSON:
 {
   "classification": {
     "signals": [{ "type": "...", "confidence": 0.85, "summary": "...", "competitor_name": null, "content_type": null, "process_name": null }],
     "sentiment": "neutral",
     "urgency": "medium",
-    "sensitivity": "normal"
+    "sensitivity": "normal",
+    "entities": [{ "type": "account", "text": "MedCore", "normalized": "MedCore Health Systems", "confidence": 0.9, "match_hint": "MedCore Health Systems" }],
+    "linked_accounts": [{ "name": "MedCore Health Systems", "confidence": 0.9 }],
+    "linked_deals": [{ "name": "MedCore Enterprise", "confidence": 0.7 }],
+    "needs_clarification": false
   },
   "follow_up": {
-    "should_ask": true,
-    "question": "Natural, conversational question",
-    "chips": ["Short answer 1", "Short answer 2", "Short answer 3"],
-    "clarifies": "scope"
+    "should_ask": false,
+    "question": null,
+    "chips": null,
+    "clarifies": null
   },
-  "acknowledgment": "Got it — tracking this competitive signal."
+  "acknowledgment": "Got it — tracking this."
 }
 
-If no follow-up needed, return: "follow_up": { "should_ask": false, "question": null, "chips": null, "clarifies": null }
+IMPORTANT: Chips should be plain language. The question should sound like a colleague, not a form.`;
 
-IMPORTANT: Chips should be plain language (e.g., "Just this deal", "Across healthcare"), not code values. The question should sound like a colleague, not a form.`;
+  const accountNames = allAccounts.map((a) => a.name).join(", ");
+  const dealLines = observerDeals.map((d) => `- ${d.name} (${d.companyName}, ${d.stage}, €${d.dealValue || 0})`).join("\n");
 
   const userPrompt = `Observer: ${observer?.name || "Unknown"} (${observer?.role || "Unknown"}, ${observer?.verticalSpecialization || "General"})
 Context: page=${context?.page || "unknown"}, deal=${context?.dealId ? "yes" : "no"}, trigger=${context?.trigger || "manual"}
 
+Known accounts in CRM: ${accountNames}
+
+This rep's current deals:
+${dealLines || "No deals assigned"}
+
 Observation: "${rawInput}"
 
-Classify this observation and decide if a follow-up question would add value. Return JSON only, no markdown fences.`;
+Classify, extract entities, and decide if a follow-up would add value. Return JSON only, no markdown fences.`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
+    max_tokens: 1500,
     messages: [{ role: "user", content: userPrompt }],
     system: systemPrompt,
   });
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-
-  // Parse JSON — strip markdown fences if present
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(cleaned);
 
+  const classResult = parsed.classification || {
+    signals: [{ type: "field_intelligence", confidence: 0.5, summary: rawInput.slice(0, 100) }],
+    sentiment: "neutral",
+    urgency: "medium",
+  };
+
   return {
-    classification: parsed.classification || {
-      signals: [{ type: "field_intelligence", confidence: 0.5, summary: rawInput.slice(0, 100) }],
-      sentiment: "neutral",
-      urgency: "medium",
+    classification: {
+      ...classResult,
+      entities: classResult.entities || parsed.entities || [],
+      linked_accounts: classResult.linked_accounts || parsed.linked_accounts || [],
+      linked_deals: classResult.linked_deals || parsed.linked_deals || [],
+      needs_clarification: classResult.needs_clarification ?? parsed.needs_clarification ?? false,
     },
     followUp: parsed.follow_up || { should_ask: false, question: null, chips: null, clarifies: null },
     acknowledgment: parsed.acknowledgment || null,
@@ -407,28 +493,115 @@ async function calculateArrImpactFromDeals(dealIds: string[]) {
   };
 }
 
-// ── Cluster Matching ──
+// ── Entity Resolution ──
 
-async function findMatchingCluster(signalType: string, signal: { competitor_name?: string; content_type?: string; process_name?: string }): Promise<string | null> {
-  const activeClusters = await db
-    .select()
-    .from(observationClusters)
-    .where(eq(observationClusters.signalType, signalType));
+function resolveEntities(
+  entities: Array<{ type: string; text: string; normalized: string; confidence: number; match_hint?: string }>,
+  linkedAccounts: Array<{ name: string; confidence: number }>,
+  linkedDeals: Array<{ name: string; confidence: number }>,
+  allAccounts: Array<{ id: string; name: string }>,
+  observerDeals: Array<{ id: string; name: string; companyId: string; companyName: string | null }>
+): { accountIds: string[]; dealIds: string[] } {
+  const accountIds: string[] = [];
+  const dealIds: string[] = [];
 
-  for (const cluster of activeClusters) {
-    const summary = cluster.structuredSummary as Record<string, unknown> | null;
-    // Match on signal type + at least one structured field overlap
-    if (signal.competitor_name && summary?.competitor_name === signal.competitor_name) return cluster.id;
-    if (signal.content_type && summary?.content_type === signal.content_type) return cluster.id;
-    if (signal.process_name && summary?.process_name === signal.process_name) return cluster.id;
-
-    // Also match by checking cluster title keywords against signal summary
-    const clusterTitle = cluster.title?.toLowerCase() || "";
-    const signalSummary = signal.competitor_name?.toLowerCase() || signal.content_type?.toLowerCase() || signal.process_name?.toLowerCase() || "";
-    if (signalSummary && clusterTitle.includes(signalSummary)) return cluster.id;
+  function fuzzyMatch(haystack: string, needle: string): boolean {
+    const h = haystack.toLowerCase();
+    const n = needle.toLowerCase();
+    return h.includes(n) || n.includes(h.split(" ")[0]!);
   }
 
-  return null;
+  for (const linked of linkedAccounts) {
+    if (linked.confidence < 0.5) continue;
+    const match = allAccounts.find((a) => fuzzyMatch(a.name, linked.name));
+    if (match && !accountIds.includes(match.id)) accountIds.push(match.id);
+  }
+
+  for (const linked of linkedDeals) {
+    if (linked.confidence < 0.5) continue;
+    const match = observerDeals.find((d) => fuzzyMatch(d.name, linked.name));
+    if (match) {
+      if (!dealIds.includes(match.id)) dealIds.push(match.id);
+      if (match.companyId && !accountIds.includes(match.companyId)) accountIds.push(match.companyId);
+    }
+  }
+
+  for (const entity of entities) {
+    if (entity.type === "account" && entity.confidence >= 0.7) {
+      const hint = entity.match_hint || entity.normalized;
+      const match = allAccounts.find((a) => fuzzyMatch(a.name, hint));
+      if (match && !accountIds.includes(match.id)) accountIds.push(match.id);
+    }
+  }
+
+  return { accountIds, dealIds };
+}
+
+// ── Semantic Cluster Matching ──
+
+async function findMatchingCluster(
+  rawInput: string,
+  classification: { signals: Array<{ type: string; summary?: string }> },
+  client: Anthropic | null
+): Promise<string | null> {
+  const activeClusters = await db
+    .select({
+      id: observationClusters.id,
+      title: observationClusters.title,
+      summary: observationClusters.summary,
+      signalType: observationClusters.signalType,
+      unstructuredQuotes: observationClusters.unstructuredQuotes,
+    })
+    .from(observationClusters)
+    .where(ne(observationClusters.resolutionStatus, "resolved"));
+
+  if (activeClusters.length === 0) return null;
+
+  if (!client) {
+    // Fallback: simple signal type + title keyword match
+    const signal = classification.signals[0];
+    if (!signal) return null;
+    for (const cluster of activeClusters) {
+      if (cluster.signalType !== signal.type) continue;
+      const titleWords = (cluster.title || "").toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
+      const inputWords = rawInput.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
+      const overlap = titleWords.filter((w) => inputWords.includes(w)).length;
+      if (overlap >= 2) return cluster.id;
+    }
+    return null;
+  }
+
+  try {
+    const clusterDescriptions = activeClusters.map((c) => {
+      const quotes = (c.unstructuredQuotes as Array<{ quote: string }>) || [];
+      const sampleQuotes = quotes.slice(0, 2).map((q) => `"${q.quote?.slice(0, 80)}"`).join(", ");
+      return `- ID: ${c.id} | "${c.title}" | Type: ${c.signalType} | ${c.summary || ""} | Samples: ${sampleQuotes}`;
+    }).join("\n");
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 200,
+      system: `You match sales observations to existing patterns. A match means the SAME underlying issue — even with different words. "GDPR compliance" matches "data privacy regulations". "Their pricing is killing us" matches "CompetitorX Aggressive Pricing". But "slow legal review" does NOT match "GDPR Compliance".
+
+Return JSON: { "cluster_id": "ID" or null, "confidence": 0.0-1.0 }
+If confidence < 0.6, return null. Return JSON only, no fences.`,
+      messages: [{
+        role: "user",
+        content: `Observation: "${rawInput}"\nSignal: ${classification.signals[0]?.type || "unknown"}\n\nExisting patterns:\n${clusterDescriptions}`,
+      }],
+    });
+
+    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const result = JSON.parse(text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+
+    if (result.cluster_id && result.confidence >= 0.6) {
+      const exists = activeClusters.find((c) => c.id === result.cluster_id);
+      if (exists) return result.cluster_id;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 async function updateClusterCounts(clusterId: string) {
@@ -506,10 +679,10 @@ async function createRoutingRecords(observationId: string, classification: { sig
   }
 }
 
-// ── Step 3: Cluster Auto-Creation ──
+// ── Semantic Cluster Auto-Creation ──
 
 async function checkAndCreateCluster(
-  obs: { id: string; observerId: string; rawInput: string; structuredData?: unknown; aiClassification?: unknown },
+  obs: { id: string; observerId: string; rawInput: string; aiClassification?: unknown },
   classification: { signals: Array<{ type: string; confidence: number; summary: string; competitor_name?: string; content_type?: string; process_name?: string }> },
   context: { dealId?: string } | null,
   client: Anthropic | null
@@ -517,90 +690,98 @@ async function checkAndCreateCluster(
   const primarySignal = classification.signals[0];
   if (!primarySignal) return;
 
-  // Find unclustered observations with the same primary signal type
+  // Find unclustered observations from last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const unclustered = await db
     .select({
       id: observations.id,
       observerId: observations.observerId,
       rawInput: observations.rawInput,
       aiClassification: observations.aiClassification,
-      structuredData: observations.structuredData,
+      createdAt: observations.createdAt,
     })
     .from(observations)
     .where(
       and(
         isNull(observations.clusterId),
-        ne(observations.id, obs.id)
+        ne(observations.id, obs.id),
+        sql`${observations.createdAt} >= ${thirtyDaysAgo}`
       )
     )
     .orderBy(desc(observations.createdAt))
-    .limit(50);
+    .limit(30);
 
-  // Filter to same signal type with structural overlap
-  const matching = unclustered.filter((o) => {
-    const oClass = o.aiClassification as { signals?: Array<{ type: string; competitor_name?: string; content_type?: string; process_name?: string }> } | null;
-    const oSignal = oClass?.signals?.[0];
-    if (!oSignal || oSignal.type !== primarySignal.type) return false;
+  if (unclustered.length === 0) return;
 
-    // Check structural overlap
-    if (primarySignal.competitor_name && oSignal.competitor_name === primarySignal.competitor_name) return true;
-    if (primarySignal.content_type && oSignal.content_type === primarySignal.content_type) return true;
-    if (primarySignal.process_name && oSignal.process_name === primarySignal.process_name) return true;
-
-    // Keyword overlap in raw input (at least 2 long words)
-    const keywords = obs.rawInput.toLowerCase().split(/\s+/).filter((w) => w.length > 5);
-    const oKeywords = o.rawInput.toLowerCase().split(/\s+/).filter((w) => w.length > 5);
-    const overlap = keywords.filter((k) => oKeywords.includes(k)).length;
-    return overlap >= 2;
-  });
-
-  if (matching.length < 1) return; // Need at least 2 total (this + 1 match)
-
-  // Generate cluster title
-  const allObs = [obs, ...matching];
-  let title: string;
-  let summary: string;
-
-  if (client) {
-    try {
-      const quotes = allObs.map((o) => o.rawInput).join("\n- ");
-      const resp = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 200,
-        system: `You name patterns in sales intelligence data. Given observations sharing a common theme, generate:
-1. A short title (5-8 words) a VP of Sales would understand. Examples: "CompetitorX Aggressive Pricing in Healthcare", "Stale Case Studies Blocking Deals"
-2. A one-sentence description.
-Return JSON only: { "title": "...", "description": "..." }`,
-        messages: [{ role: "user", content: `Signal type: ${primarySignal.type}\n\nObservations:\n- ${quotes}\n\nReturn JSON only, no markdown fences.` }],
-      });
-      const text = resp.content[0]?.type === "text" ? resp.content[0].text : "";
-      const parsed = JSON.parse(text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
-      title = parsed.title;
-      summary = parsed.description;
-    } catch {
-      title = `${primarySignal.type.replace(/_/g, " ")} pattern`;
-      summary = `${allObs.length} observations flagging a ${primarySignal.type.replace(/_/g, " ")} pattern.`;
-    }
-  } else {
-    title = `${primarySignal.type.replace(/_/g, " ")} pattern`;
-    summary = `${allObs.length} observations flagging a ${primarySignal.type.replace(/_/g, " ")} pattern.`;
+  if (!client) {
+    // Fallback: keyword-based grouping
+    const keywords = obs.rawInput.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
+    const matching = unclustered.filter((o) => {
+      const oKeywords = o.rawInput.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);
+      return keywords.filter((k) => oKeywords.includes(k)).length >= 2;
+    });
+    if (matching.length < 1) return;
+    const allObs = [obs, ...matching];
+    await createClusterFromObservations(allObs, primarySignal);
+    return;
   }
 
-  const targetFunction = SIGNAL_ROUTES[primarySignal.type] || "Field Intelligence";
+  try {
+    const obsDescriptions = unclustered.map((o) => {
+      const oType = (o.aiClassification as { signals?: Array<{ type: string }> })?.signals?.[0]?.type || "unknown";
+      return `- ID: ${o.id} | "${o.rawInput.slice(0, 120)}" | Signal: ${oType}`;
+    }).join("\n");
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 300,
+      system: `You detect patterns in sales observations. Given a new observation and unclustered observations, find which are about the SAME topic. Focus on semantic meaning, not keywords. "GDPR compliance" and "data privacy regulations" are the same topic. Be selective — only group clearly related observations.
+
+Return JSON: { "matching_ids": ["id1"], "pattern_title": "5-8 word title", "pattern_description": "one sentence" }
+If < 1 match, return: { "matching_ids": [], "pattern_title": null, "pattern_description": null }
+Return JSON only, no fences.`,
+      messages: [{
+        role: "user",
+        content: `New observation (ID: ${obs.id}): "${obs.rawInput}"\nSignal: ${primarySignal.type}\n\nUnclustered observations:\n${obsDescriptions}`,
+      }],
+    });
+
+    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const result = JSON.parse(text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+
+    if (!result.matching_ids || result.matching_ids.length === 0) return;
+
+    const validMatches = unclustered.filter((o) => result.matching_ids.includes(o.id));
+    if (validMatches.length === 0) return;
+
+    const allObs = [obs, ...validMatches];
+    await createClusterFromObservations(allObs, primarySignal, result.pattern_title, result.pattern_description);
+  } catch (err) {
+    console.error("Semantic cluster creation failed:", err);
+  }
+}
+
+async function createClusterFromObservations(
+  allObs: Array<{ id: string; observerId: string; rawInput: string }>,
+  primarySignal: { type: string; competitor_name?: string; content_type?: string; process_name?: string },
+  title?: string | null,
+  description?: string | null
+) {
   const uniqueObservers = new Set(allObs.map((o) => o.observerId)).size;
+  const uniqueQuotes = [...new Map(allObs.map((o) => [o.rawInput, o])).values()];
 
   const [newCluster] = await db
     .insert(observationClusters)
     .values({
-      title,
-      summary,
+      title: title || `${primarySignal.type.replace(/_/g, " ")} pattern`,
+      summary: description || `${allObs.length} observations flagging a ${primarySignal.type.replace(/_/g, " ")} pattern.`,
       signalType: primarySignal.type,
-      targetFunction,
+      targetFunction: SIGNAL_ROUTES[primarySignal.type] || "Field Intelligence",
       observationCount: allObs.length,
       observerCount: uniqueObservers,
       severity: allObs.length >= 4 ? "critical" : allObs.length >= 3 ? "concerning" : "notable",
       resolutionStatus: "emerging",
-      unstructuredQuotes: allObs.slice(0, 5).map((o) => ({
+      unstructuredQuotes: uniqueQuotes.slice(0, 5).map((o) => ({
         quote: o.rawInput.slice(0, 200),
         role: "AE",
         vertical: "general",
@@ -614,12 +795,10 @@ Return JSON only: { "title": "...", "description": "..." }`,
     })
     .returning();
 
-  // Assign all observations to this cluster
-  const allIds = allObs.map((o) => o.id);
   await db
     .update(observations)
     .set({ clusterId: newCluster!.id })
-    .where(inArray(observations.id, allIds));
+    .where(inArray(observations.id, allObs.map((o) => o.id)));
 }
 
 // ── Append quote to existing cluster ──
@@ -643,6 +822,8 @@ async function appendQuoteToCluster(
     date: new Date().toISOString().split("T")[0],
   };
 
+  // Skip if this exact quote already exists
+  if (currentQuotes.some((q) => q.quote === newQuote.quote)) return;
   const updatedQuotes = [newQuote, ...currentQuotes].slice(0, 10);
 
   await db
