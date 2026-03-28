@@ -34,6 +34,7 @@ type ActivityMeta = Record<string, unknown>;
 
 function getEffectiveType(activity: ActivityItem): string {
   const meta = activity.metadata as ActivityMeta | null;
+  if (meta?.source === "call_prep") return "call_prep";
   if (meta?.source === "call_analysis") return "call_analysis";
   if (meta?.source === "email_draft") return "email_draft";
   if (meta?.source === "agent_action") return "agent_action";
@@ -52,6 +53,7 @@ const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   document_shared: Share2,
   observation: Eye,
   call_analysis: AudioLines,
+  call_prep: Sparkles,
   agent_action: Sparkles,
   email_draft: Sparkles,
 };
@@ -68,6 +70,7 @@ const ACTIVITY_COLORS: Record<string, string> = {
   document_shared: "bg-cyan-50 text-cyan-600",
   observation: "bg-[#FDF0ED] text-[#D4735E]",
   call_analysis: "bg-[#FDF0ED] text-[#D4735E]",
+  call_prep: "bg-[#FDF0ED] text-[#D4735E]",
   agent_action: "bg-[#FDF0ED] text-[#D4735E]",
   email_draft: "bg-[#FDF0ED] text-[#D4735E]",
 };
@@ -101,6 +104,7 @@ function isExpandable(activity: ActivityItem): boolean {
     "email_received",
     "note_added",
     "call_analysis",
+    "call_prep",
     "agent_action",
     "email_draft",
     "observation",
@@ -165,6 +169,48 @@ function ActivityDetail({ activity }: { activity: ActivityItem }) {
       );
     }
 
+    case "call_prep": {
+      const brief = meta?.brief as {
+        headline?: string;
+        talking_points?: Array<{ topic: string }>;
+        risks_and_landmines?: Array<{ risk: string }>;
+        questions_to_ask?: Array<{ question: string }>;
+      } | undefined;
+      const prepCtx = meta?.prepContext as string | undefined;
+      return (
+        <div className="space-y-3">
+          {prepCtx && (
+            <p className="text-xs text-[#8A8078]">Prep for: {prepCtx}</p>
+          )}
+          {brief?.headline && (
+            <p className="text-sm font-medium text-[#3D3833]">{brief.headline}</p>
+          )}
+          {brief?.talking_points && brief.talking_points.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#6B6B6B] mb-1">Key Talking Points</p>
+              <ul className="space-y-1">
+                {brief.talking_points.slice(0, 3).map((tp, i) => (
+                  <li key={i} className="text-sm text-[#3D3833] flex items-start gap-2">
+                    <span className="text-[#E07A5F] mt-0.5 shrink-0 text-xs font-semibold">{i + 1}.</span>
+                    {tp.topic}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {brief?.risks_and_landmines?.[0] && (
+            <p className="text-sm text-[#C74B3B] flex items-start gap-1.5">
+              <span className="shrink-0">⚠</span>
+              {brief.risks_and_landmines[0].risk}
+            </p>
+          )}
+          {!brief && activity.description && (
+            <p className="text-sm text-[#3D3833]">{activity.description}</p>
+          )}
+        </div>
+      );
+    }
+
     case "agent_action": {
       const headline = meta?.headline as string | undefined;
       return (
@@ -180,11 +226,22 @@ function ActivityDetail({ activity }: { activity: ActivityItem }) {
     }
 
     case "email_draft": {
+      const emailSubject = meta?.subject as string | undefined;
+      const emailBody = meta?.body as string | undefined;
+      const emailTo = meta?.to as string | undefined;
       return (
         <div className="space-y-2">
-          {activity.description && (
-            <p className="text-sm text-[#3D3833]">{activity.description}</p>
+          {emailTo && (
+            <p className="text-xs text-[#8A8078]">To: {emailTo}</p>
           )}
+          {emailSubject && (
+            <p className="text-sm font-medium text-[#3D3833]">Subject: {emailSubject}</p>
+          )}
+          {emailBody ? (
+            <p className="text-sm text-[#3D3833] whitespace-pre-line leading-relaxed">{emailBody.slice(0, 300)}{emailBody.length > 300 ? "..." : ""}</p>
+          ) : activity.description ? (
+            <p className="text-sm text-[#3D3833]">{activity.description}</p>
+          ) : null}
         </div>
       );
     }
@@ -252,7 +309,7 @@ export function ActivityFeed({
     if (filter === "call") return a.type.includes("call") || effectiveType === "call_analysis";
     if (filter === "meeting") return a.type.includes("meeting");
     if (filter === "note") return a.type === "note_added" && !["call_analysis", "agent_action", "email_draft"].includes(effectiveType);
-    if (filter === "ai") return ["call_analysis", "agent_action", "email_draft", "observation"].includes(effectiveType);
+    if (filter === "ai") return ["call_analysis", "call_prep", "agent_action", "email_draft", "observation"].includes(effectiveType);
     return true;
   });
 

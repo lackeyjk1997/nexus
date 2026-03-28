@@ -21,7 +21,7 @@ import { eq, desc, and, sql, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const { dealId: rawDealId, accountId: rawAccountId, memberId, rawQuery } = await request.json();
+  const { dealId: rawDealId, accountId: rawAccountId, memberId, rawQuery, prepContext, attendeeIds } = await request.json();
 
   if (!memberId) {
     return NextResponse.json({ error: "memberId is required" }, { status: 400 });
@@ -327,9 +327,24 @@ export async function POST(request: Request) {
     })),
   };
 
+  // ── Build attendee context if specific attendees selected ──
+  let attendeeContext = "";
+  if (attendeeIds && Array.isArray(attendeeIds) && attendeeIds.length > 0) {
+    const selectedAttendees = dealContacts.filter((c) => attendeeIds.includes(c.id));
+    if (selectedAttendees.length > 0) {
+      attendeeContext = `\n\nMEETING ATTENDEES from the prospect side:\n${selectedAttendees.map((a) => `- ${a.firstName} ${a.lastName}, ${a.title || "Unknown title"} (${a.roleInDeal || "Stakeholder"})`).join("\n")}\n\nTailor talking points and questions to THESE specific people. For example, if the CFO is attending, include ROI and budget questions. If only engineers are attending, focus on technical depth.`;
+    }
+  }
+
+  // ── Build prep context section ──
+  let prepContextSection = "";
+  if (prepContext) {
+    prepContextSection = `\n\nThe rep is preparing for: "${prepContext}"\n\nTailor the entire brief to THIS specific type of meeting:\n- For discovery calls: focus on questions to ask, pain points to uncover, qualification gaps\n- For technical reviews: focus on technical talking points, demo flow, integration concerns\n- For executive meetings: focus on ROI, business case, competitive positioning, decision process\n- For negotiations: focus on pricing strategy, concession options, competitive pressure, closing tactics\n\nEvery section (talking points, questions, risks, suggested close) should be relevant to THIS meeting type, not generic deal overview.`;
+  }
+
   const systemPrompt = `You are an AI sales agent preparing a call brief for ${rep?.name || "a sales rep"}. You have access to comprehensive CRM data, field intelligence from the team, and the rep's personal selling style.
 
-Generate a call brief that the rep can read in 2 minutes and walk into the call prepared.
+Generate a call brief that the rep can read in 2 minutes and walk into the call prepared.${prepContextSection}${attendeeContext}
 
 ${agentConfigRow ? `AGENT CONFIGURATION:
 Instructions: ${agentConfigRow.instructions}
@@ -429,6 +444,14 @@ Return ONLY valid JSON with this exact structure:
       dealId: resolvedDealId,
       dealName: dealRow.name,
       accountName: dealRow.companyName,
+      dealStage: dealRow.stage,
+      contacts: dealContacts.map((c) => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`,
+        title: c.title,
+        roleInDeal: c.roleInDeal,
+        isPrimary: false, // not available in this select
+      })),
     });
   } catch (err) {
     console.error("Call prep error:", err);

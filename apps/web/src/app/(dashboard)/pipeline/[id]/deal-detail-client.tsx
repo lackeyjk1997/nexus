@@ -248,11 +248,14 @@ export function DealDetailClient({
   );
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [stageModalOpen, setStageModalOpen] = useState(false);
-  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
+  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "context" | "loading" | "result" | "error">("hidden");
   const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
   const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
   const [briefCopied, setBriefCopied] = useState(false);
   const [briefSaved, setBriefSaved] = useState(false);
+  const [prepContext, setPrepContext] = useState("");
+  const [prepContextHighlight, setPrepContextHighlight] = useState(-1);
+  const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
 
   // Email draft state
   const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
@@ -270,8 +273,39 @@ export function DealDetailClient({
   const vertColor = getVerticalColor(deal.vertical);
   const winProb = deal.winProbability ?? 0;
 
-  async function handlePrepCall() {
+  // Smart default for meeting type based on deal stage
+  function getDefaultPrepContext(): string {
+    const stage = deal.stage;
+    if (stage === "discovery" || stage === "qualified") return "Discovery call";
+    if (stage === "technical_validation") return "Technical review / demo";
+    if (stage === "proposal") return "Executive / procurement meeting";
+    if (stage === "negotiation" || stage === "closing") return "Negotiation / pricing discussion";
+    return "";
+  }
+
+  const PREP_OPTIONS = [
+    "Discovery call",
+    "Technical review / demo",
+    "Executive / procurement meeting",
+    "Negotiation / pricing discussion",
+  ];
+
+  function handlePrepCall() {
     if (!currentUser) return;
+    // Show context selector instead of generating immediately
+    const defaultCtx = getDefaultPrepContext();
+    setPrepContext(defaultCtx);
+    setPrepContextHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+    // Pre-check primary contact
+    const primaryIds = contacts.filter((c) => c.isPrimary).map((c) => c.id);
+    setSelectedAttendeeIds(primaryIds.length > 0 ? primaryIds : contacts.length > 0 ? [contacts[0].id] : []);
+    setBriefSaved(false);
+    setCallPrepPhase("context");
+  }
+
+  async function generateCallPrep(ctx: string, attendees: string[]) {
+    if (!currentUser) return;
+    setPrepContext(ctx);
     setCallPrepPhase("loading");
     try {
       const res = await fetch("/api/agent/call-prep", {
@@ -281,6 +315,8 @@ export function DealDetailClient({
           dealId: deal.id,
           accountId: deal.companyId,
           memberId: currentUser.id,
+          prepContext: ctx,
+          attendeeIds: attendees,
         }),
       });
       if (res.ok) {
@@ -297,14 +333,24 @@ export function DealDetailClient({
 
   async function saveBriefToDeal() {
     if (!currentUser || !callBrief || briefSaved) return;
+    const selectedAttendees = contacts
+      .filter((c) => selectedAttendeeIds.includes(c.id))
+      .map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, title: c.title, role: c.roleInDeal }));
     await fetch("/api/agent/save-to-deal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         dealId: deal.id,
         memberId: currentUser.id,
-        title: `AI Call Prep — ${deal.companyName}`,
-        description: `Call brief generated. Key focus: ${callBrief.headline}`,
+        title: `AI Call Prep — ${prepContext || deal.companyName}`,
+        description: callBrief.headline,
+        fullMetadata: {
+          source: "call_prep",
+          prepContext,
+          attendees: selectedAttendees,
+          brief: callBrief,
+          generatedAt: new Date().toISOString(),
+        },
       }),
     }).catch(() => {});
     setBriefSaved(true);
@@ -400,6 +446,14 @@ export function DealDetailClient({
         memberId: currentUser.id,
         title: `Follow-up email drafted${emailDraft.to ? ` for ${emailDraft.to}` : ""}`,
         description: `Subject: ${editedSubject}`,
+        fullMetadata: {
+          source: "email_draft",
+          to: emailDraft.to,
+          subject: editedSubject,
+          body: editedBody,
+          notes: emailDraft.notes_for_rep,
+          generatedAt: new Date().toISOString(),
+        },
       }),
     }).catch(() => {});
     setEmailSaved(true);
@@ -621,6 +675,163 @@ export function DealDetailClient({
         </div>
       </div>
 
+      {/* Call Prep Context Selector */}
+      {callPrepPhase === "context" && (
+        <div
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              What are you prepping for?
+            </span>
+            <button
+              onClick={() => setCallPrepPhase("hidden")}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Meeting type options */}
+          <div className="px-2 pt-2 pb-1">
+            {PREP_OPTIONS.map((option, i) => {
+              const isDefault = option === getDefaultPrepContext();
+              const isHighlighted = prepContextHighlight === i;
+              return (
+                <button
+                  key={option}
+                  onClick={() => {
+                    setPrepContext(option);
+                    setPrepContextHighlight(i);
+                  }}
+                  onMouseEnter={() => setPrepContextHighlight(i)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                  style={{
+                    background: isHighlighted ? "#F3EDE7" : isDefault ? "rgba(243,237,231,0.5)" : "transparent",
+                  }}
+                >
+                  <span
+                    className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "6px",
+                      border: `1.5px solid ${isHighlighted ? "#E07A5F" : "#D4C9BD"}`,
+                      color: isHighlighted ? "#E07A5F" : "#8A8078",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-[14px] flex-1 text-left" style={{ color: "#3D3833" }}>
+                    {option}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Free text input for custom context */}
+          <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+          <div className="flex items-center gap-2 px-3 py-2">
+            <input
+              type="text"
+              value={PREP_OPTIONS.includes(prepContext) ? "" : prepContext}
+              onChange={(e) => {
+                setPrepContext(e.target.value);
+                setPrepContextHighlight(-1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && prepContext.trim()) {
+                  generateCallPrep(prepContext, selectedAttendeeIds);
+                }
+              }}
+              placeholder="Or describe it..."
+              className="flex-1 bg-transparent border-none outline-none text-[13px] placeholder:text-[#8A8078]/60"
+              style={{ color: "#3D3833" }}
+            />
+          </div>
+
+          {/* Attendee selection */}
+          {contacts.length > 0 && (
+            <>
+              <div className="mx-5 mt-1" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+              <div className="px-5 pt-3 pb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: "#8A8078" }}>
+                  Who&apos;s attending from their side?
+                </p>
+                <div className="space-y-1.5">
+                  {contacts.map((contact) => {
+                    const isChecked = selectedAttendeeIds.includes(contact.id);
+                    return (
+                      <button
+                        key={contact.id}
+                        onClick={() =>
+                          setSelectedAttendeeIds((prev) =>
+                            isChecked ? prev.filter((id) => id !== contact.id) : [...prev, contact.id]
+                          )
+                        }
+                        className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors hover:bg-[#F3EDE7]/60"
+                      >
+                        <div
+                          className="h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors"
+                          style={{
+                            borderColor: isChecked ? "#E07A5F" : "#D4C9BD",
+                            background: isChecked ? "#E07A5F" : "transparent",
+                          }}
+                        >
+                          {isChecked && <Check className="h-2.5 w-2.5 text-white" />}
+                        </div>
+                        <div className="flex-1 text-left">
+                          <span className="text-[13px]" style={{ color: "#3D3833" }}>
+                            {contact.firstName} {contact.lastName}
+                          </span>
+                          {contact.title && (
+                            <span className="text-[12px] ml-1.5" style={{ color: "#8A8078" }}>
+                              · {contact.title}
+                            </span>
+                          )}
+                          {contact.roleInDeal && (
+                            <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.08)", color: "#0C7489" }}>
+                              {contact.roleInDeal}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Generate button */}
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={() => generateCallPrep(prepContext, selectedAttendeeIds)}
+              disabled={!prepContext.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium transition-all"
+              style={{
+                background: prepContext.trim() ? "#E07A5F" : "#E8E5E0",
+                color: prepContext.trim() ? "white" : "#8A8078",
+                cursor: prepContext.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Generate Brief
+            </button>
+            <p className="text-[11px]" style={{ color: "rgba(138,128,120,0.5)" }}>
+              1-4 select · enter confirm
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Call Prep Panel */}
       {callPrepPhase === "result" && callBrief && (
         <div
@@ -841,7 +1052,7 @@ export function DealDetailClient({
               {briefSaved ? "Saved ✓" : "Save to timeline"}
             </button>
             <button
-              onClick={handlePrepCall}
+              onClick={() => generateCallPrep(prepContext, selectedAttendeeIds)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors"
               style={{ color: "#8A8078" }}
             >

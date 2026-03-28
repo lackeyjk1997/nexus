@@ -95,6 +95,7 @@ type Phase =
   | "quick_check"
   | "quick_check_submitting"
   | "quick_check_giveback"
+  | "call_prep_context"
   | "call_prep_loading"
   | "call_prep_result"
   | "draft_loading"
@@ -102,19 +103,31 @@ type Phase =
 
 // ── Intent Detection ───────────────────────────────────────────────────────────
 
-function detectIntent(input: string): "observe" | "call_prep" | "draft_email" {
+function detectIntent(input: string): "observe" | "call_prep" | "draft_email" | "quick_answer" {
   const lower = input.toLowerCase();
-  if (
-    lower.match(
-      /\b(prep|prepare|brief|get ready for|upcoming call|before my call|call with|meeting with)\b/
-    )
-  )
+
+  // Observation signals — check first so they override action intents
+  if (lower.match(/\b(noticing|seeing|hearing|observed|pattern|trend|slowing|across|every|all)\b.*\b(deal|account|enterprise|pipeline|team)\b/))
+    return "observe";
+  if (lower.match(/\b(are|is|keep)\b.*\b(slowing|blocking|stalling|hurting|killing)\b/))
+    return "observe";
+
+  // Quick answer — status/info queries
+  if (lower.match(/\b(what'?s|how'?s|status|update on|where.?is|tell me about)\b.*\b(happening|going|with|on)\b/))
+    return "quick_answer";
+
+  // Call prep — "prep MedVista", "prepare for call", "brief me on", etc.
+  if (lower.match(/\b(prep|prepare|brief|get ready)\b/))
     return "call_prep";
-  if (
-    lower.match(/\b(draft|write|compose|email|follow.?up|reply|message to|reach out)\b/) &&
-    !lower.match(/\b(noticing|seeing|hearing|pattern|observed)\b/)
-  )
+  if (lower.match(/\b(upcoming call|before my call|call with|meeting with)\b/))
+    return "call_prep";
+
+  // Email draft — "email Oliver", "draft follow-up", "write to", etc.
+  if (lower.match(/\b(draft|write|compose|reply|message to|reach out to)\b/))
     return "draft_email";
+  if (lower.match(/\b(email|follow.?up)\b/) && lower.match(/\b(to|for|about)\b/))
+    return "draft_email";
+
   return "observe";
 }
 
@@ -181,6 +194,14 @@ export function ObservationInput({
   const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
   const [callBriefDealId, setCallBriefDealId] = useState<string | null>(null);
   const [callBriefDealName, setCallBriefDealName] = useState<string | null>(null);
+  const [callBriefAccountId, setCallBriefAccountId] = useState<string | null>(null);
+
+  // Prep context state (meeting type + attendee selection)
+  const [agentPrepContext, setAgentPrepContext] = useState("");
+  const [agentPrepHighlight, setAgentPrepHighlight] = useState(-1);
+  const [agentPrepContacts, setAgentPrepContacts] = useState<Array<{ id: string; name: string; title: string | null; roleInDeal: string | null; isPrimary: boolean | null }>>([]);
+  const [agentSelectedAttendees, setAgentSelectedAttendees] = useState<string[]>([]);
+  const [agentDealStage, setAgentDealStage] = useState<string | null>(null);
 
   // Email draft state
   const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
@@ -198,19 +219,17 @@ export function ObservationInput({
 
   const isAE = currentUser?.role === "AE";
 
+  const PAGE_PLACEHOLDERS: Record<string, string> = {
+    pipeline: "Ask Nexus — prep a call, draft an email, or share intel",
+    deal_detail: "Ask Nexus — prep this call, draft a follow-up, or share intel",
+    prospects: "Ask Nexus — research a prospect, draft outreach, or share intel",
+    outreach: "Ask Nexus — draft an email or share what you're seeing",
+    analyze: "Ask Nexus — draft a follow-up or share what you noticed",
+    observations: "Share what you're noticing across your deals",
+    intelligence: "Ask about patterns you're seeing",
+  };
   const defaultPlaceholder =
-    placeholder ||
-    (context.page === "deal_detail"
-      ? "Ask Nexus — prep this call, draft a follow-up, or share intel"
-      : context.page === "pipeline"
-        ? "Ask Nexus — prep a call, draft an email, or share what you're seeing"
-        : context.page === "analyze"
-          ? "Anything the analysis missed, or patterns you're seeing?"
-          : context.page === "outreach"
-            ? "What are you noticing about prospect responses?"
-            : context.page === "prospects"
-              ? "What are you noticing about this prospect/market?"
-              : "Ask Nexus anything — share intel, prep a call, draft an email…");
+    placeholder || PAGE_PLACEHOLDERS[context.page] || "Ask Nexus anything — share intel, prep a call, draft an email…";
 
   // ── Fetch pending quick check questions on mount ──
   useEffect(() => {
@@ -282,11 +301,87 @@ export function ObservationInput({
     }
   }
 
-  // ── Call prep submit ──
-  async function handleCallPrep(userInput: string) {
+  // Smart default prep context from deal stage
+  const PREP_OPTIONS = [
+    "Discovery call",
+    "Technical review / demo",
+    "Executive / procurement meeting",
+    "Negotiation / pricing discussion",
+  ];
+
+  function getDefaultPrepFromStage(stage: string | null): string {
+    if (stage === "discovery" || stage === "qualified") return "Discovery call";
+    if (stage === "technical_validation") return "Technical review / demo";
+    if (stage === "proposal") return "Executive / procurement meeting";
+    if (stage === "negotiation" || stage === "closing") return "Negotiation / pricing discussion";
+    return "";
+  }
+
+  // ── Call prep with context — resolve deal, then show selector ──
+  async function handleCallPrepWithContext(userInput: string) {
     if (!currentUser) return;
     setSubmittedText(userInput);
     setInput("");
+
+    // If we already have a dealId from context (deal detail page), skip resolution
+    if (context.dealId) {
+      // Fetch contacts for the deal
+      try {
+        const res = await fetch("/api/deals/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealId: context.dealId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCallBriefDealId(data.dealId);
+          setCallBriefDealName(data.dealName ?? data.accountName ?? null);
+          setCallBriefAccountId(data.accountId ?? null);
+          setAgentPrepContacts(data.contacts || []);
+          setAgentDealStage(data.dealStage);
+          const defaultCtx = getDefaultPrepFromStage(data.dealStage);
+          setAgentPrepContext(defaultCtx);
+          setAgentPrepHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+          const primaryIds = (data.contacts || []).filter((c: { isPrimary: boolean | null }) => c.isPrimary).map((c: { id: string }) => c.id);
+          setAgentSelectedAttendees(primaryIds.length > 0 ? primaryIds : data.contacts?.length > 0 ? [data.contacts[0].id] : []);
+          setPhase("call_prep_context");
+          return;
+        }
+      } catch { /* fall through to direct generation */ }
+    }
+
+    // Resolve from query
+    try {
+      const res = await fetch("/api/deals/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawQuery: userInput }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCallBriefDealId(data.dealId);
+        setCallBriefDealName(data.dealName ?? data.accountName ?? null);
+        setCallBriefAccountId(data.accountId ?? null);
+        setAgentPrepContacts(data.contacts || []);
+        setAgentDealStage(data.dealStage);
+        const defaultCtx = getDefaultPrepFromStage(data.dealStage);
+        setAgentPrepContext(defaultCtx);
+        setAgentPrepHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+        const primaryIds = (data.contacts || []).filter((c: { isPrimary: boolean | null }) => c.isPrimary).map((c: { id: string }) => c.id);
+        setAgentSelectedAttendees(primaryIds.length > 0 ? primaryIds : data.contacts?.length > 0 ? [data.contacts[0].id] : []);
+        setPhase("call_prep_context");
+      } else {
+        setPhase("expanded");
+      }
+    } catch {
+      setPhase("expanded");
+    }
+  }
+
+  // ── Generate call prep with context ──
+  async function generateCallPrepFromBar(ctx: string, attendees: string[]) {
+    if (!currentUser || !callBriefDealId) return;
+    setAgentPrepContext(ctx);
     setPhase("call_prep_loading");
 
     try {
@@ -295,16 +390,16 @@ export function ObservationInput({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           memberId: currentUser.id,
-          rawQuery: userInput,
-          dealId: context.dealId,
-          accountId: context.accountId,
+          dealId: callBriefDealId,
+          accountId: callBriefAccountId,
+          prepContext: ctx,
+          attendeeIds: attendees,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
         setCallBrief(data.brief);
-        setCallBriefDealId(data.dealId ?? null);
         setCallBriefDealName(data.dealName ?? data.accountName ?? null);
         setPhase("call_prep_result");
       } else {
@@ -355,8 +450,9 @@ export function ObservationInput({
   async function handleSubmit() {
     if (!input.trim() || !currentUser) return;
     const intent = detectIntent(input.trim());
-    if (intent === "call_prep") return handleCallPrep(input.trim());
+    if (intent === "call_prep") return handleCallPrepWithContext(input.trim());
     if (intent === "draft_email") return handleDraftEmail(input.trim());
+    // quick_answer and observe both go through observation submit
     return handleObservationSubmit();
   }
 
@@ -464,7 +560,7 @@ export function ObservationInput({
   }
 
   // ── Save actions ──
-  async function saveToDeals(title: string, description: string, dealId: string | null, type: "email" | "brief" = "brief") {
+  async function saveToDeals(title: string, description: string, dealId: string | null, type: "email" | "brief" = "brief", fullMetadata?: Record<string, unknown>) {
     if (!dealId || !currentUser) return;
     await fetch("/api/agent/save-to-deal", {
       method: "POST",
@@ -474,6 +570,7 @@ export function ObservationInput({
         memberId: currentUser.id,
         title,
         description,
+        fullMetadata,
       }),
     }).catch(() => {});
     setSaveFeedback(type);
@@ -567,6 +664,7 @@ export function ObservationInput({
     phase === "quick_check_giveback";
 
   const isAgentActionActive =
+    phase === "call_prep_context" ||
     phase === "call_prep_loading" ||
     phase === "call_prep_result" ||
     phase === "draft_loading" ||
@@ -981,6 +1079,137 @@ export function ObservationInput({
               </div>
             )}
 
+            {/* Prep Context Selector */}
+            {phase === "call_prep_context" && (
+              <div
+                className="animate-[fadeSlideUp_0.35s_ease]"
+                style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "12px", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+              >
+                <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "#E07A5F" }} />
+                  <span className="text-[13px] font-semibold tracking-[0.01em]" style={{ color: "#3D3833" }}>
+                    What are you prepping for?
+                  </span>
+                  <button onClick={reset} className="ml-auto p-0.5 hover:opacity-70" style={{ color: "#8A8078" }}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="px-2 pt-2 pb-1">
+                  {PREP_OPTIONS.map((option, i) => {
+                    const isHighlighted = agentPrepHighlight === i;
+                    const isDefault = option === getDefaultPrepFromStage(agentDealStage);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => { setAgentPrepContext(option); setAgentPrepHighlight(i); }}
+                        onMouseEnter={() => setAgentPrepHighlight(i)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                        style={{ background: isHighlighted ? "#F3EDE7" : isDefault ? "rgba(243,237,231,0.5)" : "transparent" }}
+                      >
+                        <span
+                          className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                          style={{
+                            width: "24px", height: "24px", borderRadius: "6px",
+                            border: `1.5px solid ${isHighlighted ? "#E07A5F" : "#D4C9BD"}`,
+                            color: isHighlighted ? "#E07A5F" : "#8A8078",
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-[14px] flex-1 text-left" style={{ color: "#3D3833" }}>{option}</span>
+                        {isHighlighted && <CornerDownLeft className="h-3 w-3 shrink-0" style={{ color: "rgba(138,128,120,0.6)" }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input
+                    type="text"
+                    value={PREP_OPTIONS.includes(agentPrepContext) ? "" : agentPrepContext}
+                    onChange={(e) => { setAgentPrepContext(e.target.value); setAgentPrepHighlight(-1); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && agentPrepContext.trim()) {
+                        e.stopPropagation();
+                        generateCallPrepFromBar(agentPrepContext, agentSelectedAttendees);
+                      }
+                    }}
+                    placeholder="Or describe it…"
+                    className="flex-1 bg-transparent border-none outline-none text-[13px] placeholder:text-[#8A8078]/60"
+                    style={{ color: "#3D3833" }}
+                  />
+                </div>
+
+                {/* Attendees */}
+                {agentPrepContacts.length > 0 && (
+                  <>
+                    <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+                    <div className="px-5 pt-3 pb-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: "#8A8078" }}>
+                        Who&apos;s attending from their side?
+                      </p>
+                      <div className="space-y-1.5">
+                        {agentPrepContacts.map((contact) => {
+                          const isChecked = agentSelectedAttendees.includes(contact.id);
+                          return (
+                            <button
+                              key={contact.id}
+                              onClick={() =>
+                                setAgentSelectedAttendees((prev) =>
+                                  isChecked ? prev.filter((id) => id !== contact.id) : [...prev, contact.id]
+                                )
+                              }
+                              className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors hover:bg-[#F3EDE7]/60"
+                            >
+                              <div
+                                className="h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors"
+                                style={{
+                                  borderColor: isChecked ? "#E07A5F" : "#D4C9BD",
+                                  background: isChecked ? "#E07A5F" : "transparent",
+                                }}
+                              >
+                                {isChecked && <Check className="h-2.5 w-2.5 text-white" />}
+                              </div>
+                              <span className="text-[13px] text-left" style={{ color: "#3D3833" }}>
+                                {contact.name}
+                                {contact.title && <span className="text-[12px] ml-1.5" style={{ color: "#8A8078" }}>· {contact.title}</span>}
+                                {contact.roleInDeal && (
+                                  <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.08)", color: "#0C7489" }}>
+                                    {contact.roleInDeal}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                  <button
+                    onClick={() => generateCallPrepFromBar(agentPrepContext, agentSelectedAttendees)}
+                    disabled={!agentPrepContext.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium transition-all"
+                    style={{
+                      background: agentPrepContext.trim() ? "#E07A5F" : "#E8E5E0",
+                      color: agentPrepContext.trim() ? "white" : "#8A8078",
+                      cursor: agentPrepContext.trim() ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Generate Brief
+                  </button>
+                  <p className="text-[11px]" style={{ color: "rgba(138,128,120,0.5)" }}>
+                    1-4 select · enter confirm
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Loading */}
             {(phase === "call_prep_loading" || phase === "draft_loading") && (
               <div className="flex items-center gap-2.5 animate-[fadeSlideUp_0.25s_ease]">
@@ -1180,12 +1409,18 @@ export function ObservationInput({
                   </button>
                   {callBriefDealId && (
                     <button
-                      onClick={() => saveToDeals(
-                        `AI Call Prep — ${callBriefDealName}`,
-                        `Call brief generated. Key focus: ${callBrief.headline}`,
-                        callBriefDealId,
-                        "brief"
-                      )}
+                      onClick={() => {
+                        const attendees = agentPrepContacts
+                          .filter((c) => agentSelectedAttendees.includes(c.id))
+                          .map((c) => ({ id: c.id, name: c.name, title: c.title, role: c.roleInDeal }));
+                        saveToDeals(
+                          `AI Call Prep — ${agentPrepContext || callBriefDealName}`,
+                          callBrief.headline,
+                          callBriefDealId,
+                          "brief",
+                          { source: "call_prep", prepContext: agentPrepContext, attendees, brief: callBrief, generatedAt: new Date().toISOString() }
+                        );
+                      }}
                       disabled={saveFeedback === "brief"}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
                       style={{
@@ -1328,7 +1563,8 @@ export function ObservationInput({
                           `Follow-up email drafted${emailContactName ? ` for ${emailContactName}` : ""}`,
                           `Subject: ${editedSubject}`,
                           dealId,
-                          "email"
+                          "email",
+                          { source: "email_draft", to: emailDraft.to, subject: editedSubject, body: editedBody, notes: emailDraft.notes_for_rep, generatedAt: new Date().toISOString() }
                         );
                       }
                     }}
@@ -1491,9 +1727,7 @@ export function ObservationInput({
     >
       <div className="max-w-4xl mx-auto px-4 py-2.5">
         <button
-          onClick={() =>
-            hasPendingChecks ? setPhase("quick_check") : setPhase("expanded")
-          }
+          onClick={() => setPhase("expanded")}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white text-left group transition-all duration-200"
           style={{
             border: "1px solid #E8E5E0",
@@ -1512,22 +1746,17 @@ export function ObservationInput({
             className="h-4 w-4 shrink-0 transition-colors duration-200"
             style={{ color: hasPendingChecks ? "#E07A5F" : "#D4C9BD" }}
           />
-          {hasPendingChecks ? (
-            <>
-              <span className="text-sm flex-1 font-medium transition-colors duration-200" style={{ color: "#3D3833" }}>
-                {pendingQuestions.length} quick check{pendingQuestions.length > 1 ? "s" : ""} waiting
-              </span>
-              <span
-                className="text-[11px] px-2 py-0.5 rounded-full mr-1 font-medium"
-                style={{ background: "rgba(224,122,95,0.1)", color: "#E07A5F" }}
-              >
-                View
-              </span>
-            </>
-          ) : (
-            <span className="text-sm flex-1 transition-colors duration-200 text-[#8A8078] group-hover:text-[#3D3833]">
-              {defaultPlaceholder}
-            </span>
+          <span className="text-sm flex-1 transition-colors duration-200 text-[#8A8078] group-hover:text-[#3D3833]">
+            {defaultPlaceholder}
+          </span>
+          {hasPendingChecks && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setPhase("quick_check"); }}
+              className="text-[11px] px-2 py-0.5 rounded-full mr-1 font-medium transition-colors hover:opacity-80"
+              style={{ background: "rgba(224,122,95,0.1)", color: "#E07A5F" }}
+            >
+              {pendingQuestions.length} quick check{pendingQuestions.length > 1 ? "s" : ""}
+            </button>
           )}
           <ChevronUp
             className="h-3.5 w-3.5 shrink-0 transition-colors duration-200"

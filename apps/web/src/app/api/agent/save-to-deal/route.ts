@@ -6,7 +6,7 @@ import { eq, and, gte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const { dealId, memberId, title, description } = await request.json();
+  const { dealId, memberId, title, description, fullMetadata } = await request.json();
 
   if (!dealId || !memberId || !title) {
     return NextResponse.json({ error: "dealId, memberId, title are required" }, { status: 400 });
@@ -26,10 +26,13 @@ export async function POST(request: Request) {
     )
     .limit(1);
 
+  // Use fullMetadata if provided (call prep / email draft with full brief), else default
+  const metadata = fullMetadata || { source: "agent_action" };
+
   if (existing[0]) {
     await db
       .update(activities)
-      .set({ description, metadata: { source: "agent_action" }, createdAt: new Date() })
+      .set({ description, metadata, createdAt: new Date() })
       .where(eq(activities.id, existing[0].id));
   } else {
     await db.insert(activities).values({
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
       type: "note_added",
       subject: title,
       description,
-      metadata: { source: "agent_action" },
+      metadata,
     });
   }
 
