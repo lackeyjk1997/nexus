@@ -32,6 +32,7 @@ export default async function CommandCenterPage() {
       type: activities.type,
       subject: activities.subject,
       description: activities.description,
+      metadata: activities.metadata,
       createdAt: activities.createdAt,
       teamMemberName: teamMembers.name,
       teamMemberRole: teamMembers.role,

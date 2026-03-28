@@ -94,6 +94,7 @@ export default async function DealDetailPage({
         type: activities.type,
         subject: activities.subject,
         description: activities.description,
+        metadata: activities.metadata,
         createdAt: activities.createdAt,
         teamMemberName: teamMembers.name,
         teamMemberRole: teamMembers.role,
@@ -152,7 +153,7 @@ export default async function DealDetailPage({
       meddpicc={meddpicc}
       milestones={milestones}
       contacts={dealContacts}
-      activities={dealActivities}
+      activities={dealActivities as import("@/components/activity-feed").ActivityItem[]}
       transcripts={transcripts}
       stageHistory={stageHistory}
       dealObservations={dealObservations}

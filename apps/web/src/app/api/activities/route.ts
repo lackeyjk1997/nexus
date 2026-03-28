@@ -12,6 +12,7 @@ export async function GET() {
       type: activities.type,
       subject: activities.subject,
       description: activities.description,
+      metadata: activities.metadata,
       createdAt: activities.createdAt,
       dealName: deals.name,
       companyName: companies.name,
