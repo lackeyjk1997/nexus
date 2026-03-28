@@ -144,16 +144,80 @@ async function seed() {
       dealId: medvista.id,
       teamMemberId: sarahChen.id,
       type: "note_added",
-      subject: "AI Call Prep Generated",
-      description: "Call prep for MedVista negotiation. Key focus: engage CFO Emma Mueller, address data residency concerns, counter Copilot competitive pressure.",
+      subject: "AI Call Prep — Negotiation / pricing discussion",
+      description: "Economic Buyer confidence is 39% — CFO Emma Mueller hasn't been directly engaged yet.",
       metadata: {
-        source: "agent_action",
-        headline: "Economic Buyer confidence is 39% — CFO Emma Mueller hasn't been directly engaged yet.",
+        source: "call_prep",
+        prepContext: "Negotiation / pricing discussion",
+        attendees: [
+          { name: "Oliver Laurent", title: "VP of Engineering", role: "Champion" },
+          { name: "Emma Mueller", title: "CFO", role: "Economic Buyer" },
+        ],
+        brief: {
+          headline: "Economic Buyer confidence is 39% — CFO Emma Mueller hasn't been directly engaged yet.",
+          deal_snapshot: {
+            stage: "Negotiation",
+            value: "€2,400,000",
+            days_in_stage: "5 days",
+            health: "at_risk",
+            health_reason: "CFO engagement is critical at this stage but hasn't occurred.",
+          },
+          stakeholders_in_play: [
+            { name: "Oliver Laurent", title: "VP of Engineering", role: "Champion", engagement: "hot", last_contact: "3 days ago", notes: "Strong advocate internally. Forwarded security docs to compliance." },
+            { name: "Emma Mueller", title: "CFO", role: "Economic Buyer", engagement: "cold", last_contact: null, notes: "No direct engagement yet — highest priority gap." },
+            { name: "Emma Laurent", title: "CTO", role: "Technical Evaluator", engagement: "warm", last_contact: "6 days ago", notes: "Attended technical demo. Positive on API integration." },
+          ],
+          talking_points: [
+            { topic: "ROI for clinical documentation automation", why: "CFO needs business case — 200 clinicians × 2+ hrs/day manual work", approach: "Lead with time savings: 30+ hrs/week recovered across the network" },
+            { topic: "Data residency and EU compliance", why: "Oliver flagged EU data residency as a key requirement", approach: "Present Claude's EU data center options and GDPR compliance posture" },
+            { topic: "Competitive differentiation vs Microsoft Copilot", why: "Copilot team sent aggressive pricing proposal last week", approach: "Emphasize privacy-first architecture, context window advantages, and HIPAA expertise" },
+          ],
+          questions_to_ask: [
+            { question: "What does Emma Mueller need to see to approve the budget?", purpose: "Uncover CFO's decision criteria", meddpicc_gap: "Economic Buyer" },
+            { question: "What's the timeline for the board review?", purpose: "Map the decision process", meddpicc_gap: "Decision Process" },
+            { question: "How did the Copilot evaluation compare on clinical accuracy?", purpose: "Competitive intelligence", meddpicc_gap: "Competition" },
+          ],
+          risks_and_landmines: [
+            { risk: "CFO not engaged — deal could stall at procurement", source: "crm", mitigation: "Request intro to Emma Mueller through Oliver. Prepare CFO-specific ROI one-pager." },
+            { risk: "Microsoft Copilot aggressive pricing may undercut", source: "observations", mitigation: "Shift conversation from price to accuracy, privacy, and total cost of implementation failure." },
+          ],
+          team_intelligence: [
+            "3 other healthcare deals report Copilot competitive pressure — pricing alone isn't winning them deals",
+            "Security reviews are slowing enterprise deals across the board — proactive compliance doc sharing accelerates by 2 weeks",
+          ],
+          competitive_context: "Microsoft Copilot team sent aggressive pricing proposal. Key differentiation: Claude's privacy-first architecture, 200K context window for clinical docs, and HIPAA-specific training.",
+          suggested_resources: [
+            { title: "HIPAA Compliance FAQ", type: "compliance", why: "Address CFO's compliance concerns proactively" },
+            { title: "Claude vs Copilot Comparison", type: "competitive", why: "Counter Copilot pricing pressure with accuracy and privacy data" },
+          ],
+          suggested_next_steps: [
+            "Get intro to CFO Emma Mueller via Oliver — propose 20-min ROI walkthrough",
+            "Send EU data residency architecture doc before the call",
+            "Prepare 3-slide CFO deck: cost savings, compliance, competitive advantage",
+          ],
+        },
+        generatedAt: new Date(daysAgo(1).getTime()).toISOString(),
       },
       createdAt: daysAgo(1),
     },
+    {
+      dealId: medvista.id,
+      teamMemberId: sarahChen.id,
+      type: "note_added",
+      subject: "Follow-up email drafted for Oliver Laurent",
+      description: "Subject: Next steps — data residency docs + CFO intro",
+      metadata: {
+        source: "email_draft",
+        to: "Oliver Laurent <oliver.laurent@medvista.eu>",
+        subject: "Next steps — data residency docs + CFO intro",
+        body: "Hi Oliver,\n\nGreat connecting on the technical demo last week — your team's questions on the API integration were spot on.\n\nI wanted to follow up on two items:\n\n1. **EU Data Residency** — I've attached our EU data center architecture overview and GDPR compliance documentation. This should address the concerns your compliance team raised.\n\n2. **CFO Engagement** — As we move into pricing discussions, it would be helpful to include Emma Mueller early. Would you be open to a brief intro call? I can prepare a 20-minute ROI walkthrough tailored to MedVista's 12-facility network.\n\nI also wanted to flag — we've seen similar healthcare orgs recover 30+ hours/week in clinical documentation time. Happy to share a case study if that would help the internal conversation.\n\nLooking forward to the next step.\n\nBest,\nSarah",
+        notes: "References the technical demo, addresses data residency proactively, and uses Oliver as a path to the CFO.",
+        generatedAt: new Date(daysAgo(1).getTime() + 20 * 60 * 1000).toISOString(),
+      },
+      createdAt: new Date(daysAgo(1).getTime() + 20 * 60 * 1000),
+    },
   ]);
-  console.log("  ✅ MedVista: 8 activities");
+  console.log("  ✅ MedVista: 9 activities");
 
   // ── Step 4: Seed HealthFirst activities ──
   console.log("  📋 Seeding HealthFirst timeline...");
