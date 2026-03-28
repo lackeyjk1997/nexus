@@ -28,12 +28,20 @@ import {
   Swords,
   Search,
   UserCheck,
+  Sparkles,
+  X,
+  Copy,
+  Check,
+  ChevronDown,
+  Lightbulb,
+  RotateCcw,
 } from "lucide-react";
 import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@/lib/utils";
 import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared";
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
 import { ObservationInput } from "@/components/observation-input";
+import { usePersona } from "@/components/providers";
 
 // ── Types ──
 
@@ -144,6 +152,47 @@ const STAGES_ORDER: PipelineStage[] = [
   "proposal", "negotiation", "closing", "closed_won", "closed_lost",
 ];
 
+// ── Call Brief Types ──
+
+type CallBrief = {
+  headline: string;
+  deal_snapshot: { stage: string; value: string; days_in_stage: string; health: string; health_reason: string };
+  stakeholders_in_play: Array<{ name: string; title: string; role: string; engagement: string; last_contact: string | null; notes: string }>;
+  talking_points: Array<{ topic: string; why: string; approach: string }>;
+  questions_to_ask: Array<{ question: string; purpose: string; meddpicc_gap: string | null }>;
+  risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
+  team_intelligence: string[];
+  competitive_context: string | null;
+  suggested_next_steps: string[];
+};
+
+// ── Collapsible Section ──
+
+function BriefSection({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between py-2"
+        style={{ color: "#3D3833" }}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">{title}</span>
+        <ChevronDown className={cn("h-3 w-3 transition-transform", open ? "rotate-180" : "")} style={{ color: "#8A8078" }} />
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 // ── Main Component ──
 
 type DealObservation = {
@@ -198,11 +247,63 @@ export function DealDetailClient({
   );
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [stageModalOpen, setStageModalOpen] = useState(false);
+  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "loading" | "result">("hidden");
+  const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
+  const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
+  const [briefCopied, setBriefCopied] = useState(false);
+  const { currentUser } = usePersona();
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
   const health = getHealthColor(daysInStage, deal.stage);
   const vertColor = getVerticalColor(deal.vertical);
   const winProb = deal.winProbability ?? 0;
+
+  async function handlePrepCall() {
+    if (!currentUser) return;
+    setCallPrepPhase("loading");
+    try {
+      const res = await fetch("/api/agent/call-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCallBrief(data.brief);
+        setCallPrepPhase("result");
+      } else {
+        setCallPrepPhase("hidden");
+      }
+    } catch {
+      setCallPrepPhase("hidden");
+    }
+  }
+
+  async function saveBriefToDeal() {
+    if (!currentUser || !callBrief) return;
+    await fetch("/api/agent/save-to-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: deal.id,
+        memberId: currentUser.id,
+        title: `AI Call Prep — ${deal.companyName}`,
+        description: `Call brief generated. Key focus: ${callBrief.headline}`,
+      }),
+    }).catch(() => {});
+  }
+
+  async function copyBrief() {
+    if (!callBrief) return;
+    const text = `CALL BRIEF — ${deal.companyName}\n\n${callBrief.headline}\n\nTalking Points:\n${callBrief.talking_points.map((tp, i) => `${i + 1}. ${tp.topic}: ${tp.approach}`).join("\n")}\n\nQuestions:\n${callBrief.questions_to_ask.map((q, i) => `${i + 1}. ${q.question}`).join("\n")}`;
+    await navigator.clipboard.writeText(text).catch(() => {});
+    setBriefCopied(true);
+    setTimeout(() => setBriefCopied(false), 2000);
+  }
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -310,6 +411,28 @@ export function DealDetailClient({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2 shrink-0 ml-4">
+            <button
+              onClick={handlePrepCall}
+              disabled={callPrepPhase === "loading"}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+              }}
+            >
+              {callPrepPhase === "loading" ? (
+                <>
+                  <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
+                  Prepping…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Prep Call
+                </>
+              )}
+            </button>
             {[
               { icon: Calendar, label: "Schedule Meeting" },
               { icon: Mail, label: "Draft Email" },
@@ -353,6 +476,216 @@ export function DealDetailClient({
           })}
         </div>
       </div>
+
+      {/* Call Prep Panel */}
+      {callPrepPhase === "result" && callBrief && (
+        <div
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Call Brief — {deal.companyName}
+            </span>
+            <button
+              onClick={() => { setCallPrepPhase("hidden"); setCallBrief(null); }}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Headline */}
+          <div
+            className="mx-5 mt-4 px-4 py-3 rounded-lg"
+            style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)" }}
+          >
+            <p className="text-sm font-medium leading-[1.5]" style={{ color: "#3D3833" }}>
+              {callBrief.headline}
+            </p>
+          </div>
+
+          <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left column */}
+            <div className="space-y-4">
+              {/* Deal Snapshot */}
+              <BriefSection title="Deal Snapshot">
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <span className="text-[13px]" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.stage}</span>
+                  <span className="text-[13px] font-semibold" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.value}</span>
+                  <span className="text-[13px]" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.days_in_stage}</span>
+                  <span
+                    className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                    style={{
+                      background: callBrief.deal_snapshot.health === "on_track" ? "rgba(45,138,78,0.1)" : callBrief.deal_snapshot.health === "at_risk" ? "rgba(212,168,67,0.1)" : "rgba(199,75,59,0.1)",
+                      color: callBrief.deal_snapshot.health === "on_track" ? "#2D8A4E" : callBrief.deal_snapshot.health === "at_risk" ? "#D4A843" : "#C74B3B",
+                    }}
+                  >
+                    {callBrief.deal_snapshot.health.replace("_", " ")}
+                  </span>
+                </div>
+                <p className="text-[12px] mt-1" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.health_reason}</p>
+              </BriefSection>
+
+              {/* Stakeholders */}
+              {callBrief.stakeholders_in_play.length > 0 && (
+                <BriefSection title="Stakeholders">
+                  <div className="space-y-2 mt-1">
+                    {callBrief.stakeholders_in_play.map((s, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div
+                          className="h-6 w-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold"
+                          style={{
+                            background: s.engagement === "hot" ? "rgba(224,122,95,0.12)" : s.engagement === "warm" ? "rgba(212,168,67,0.12)" : "rgba(107,107,107,0.1)",
+                            color: s.engagement === "hot" ? "#E07A5F" : s.engagement === "warm" ? "#D4A843" : "#6B6B6B",
+                          }}
+                        >
+                          {s.name.split(" ").map((n: string) => n[0]).join("")}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+                            {s.name} <span className="font-normal" style={{ color: "#8A8078" }}>· {s.role}</span>
+                          </p>
+                          <p className="text-[12px]" style={{ color: "#8A8078" }}>{s.title}</p>
+                          {s.notes && <p className="text-[12px] mt-0.5" style={{ color: "#6B6B6B" }}>{s.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
+              {/* Team Intelligence */}
+              {callBrief.team_intelligence.length > 0 && (
+                <BriefSection title="💡 Team Intelligence">
+                  <div className="space-y-1.5 mt-1">
+                    {callBrief.team_intelligence.map((intel, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span style={{ color: "#E07A5F" }}>·</span>
+                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{intel}</p>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
+              {/* Competitive */}
+              {callBrief.competitive_context && (
+                <div className="rounded-lg p-3" style={{ background: "rgba(199,75,59,0.05)", border: "1px solid rgba(199,75,59,0.15)" }}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: "#C74B3B" }}>Competitive</p>
+                  <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{callBrief.competitive_context}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right column */}
+            <div className="space-y-4">
+              {/* Talking Points */}
+              {callBrief.talking_points.length > 0 && (
+                <BriefSection title="Talking Points">
+                  <div className="space-y-2.5 mt-1">
+                    {callBrief.talking_points.map((tp, i) => (
+                      <div key={i} className="flex gap-2.5">
+                        <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{tp.topic}</p>
+                          <p className="text-[12px]" style={{ color: "#8A8078" }}>{tp.approach}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
+              {/* Questions */}
+              {callBrief.questions_to_ask.length > 0 && (
+                <BriefSection title="Questions to Ask">
+                  <div className="space-y-2.5 mt-1">
+                    {callBrief.questions_to_ask.map((q, i) => (
+                      <div key={i} className="flex gap-2.5">
+                        <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>"{q.question}"</p>
+                          {q.meddpicc_gap && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.1)", color: "#0C7489" }}>
+                              → {q.meddpicc_gap}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
+              {/* Risks */}
+              {callBrief.risks_and_landmines.length > 0 && (
+                <BriefSection title="⚠ Risks">
+                  <div className="space-y-2 mt-1">
+                    {callBrief.risks_and_landmines.map((r, i) => (
+                      <div key={i} className="rounded-lg p-3" style={{ background: "rgba(212,168,67,0.06)", border: "1px solid rgba(212,168,67,0.2)" }}>
+                        <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{r.risk}</p>
+                        <p className="text-[12px] mt-0.5" style={{ color: "#8A8078" }}>{r.mitigation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+
+              {/* Next Steps */}
+              {callBrief.suggested_next_steps.length > 0 && (
+                <BriefSection title="Suggested Close">
+                  <div className="space-y-1 mt-1">
+                    {callBrief.suggested_next_steps.map((step, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
+                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={copyBrief}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: briefCopied ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: briefCopied ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {briefCopied ? "Copied!" : "Copy brief"}
+            </button>
+            <button
+              onClick={saveBriefToDeal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{ background: "#F3EDE7", color: "#8A8078" }}
+            >
+              <Check className="h-3 w-3" />
+              Save to timeline
+            </button>
+            <button
+              onClick={handlePrepCall}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors"
+              style={{ color: "#8A8078" }}
+            >
+              <RotateCcw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-border">
