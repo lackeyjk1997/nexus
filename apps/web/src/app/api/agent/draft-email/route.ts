@@ -267,7 +267,7 @@ ${rawQuery ? `Rep's request: ${rawQuery}` : ""}`;
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],

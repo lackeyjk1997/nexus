@@ -405,7 +405,7 @@ Return ONLY valid JSON with this exact structure:
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
       system: systemPrompt,
       messages: [

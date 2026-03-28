@@ -248,14 +248,14 @@ export function DealDetailClient({
   );
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [stageModalOpen, setStageModalOpen] = useState(false);
-  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "loading" | "result">("hidden");
+  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
   const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
   const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
   const [briefCopied, setBriefCopied] = useState(false);
   const [briefSaved, setBriefSaved] = useState(false);
 
   // Email draft state
-  const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result">("hidden");
+  const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
   const [editedSubject, setEditedSubject] = useState("");
   const [editedBody, setEditedBody] = useState("");
@@ -288,10 +288,10 @@ export function DealDetailClient({
         setCallBrief(data.brief);
         setCallPrepPhase("result");
       } else {
-        setCallPrepPhase("hidden");
+        setCallPrepPhase("error");
       }
     } catch {
-      setCallPrepPhase("hidden");
+      setCallPrepPhase("error");
     }
   }
 
@@ -341,10 +341,10 @@ export function DealDetailClient({
         setDraftPhase("result");
         setDraftContext("");
       } else {
-        setDraftPhase("hidden");
+        setDraftPhase("error");
       }
     } catch {
-      setDraftPhase("hidden");
+      setDraftPhase("error");
     }
   }
 
@@ -377,10 +377,10 @@ export function DealDetailClient({
         setDraftPhase("result");
         setDraftContext("");
       } else {
-        setDraftPhase("hidden");
+        setDraftPhase("error");
       }
     } catch {
-      setDraftPhase("hidden");
+      setDraftPhase("error");
     }
   }
 
@@ -524,15 +524,20 @@ export function DealDetailClient({
               disabled={callPrepPhase === "loading"}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
               style={{
-                background: callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
-                color: callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
-                border: "1px solid " + (callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+                background: callPrepPhase === "error" ? "rgba(199,75,59,0.1)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: callPrepPhase === "error" ? "#C74B3B" : callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (callPrepPhase === "error" ? "rgba(199,75,59,0.3)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
               }}
             >
               {callPrepPhase === "loading" ? (
                 <>
                   <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
                   Prepping…
+                </>
+              ) : callPrepPhase === "error" ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Failed — try again
                 </>
               ) : (
                 <>
@@ -550,9 +555,9 @@ export function DealDetailClient({
               title={transcripts.length === 0 ? "No recent calls to reference" : "Draft a follow-up email"}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
               style={{
-                background: draftPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
-                color: transcripts.length === 0 ? "#C4BDB5" : draftPhase !== "hidden" ? "#E07A5F" : "#8A8078",
-                border: "1px solid " + (draftPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+                background: draftPhase === "error" ? "rgba(199,75,59,0.1)" : draftPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: transcripts.length === 0 ? "#C4BDB5" : draftPhase === "error" ? "#C74B3B" : draftPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (draftPhase === "error" ? "rgba(199,75,59,0.3)" : draftPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
                 cursor: transcripts.length === 0 ? "not-allowed" : "pointer",
               }}
             >
@@ -560,6 +565,11 @@ export function DealDetailClient({
                 <>
                   <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
                   Drafting…
+                </>
+              ) : draftPhase === "error" ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Failed — try again
                 </>
               ) : (
                 <>
