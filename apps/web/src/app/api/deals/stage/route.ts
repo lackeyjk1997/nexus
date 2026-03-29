@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { deals, dealStageHistory, activities, teamMembers } from "@nexus/db";
+import { deals, dealStageHistory, activities, observations } from "@nexus/db";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -20,6 +20,10 @@ export async function POST(request: Request) {
     // Close/Won outcome fields
     winTurningPoint,
     winReplicable,
+    // AI analysis fields
+    closeAiAnalysis,
+    closeFactors,
+    winFactors,
   } = body;
 
   if (!dealId || !toStage) {
@@ -39,6 +43,9 @@ export async function POST(request: Request) {
     updateSet.closedAt = new Date();
     if (winTurningPoint) updateSet.winTurningPoint = winTurningPoint;
     if (winReplicable) updateSet.winReplicable = winReplicable;
+    if (closeAiAnalysis) updateSet.closeAiAnalysis = closeAiAnalysis;
+    if (winFactors) updateSet.winFactors = winFactors;
+    if (closeAiAnalysis) updateSet.closeAiRanAtTimestamp = new Date();
   } else if (toStage === "closed_lost") {
     updateSet.winProbability = 0;
     updateSet.forecastCategory = "closed";
@@ -47,8 +54,10 @@ export async function POST(request: Request) {
     if (closeCompetitor) updateSet.closeCompetitor = closeCompetitor;
     if (closeNotes) updateSet.closeNotes = closeNotes;
     if (closeImprovement) updateSet.closeImprovement = closeImprovement;
+    if (closeAiAnalysis) updateSet.closeAiAnalysis = closeAiAnalysis;
+    if (closeFactors) updateSet.closeFactors = closeFactors;
+    if (closeAiAnalysis) updateSet.closeAiRanAtTimestamp = new Date();
   } else {
-    // Non-closed stages keep default probability handling
     updateSet.winProbability = undefined;
     updateSet.forecastCategory = undefined;
   }
@@ -68,33 +77,90 @@ export async function POST(request: Request) {
     reason: reason || closeNotes || null,
   });
 
-  // Get the deal's AE to attribute the activity
+  // Get the deal's AE and name for activities
   const [deal] = await db
-    .select({ assignedAeId: deals.assignedAeId })
+    .select({ assignedAeId: deals.assignedAeId, name: deals.name, vertical: deals.vertical })
     .from(deals)
     .where(eq(deals.id, dealId))
     .limit(1);
 
   // Create activity record
   if (deal?.assignedAeId) {
+    const outcome = toStage === "closed_won" ? "won" : toStage === "closed_lost" ? "lost" : null;
+
     const subject = toStage === "closed_won"
-      ? `Deal closed won${winTurningPoint ? ` — turning point: ${winTurningPoint.replace("_", " ")}` : ""}`
+      ? `Deal closed won${winTurningPoint ? ` — turning point: ${winTurningPoint.replace(/_/g, " ")}` : ""}`
       : toStage === "closed_lost"
-        ? `Deal closed lost${lossReason ? ` — reason: ${lossReason.replace("_", " ")}` : ""}`
-        : `Stage changed from ${fromStage?.replace("_", " ") || "unknown"} to ${toStage.replace("_", " ")}`;
+        ? `Deal closed lost${lossReason ? ` — reason: ${lossReason.replace(/_/g, " ")}` : ""}`
+        : `Stage changed from ${fromStage?.replace(/_/g, " ") || "unknown"} to ${toStage.replace(/_/g, " ")}`;
+
+    const metadata: Record<string, unknown> = {};
+    if (toStage === "closed_lost") {
+      metadata.outcome = "lost";
+      metadata.lossReason = lossReason;
+      metadata.closeCompetitor = closeCompetitor;
+      metadata.closeImprovement = closeImprovement;
+      if (closeFactors) metadata.factors = closeFactors;
+      if (closeAiAnalysis) metadata.aiSummary = closeAiAnalysis.summary;
+    } else if (toStage === "closed_won") {
+      metadata.outcome = "won";
+      metadata.winTurningPoint = winTurningPoint;
+      metadata.winReplicable = winReplicable;
+      if (winFactors) metadata.factors = winFactors;
+      if (closeAiAnalysis) metadata.aiSummary = closeAiAnalysis.summary;
+    }
 
     await db.insert(activities).values({
       dealId,
       teamMemberId: deal.assignedAeId,
       type: "stage_changed",
       subject,
-      description: closeNotes || winReplicable || reason || null,
-      metadata: toStage === "closed_lost"
-        ? { lossReason, closeCompetitor, closeImprovement }
-        : toStage === "closed_won"
-          ? { winTurningPoint, winReplicable }
-          : undefined,
+      description: closeAiAnalysis?.summary || closeNotes || winReplicable || reason || null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     });
+
+    // ── Create observations from confirmed AI factors (Priority 5a) ──
+    if (outcome && (closeFactors || winFactors)) {
+      const factors = (closeFactors || winFactors) as Array<{
+        id: string;
+        label: string;
+        category: string;
+        source: string;
+        confirmed: boolean;
+        evidence: string | null;
+        repNote: string | null;
+      }>;
+
+      try {
+        for (const factor of factors) {
+          if (!factor.confirmed || factor.source !== "ai_suggested" || !factor.evidence) continue;
+
+          await db.insert(observations).values({
+            observerId: deal.assignedAeId,
+            rawInput: `[Close ${outcome} — ${deal.name}] ${factor.label}: ${factor.evidence}`,
+            aiClassification: {
+              signals: [{
+                type: factor.category === "competitor" ? "competitive_intel"
+                  : factor.category === "process" ? "process_friction"
+                  : factor.category === "product" ? "product_gap"
+                  : factor.category === "stakeholder" ? "deal_blocker"
+                  : factor.category === "pricing" ? "competitive_intel"
+                  : "deal_blocker",
+                confidence: 0.9,
+              }],
+            },
+            sourceContext: {
+              page: "deal_close",
+              dealId,
+              trigger: outcome === "lost" ? "loss_debrief" : "win_debrief",
+            },
+            status: "processed",
+          });
+        }
+      } catch (err) {
+        console.error("Observation creation from close factors failed (non-fatal):", err);
+      }
+    }
   }
 
   return NextResponse.json({ success: true });
