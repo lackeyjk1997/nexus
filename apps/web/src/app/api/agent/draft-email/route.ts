@@ -15,8 +15,10 @@ import {
   callAnalyses,
   resources,
   crossAgentFeedback,
+  systemIntelligence,
+  managerDirectives,
 } from "@nexus/db";
-import { eq, desc, and, sql, ne } from "drizzle-orm";
+import { eq, desc, and, sql, ne, or, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 const VERTICAL_DISPLAY: Record<string, string[]> = {
@@ -312,6 +314,62 @@ export async function POST(request: Request) {
     console.error("Email draft cross-feedback query error (non-fatal):", err);
   }
 
+  // ── System intelligence + manager directives for email ──
+  type SystemInsight = { title: string; insight: string };
+  let emailSystemInsights: SystemInsight[] = [];
+  try {
+    if (dealVertical) {
+      emailSystemInsights = await db
+        .select({ title: systemIntelligence.title, insight: systemIntelligence.insight })
+        .from(systemIntelligence)
+        .where(
+          and(
+            eq(systemIntelligence.status, "active"),
+            or(
+              eq(systemIntelligence.vertical, dealVertical),
+              isNull(systemIntelligence.vertical)
+            ),
+            or(
+              eq(systemIntelligence.insightType, "competitive_pattern"),
+              eq(systemIntelligence.insightType, "win_pattern"),
+              eq(systemIntelligence.insightType, "loss_pattern")
+            )
+          )
+        )
+        .orderBy(desc(systemIntelligence.relevanceScore))
+        .limit(3);
+    }
+  } catch (err) {
+    console.error("Email system intel query error (non-fatal):", err);
+  }
+
+  type Directive = { directive: string; priority: string; category: string };
+  let emailDirectives: Directive[] = [];
+  try {
+    emailDirectives = await db
+      .select({
+        directive: managerDirectives.directive,
+        priority: managerDirectives.priority,
+        category: managerDirectives.category,
+      })
+      .from(managerDirectives)
+      .where(
+        and(
+          eq(managerDirectives.isActive, true),
+          or(
+            and(eq(managerDirectives.scope, "org_wide"), eq(managerDirectives.category, "messaging")),
+            and(eq(managerDirectives.scope, "org_wide"), eq(managerDirectives.category, "positioning")),
+            and(
+              eq(managerDirectives.scope, "vertical"),
+              eq(managerDirectives.vertical, dealVertical)
+            )
+          )
+        )
+      );
+  } catch (err) {
+    console.error("Email directives query error (non-fatal):", err);
+  }
+
   // ── Pick primary contact ──
   const primaryContact = resolvedContactId
     ? contactsForDeal.find((c) => c.id === resolvedContactId) ?? contactsForDeal[0]
@@ -352,6 +410,11 @@ Write this email in the style described above. Match the tone, sentence structur
 
 Guardrails (NEVER violate):
 ${(outputPrefs?.guardrails || []).map((g) => `- ${g}`).join("\n") || "- None"}` : `REP DETAILS:\nName: ${rep?.name || "the rep"}\nCommunication style: Professional and concise`}${teamIntelSection}${crossFeedbackSection}
+${emailSystemInsights.length > 0 ? `\nSYSTEM INTELLIGENCE:\n${emailSystemInsights.map((si) => `📊 ${si.title}: ${si.insight}`).join("\n")}\nUse these insights to preemptively address common objections or position competitively.` : ""}
+${emailDirectives.length > 0 ? `\nMANAGER DIRECTIVES:\n${emailDirectives.map((d) => {
+  const label = d.priority === "mandatory" ? "🔴 MANDATORY" : d.priority === "strong" ? "🟡 STRONG" : "🟢 GUIDANCE";
+  return `${label}: ${d.directive}`;
+}).join("\n")}\nNEVER violate mandatory directives in the email content.` : ""}
 
 RULES:
 - Write as if you ARE this rep. Use first person. Match their tone exactly.

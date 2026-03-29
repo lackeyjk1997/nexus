@@ -17,8 +17,10 @@ import {
   callAnalyses,
   resources,
   crossAgentFeedback,
+  systemIntelligence,
+  managerDirectives,
 } from "@nexus/db";
-import { eq, desc, and, sql, or, ne } from "drizzle-orm";
+import { eq, desc, and, sql, or, ne, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 // Map vertical enum values to display names for matching against industryFocus
@@ -396,6 +398,141 @@ export async function POST(request: Request) {
     console.error("Cross-agent feedback query error (non-fatal):", err);
   }
 
+  // ── System intelligence for this vertical ──
+  type SystemInsight = { title: string; insight: string; insightType: string; supportingData: unknown };
+  let systemInsights: SystemInsight[] = [];
+  try {
+    systemInsights = await db
+      .select({
+        title: systemIntelligence.title,
+        insight: systemIntelligence.insight,
+        insightType: systemIntelligence.insightType,
+        supportingData: systemIntelligence.supportingData,
+      })
+      .from(systemIntelligence)
+      .where(
+        and(
+          eq(systemIntelligence.status, "active"),
+          or(
+            eq(systemIntelligence.vertical, dealVertical),
+            isNull(systemIntelligence.vertical)
+          )
+        )
+      )
+      .orderBy(desc(systemIntelligence.relevanceScore))
+      .limit(5);
+  } catch (err) {
+    console.error("System intelligence query error (non-fatal):", err);
+  }
+
+  // ── Manager directives ──
+  type Directive = { directive: string; priority: string; category: string; scope: string; vertical: string | null };
+  let directives: Directive[] = [];
+  try {
+    directives = await db
+      .select({
+        directive: managerDirectives.directive,
+        priority: managerDirectives.priority,
+        category: managerDirectives.category,
+        scope: managerDirectives.scope,
+        vertical: managerDirectives.vertical,
+      })
+      .from(managerDirectives)
+      .where(
+        and(
+          eq(managerDirectives.isActive, true),
+          or(
+            eq(managerDirectives.scope, "org_wide"),
+            and(
+              eq(managerDirectives.scope, "vertical"),
+              eq(managerDirectives.vertical, dealVertical)
+            )
+          ),
+          or(
+            isNull(managerDirectives.expiresAt),
+            sql`${managerDirectives.expiresAt} >= NOW()`
+          )
+        )
+      );
+  } catch (err) {
+    console.error("Manager directives query error (non-fatal):", err);
+  }
+
+  // ── Win/loss patterns from closed deals in this vertical ──
+  type LossPattern = { reason: string | null; competitor: string | null; notes: string | null };
+  type WinPattern = { turningPoint: string | null; replicable: string | null };
+  let lossPatterns: LossPattern[] = [];
+  let winPatterns: WinPattern[] = [];
+  try {
+    const closedDeals = await db
+      .select({
+        stage: deals.stage,
+        lossReason: deals.lossReason,
+        closeCompetitor: deals.closeCompetitor,
+        closeNotes: deals.closeNotes,
+        winTurningPoint: deals.winTurningPoint,
+        winReplicable: deals.winReplicable,
+      })
+      .from(deals)
+      .where(
+        and(
+          eq(deals.vertical, dealVertical as typeof deals.vertical.enumValues[number]),
+          or(
+            eq(deals.stage, "closed_won"),
+            eq(deals.stage, "closed_lost")
+          )
+        )
+      )
+      .orderBy(desc(deals.closedAt))
+      .limit(10);
+
+    lossPatterns = closedDeals
+      .filter((d) => d.stage === "closed_lost" && d.lossReason)
+      .map((d) => ({ reason: d.lossReason, competitor: d.closeCompetitor, notes: d.closeNotes }));
+    winPatterns = closedDeals
+      .filter((d) => d.stage === "closed_won" && d.winTurningPoint)
+      .map((d) => ({ turningPoint: d.winTurningPoint, replicable: d.winReplicable }));
+  } catch (err) {
+    console.error("Win/loss patterns query error (non-fatal):", err);
+  }
+
+  // ── Stakeholder engagement alerts ──
+  type StakeholderAlert = { name: string; title: string | null; role: string | null; activityCount: number };
+  let underEngagedStakeholders: StakeholderAlert[] = [];
+  try {
+    const keyRoles = ["economic_buyer", "champion"];
+    const keyContacts = dealContacts.filter((c) => keyRoles.includes(c.roleInDeal || ""));
+
+    for (const contact of keyContacts) {
+      const contactName = `${contact.firstName} ${contact.lastName}`;
+      const result = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.dealId, resolvedDealId!),
+            or(
+              sql`${activities.description} ILIKE ${"%" + contactName + "%"}`,
+              sql`${activities.subject} ILIKE ${"%" + contactName + "%"}`,
+              eq(activities.contactId, contact.id)
+            )
+          )
+        );
+
+      const count = Number(result[0]?.count || 0);
+      if (count < 2) {
+        underEngagedStakeholders.push({
+          name: contactName,
+          title: contact.title,
+          role: contact.roleInDeal,
+          activityCount: count,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Stakeholder engagement query error (non-fatal):", err);
+  }
+
   const daysInStage = dealRow.stageEnteredAt
     ? Math.floor((Date.now() - new Date(dealRow.stageEnteredAt).getTime()) / 86400000)
     : 0;
@@ -544,6 +681,31 @@ ${outputPrefs?.dealStageRules?.[dealRow.stage] ? `Stage-Specific Guidance for ${
 
 Follow the persona and communication style above in the tone and approach of the brief. This brief should sound like it was written specifically for ${rep?.name || "this rep"}, not like a generic template.` : ""}${teamIntelSection}${crossFeedbackSection}${teamIntelVisibilityInstruction}
 
+${systemInsights.length > 0 ? `SYSTEM INTELLIGENCE FOR ${dealVertical.toUpperCase().replace("_", " ")}:
+These insights are derived from aggregated data across your team's deals, calls, and outcomes. They represent data-driven patterns. Use them to make your recommendations evidence-based.
+
+${systemInsights.map((si) => {
+  const sd = si.supportingData as { metric?: string; sample_size?: number; time_range?: string } | null;
+  return `📊 ${si.title}\n${si.insight}${sd?.metric ? `\n(${sd.metric}, based on ${sd.sample_size || "multiple"} data points over ${sd.time_range || "recent period"})` : ""}`;
+}).join("\n\n")}
+` : ""}
+${lossPatterns.length > 0 || winPatterns.length > 0 ? `WIN/LOSS INTELLIGENCE FOR ${dealVertical.toUpperCase().replace("_", " ")}:
+Learn from recent outcomes in this vertical. Flag risks that match lost-deal patterns. Recommend tactics from won deals.
+
+${lossPatterns.map((l) => `📉 Lost: ${l.reason?.replace("_", " ")}${l.competitor ? ` (to ${l.competitor})` : ""} — ${l.notes || "No details"}`).join("\n")}
+${winPatterns.map((w) => `🏆 Won: ${w.turningPoint?.replace("_", " ")} — ${w.replicable || "No details"}`).join("\n")}
+` : ""}
+${underEngagedStakeholders.length > 0 ? `⚠️ STAKEHOLDER ENGAGEMENT ALERTS:
+${underEngagedStakeholders.map((ue) => `⚠️ ${ue.name} (${ue.title || "Unknown title"}, ${ue.role?.replace("_", " ")}): Only ${ue.activityCount} logged interaction${ue.activityCount !== 1 ? "s" : ""}. ${ue.role === "economic_buyer" ? "Data shows deals without early Economic Buyer engagement close at only 18%." : ue.role === "champion" ? "Champions with fewer than 3 touchpoints rarely drive internal consensus." : "Consider scheduling a direct touchpoint."}`).join("\n")}
+` : ""}
+${directives.length > 0 ? `MANAGER DIRECTIVES (from leadership — carry authority):
+${directives.map((d) => {
+  const label = d.priority === "mandatory" ? "🔴 MANDATORY" : d.priority === "strong" ? "🟡 STRONG" : "🟢 GUIDANCE";
+  return `${label}: ${d.directive}`;
+}).join("\n")}
+
+IMPORTANT: Mandatory directives are hard constraints. NEVER suggest actions that violate them (e.g., do not suggest discounts exceeding the stated limit). Strong directives should be followed. Guidance directives should inform your approach.
+` : ""}
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
 
@@ -586,12 +748,18 @@ Return ONLY valid JSON with this exact structure:
   "risks_and_landmines": [
     {
       "risk": "What could go wrong",
-      "source": "observations | cluster | transcript | crm | team_intel",
+      "source": "observations | cluster | transcript | crm | team_intel | system_intel | win_loss | directive",
       "mitigation": "How to handle it"
     }
   ],
   "team_intelligence": [
     "📋 [Name] ([Role]): Insight from teammate relevant to this call"
+  ],
+  "system_intelligence": [
+    "📊 Data-driven insight from system analysis relevant to this call"
+  ],
+  "manager_directives": [
+    "🔴 MANDATORY | 🟡 STRONG | 🟢 GUIDANCE: directive text"
   ],
   "competitive_context": "1-2 sentences about competitive situation if relevant, null otherwise",
   "suggested_resources": [
@@ -611,7 +779,7 @@ Return ONLY valid JSON with this exact structure:
   try {
     const message = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: systemPrompt,
       messages: [
         {

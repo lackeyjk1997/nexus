@@ -269,6 +269,12 @@ export const deals = pgTable("deals", {
   leadSource: leadSourceEnum("lead_source"),
   competitor: text("competitor"),
   lossReason: text("loss_reason"),
+  closeCompetitor: text("close_competitor"),
+  closeNotes: text("close_notes"),
+  closeImprovement: text("close_improvement"),
+  winTurningPoint: text("win_turning_point"),
+  winReplicable: text("win_replicable"),
+  closedAt: timestamp("closed_at"),
   stageEnteredAt: timestamp("stage_entered_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -736,6 +742,42 @@ export const crossAgentFeedback = pgTable("cross_agent_feedback", {
   accountId: uuid("account_id").references(() => companies.id),
   vertical: verticalEnum("vertical"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ── System Intelligence ────────────────────────
+
+export const systemIntelligence = pgTable("system_intelligence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  vertical: text("vertical"),
+  accountId: uuid("account_id").references(() => companies.id),
+  insightType: text("insight_type").notNull(),
+  title: text("title").notNull(),
+  insight: text("insight").notNull(),
+  supportingData: jsonb("supporting_data"),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }),
+  relevanceScore: decimal("relevance_score", { precision: 3, scale: 2 }),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ── Manager Directives ─────────────────────────
+
+export const managerDirectives = pgTable("manager_directives", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  authorId: uuid("author_id")
+    .references(() => teamMembers.id)
+    .notNull(),
+  scope: text("scope").notNull(),
+  vertical: text("vertical"),
+  targetRole: text("target_role"),
+  targetMemberId: uuid("target_member_id").references(() => teamMembers.id),
+  directive: text("directive").notNull(),
+  priority: text("priority").notNull(),
+  category: text("category").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
 });
 
 // ── Resource Hub ────────────────────────────────
