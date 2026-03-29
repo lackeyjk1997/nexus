@@ -339,9 +339,8 @@ export function ObservationInput({
           setCallBriefAccountId(data.accountId ?? null);
           setAgentPrepContacts(data.contacts || []);
           setAgentDealStage(data.dealStage);
-          const defaultCtx = getDefaultPrepFromStage(data.dealStage);
-          setAgentPrepContext(defaultCtx);
-          setAgentPrepHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+          setAgentPrepContext("");
+          setAgentPrepHighlight(-1);
           const primaryIds = (data.contacts || []).filter((c: { isPrimary: boolean | null }) => c.isPrimary).map((c: { id: string }) => c.id);
           setAgentSelectedAttendees(primaryIds.length > 0 ? primaryIds : data.contacts?.length > 0 ? [data.contacts[0].id] : []);
           setPhase("call_prep_context");
@@ -364,9 +363,8 @@ export function ObservationInput({
         setCallBriefAccountId(data.accountId ?? null);
         setAgentPrepContacts(data.contacts || []);
         setAgentDealStage(data.dealStage);
-        const defaultCtx = getDefaultPrepFromStage(data.dealStage);
-        setAgentPrepContext(defaultCtx);
-        setAgentPrepHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+        setAgentPrepContext("");
+        setAgentPrepHighlight(-1);
         const primaryIds = (data.contacts || []).filter((c: { isPrimary: boolean | null }) => c.isPrimary).map((c: { id: string }) => c.id);
         setAgentSelectedAttendees(primaryIds.length > 0 ? primaryIds : data.contacts?.length > 0 ? [data.contacts[0].id] : []);
         setPhase("call_prep_context");

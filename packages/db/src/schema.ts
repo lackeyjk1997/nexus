@@ -721,6 +721,23 @@ export const fieldQueryQuestionsRelations = relations(fieldQueryQuestions, ({ on
   }),
 }));
 
+// ── Cross-Agent Feedback ────────────────────────
+
+export const crossAgentFeedback = pgTable("cross_agent_feedback", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceMemberId: uuid("source_member_id")
+    .references(() => teamMembers.id)
+    .notNull(),
+  targetMemberId: uuid("target_member_id")
+    .references(() => teamMembers.id)
+    .notNull(),
+  content: text("content").notNull(),
+  dealId: uuid("deal_id").references(() => deals.id),
+  accountId: uuid("account_id").references(() => companies.id),
+  vertical: verticalEnum("vertical"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ── Resource Hub ────────────────────────────────
 
 export const resources = pgTable("resources", {

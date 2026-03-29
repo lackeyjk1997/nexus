@@ -14,9 +14,19 @@ import {
   callTranscripts,
   callAnalyses,
   resources,
+  crossAgentFeedback,
 } from "@nexus/db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+const VERTICAL_DISPLAY: Record<string, string[]> = {
+  healthcare: ["Healthcare", "healthcare"],
+  financial_services: ["Financial Services", "financial_services", "FinServ"],
+  manufacturing: ["Manufacturing", "manufacturing"],
+  retail: ["Retail", "retail"],
+  technology: ["Technology", "technology"],
+  general: ["General", "general"],
+};
 
 export async function POST(request: Request) {
   const {
@@ -194,6 +204,114 @@ export async function POST(request: Request) {
     (r) => !r.verticals || r.verticals.includes(dealVertical) || r.verticals.includes("all")
   );
 
+  // ── Team intelligence for email draft ──
+  type TeamIntelItem = { name: string; role: string; guardrails: string[] };
+  let teamIntel: TeamIntelItem[] = [];
+  let crossFeedback: { content: string; sourceName: string }[] = [];
+
+  try {
+    if (dealVertical) {
+      const verticalNames = VERTICAL_DISPLAY[dealVertical] || [dealVertical];
+      const accountNameLower = (dealRow?.companyName || "").toLowerCase();
+
+      const allOtherConfigs = await db
+        .select({
+          teamMemberId: agentConfigs.teamMemberId,
+          instructions: agentConfigs.instructions,
+          outputPreferences: agentConfigs.outputPreferences,
+        })
+        .from(agentConfigs)
+        .where(
+          and(
+            ne(agentConfigs.teamMemberId, memberId),
+            eq(agentConfigs.isActive, true)
+          )
+        );
+
+      const verticalMembers = await db
+        .select({ id: teamMembers.id })
+        .from(teamMembers)
+        .where(
+          and(
+            ne(teamMembers.id, memberId),
+            eq(teamMembers.verticalSpecialization, dealVertical as typeof teamMembers.verticalSpecialization.enumValues[number])
+          )
+        );
+
+      const allMembers = await db
+        .select({ id: teamMembers.id, name: teamMembers.name, role: teamMembers.role })
+        .from(teamMembers);
+      const memberMap = new Map(allMembers.map((m) => [m.id, m]));
+
+      const relevantMemberIds = new Set(verticalMembers.map((m) => m.id));
+      for (const cfg of allOtherConfigs) {
+        const prefs = cfg.outputPreferences as { industryFocus?: string[] } | null;
+        if (prefs?.industryFocus?.some((f) => verticalNames.some((vn) => f.toLowerCase() === vn.toLowerCase()))) {
+          relevantMemberIds.add(cfg.teamMemberId);
+        }
+      }
+
+      for (const cfg of allOtherConfigs) {
+        if (!relevantMemberIds.has(cfg.teamMemberId)) continue;
+        const member = memberMap.get(cfg.teamMemberId);
+        if (!member) continue;
+
+        const prefs = cfg.outputPreferences as { guardrails?: string[] } | null;
+        const guardrails = prefs?.guardrails || [];
+        const relevantGuardrails = guardrails.filter((g) => {
+          const lower = g.toLowerCase();
+          return (
+            verticalNames.some((vn) => lower.includes(vn.toLowerCase())) ||
+            lower.includes(accountNameLower) ||
+            lower.includes("compliance") ||
+            lower.includes("always") ||
+            lower.includes("never")
+          );
+        });
+
+        const instrLower = (cfg.instructions || "").toLowerCase();
+        if (
+          verticalNames.some((vn) => instrLower.includes(vn.toLowerCase())) ||
+          instrLower.includes(accountNameLower) ||
+          relevantGuardrails.length > 0
+        ) {
+          teamIntel.push({
+            name: member.name,
+            role: member.role,
+            guardrails: relevantGuardrails,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Email draft team intel query error (non-fatal):", err);
+  }
+
+  try {
+    const rawFeedback = await db
+      .select({
+        content: crossAgentFeedback.content,
+        sourceMemberId: crossAgentFeedback.sourceMemberId,
+      })
+      .from(crossAgentFeedback)
+      .where(eq(crossAgentFeedback.targetMemberId, memberId))
+      .orderBy(desc(crossAgentFeedback.createdAt))
+      .limit(5);
+
+    if (rawFeedback.length > 0) {
+      const allMembers = await db
+        .select({ id: teamMembers.id, name: teamMembers.name })
+        .from(teamMembers);
+      const nameMap = new Map(allMembers.map((m) => [m.id, m.name]));
+      crossFeedback = rawFeedback.map((f) => ({
+        content: f.content,
+        sourceName: nameMap.get(f.sourceMemberId) || "a teammate",
+      }));
+    }
+  } catch (err) {
+    console.error("Email draft cross-feedback query error (non-fatal):", err);
+  }
+
   // ── Pick primary contact ──
   const primaryContact = resolvedContactId
     ? contactsForDeal.find((c) => c.id === resolvedContactId) ?? contactsForDeal[0]
@@ -207,13 +325,33 @@ export async function POST(request: Request) {
     industryFocus?: string[];
   } | null;
 
+  // ── Build team intel prompt sections ──
+  let teamIntelSection = "";
+  if (teamIntel.length > 0) {
+    teamIntelSection = `\n\nCONTEXT FROM YOUR TEAM (${dealVertical.toUpperCase().replace("_", " ")}):
+Your teammates who specialize in this vertical have shared these insights. Include relevant ones naturally in the email — don't force them if they're not relevant to this specific follow-up.
+
+${teamIntel.map((ti) => `From ${ti.name} (${ti.role}): ${ti.guardrails.join("; ") || "vertical specialist"}`).join("\n")}`;
+  }
+
+  let crossFeedbackSection = "";
+  if (crossFeedback.length > 0) {
+    crossFeedbackSection = `\n\nRECOMMENDATIONS FROM YOUR TEAMMATES:
+${crossFeedback.map((f) => `- From ${f.sourceName}: ${f.content}`).join("\n")}
+
+If any of these recommendations are relevant to this email, incorporate them naturally.`;
+  }
+
   const systemPrompt = `You are an AI sales agent drafting an email for ${rep?.name || "a sales rep"}. Write in the rep's voice, following their communication style exactly.
 
-REP DETAILS:
-Name: ${rep?.name || "the rep"}
-${agentConfigRow ? `Instructions: ${agentConfigRow.instructions}
-Communication style: ${outputPrefs?.communicationStyle || "Professional and concise"}
-Guardrails: ${JSON.stringify(outputPrefs?.guardrails || [])}` : "Communication style: Professional and concise"}
+${agentConfigRow ? `YOUR WRITING STYLE:
+Persona & Instructions: ${agentConfigRow.instructions}
+Communication Style: ${outputPrefs?.communicationStyle || "Professional and concise"}
+
+Write this email in the style described above. Match the tone, sentence structure, and level of formality from the communication style. This email should sound like ${rep?.name || "the rep"}, not like a generic AI.
+
+Guardrails (NEVER violate):
+${(outputPrefs?.guardrails || []).map((g) => `- ${g}`).join("\n") || "- None"}` : `REP DETAILS:\nName: ${rep?.name || "the rep"}\nCommunication style: Professional and concise`}${teamIntelSection}${crossFeedbackSection}
 
 RULES:
 - Write as if you ARE this rep. Use first person. Match their tone exactly.

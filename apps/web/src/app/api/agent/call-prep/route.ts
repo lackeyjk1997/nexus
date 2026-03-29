@@ -16,9 +16,20 @@ import {
   callTranscripts,
   callAnalyses,
   resources,
+  crossAgentFeedback,
 } from "@nexus/db";
-import { eq, desc, and, sql, or } from "drizzle-orm";
+import { eq, desc, and, sql, or, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
+
+// Map vertical enum values to display names for matching against industryFocus
+const VERTICAL_DISPLAY: Record<string, string[]> = {
+  healthcare: ["Healthcare", "healthcare"],
+  financial_services: ["Financial Services", "financial_services", "FinServ"],
+  manufacturing: ["Manufacturing", "manufacturing"],
+  retail: ["Retail", "retail"],
+  technology: ["Technology", "technology"],
+  general: ["General", "general"],
+};
 
 export async function POST(request: Request) {
   const { dealId: rawDealId, accountId: rawAccountId, memberId, rawQuery, prepContext, attendeeIds } = await request.json();
@@ -238,6 +249,153 @@ export async function POST(request: Request) {
     industryFocus?: string[];
   } | null;
 
+  // ── Team intelligence: query teammates' configs by vertical ──
+  type TeamIntelItem = {
+    name: string;
+    role: string;
+    instructions: string;
+    guardrails: string[];
+    dealStageRule: string | null;
+    communicationStyle: string;
+  };
+  let teamIntel: TeamIntelItem[] = [];
+  let crossFeedback: { content: string; sourceName: string }[] = [];
+
+  const dealVertical = dealRow.vertical || "";
+
+  try {
+    if (dealVertical) {
+      // Find team members who specialize in this vertical (excluding the current rep)
+      const verticalMembers = await db
+        .select({
+          id: teamMembers.id,
+          name: teamMembers.name,
+          role: teamMembers.role,
+          vertical: teamMembers.verticalSpecialization,
+        })
+        .from(teamMembers)
+        .where(
+          and(
+            ne(teamMembers.id, memberId),
+            eq(teamMembers.verticalSpecialization, dealVertical as typeof teamMembers.verticalSpecialization.enumValues[number])
+          )
+        );
+
+      // Also find members whose industryFocus in agent config covers this vertical
+      const allOtherConfigs = await db
+        .select({
+          teamMemberId: agentConfigs.teamMemberId,
+          instructions: agentConfigs.instructions,
+          outputPreferences: agentConfigs.outputPreferences,
+        })
+        .from(agentConfigs)
+        .where(
+          and(
+            ne(agentConfigs.teamMemberId, memberId),
+            eq(agentConfigs.isActive, true)
+          )
+        );
+
+      // Get all team members for name/role lookup
+      const allMembers = await db
+        .select({ id: teamMembers.id, name: teamMembers.name, role: teamMembers.role })
+        .from(teamMembers);
+      const memberMap = new Map(allMembers.map((m) => [m.id, m]));
+
+      const verticalNames = VERTICAL_DISPLAY[dealVertical] || [dealVertical];
+      const accountNameLower = (dealRow.companyName || "").toLowerCase();
+
+      // Deduplicate: collect member IDs from both sources
+      const relevantMemberIds = new Set<string>();
+      for (const vm of verticalMembers) relevantMemberIds.add(vm.id);
+
+      // Add members whose industryFocus covers this vertical
+      for (const cfg of allOtherConfigs) {
+        const prefs = cfg.outputPreferences as { industryFocus?: string[] } | null;
+        if (prefs?.industryFocus?.some((f) => verticalNames.some((vn) => f.toLowerCase() === vn.toLowerCase()))) {
+          relevantMemberIds.add(cfg.teamMemberId);
+        }
+      }
+
+      // Build team intel from relevant configs
+      for (const cfg of allOtherConfigs) {
+        if (!relevantMemberIds.has(cfg.teamMemberId)) continue;
+        const member = memberMap.get(cfg.teamMemberId);
+        if (!member) continue;
+
+        const prefs = cfg.outputPreferences as {
+          communicationStyle?: string;
+          guardrails?: string[];
+          dealStageRules?: Record<string, string>;
+          industryFocus?: string[];
+        } | null;
+
+        const instrLower = (cfg.instructions || "").toLowerCase();
+        const guardrails = prefs?.guardrails || [];
+
+        // Filter guardrails to vertical-relevant or universal ones
+        const relevantGuardrails = guardrails.filter((g) => {
+          const lower = g.toLowerCase();
+          return (
+            verticalNames.some((vn) => lower.includes(vn.toLowerCase())) ||
+            lower.includes(accountNameLower) ||
+            lower.includes("compliance") ||
+            lower.includes("always") ||
+            lower.includes("never")
+          );
+        });
+
+        // Include if they have relevant content
+        const hasRelevantInstructions =
+          verticalNames.some((vn) => instrLower.includes(vn.toLowerCase())) ||
+          instrLower.includes(accountNameLower) ||
+          instrLower.includes("hipaa") ||
+          instrLower.includes("soc2") ||
+          instrLower.includes("compliance");
+
+        if (hasRelevantInstructions || relevantGuardrails.length > 0) {
+          teamIntel.push({
+            name: member.name,
+            role: member.role,
+            instructions: cfg.instructions,
+            guardrails: relevantGuardrails,
+            dealStageRule: prefs?.dealStageRules?.[dealRow.stage] || null,
+            communicationStyle: prefs?.communicationStyle || "",
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Team intelligence query error (non-fatal):", err);
+  }
+
+  // ── Cross-agent feedback directed at this rep ──
+  try {
+    const rawFeedback = await db
+      .select({
+        content: crossAgentFeedback.content,
+        sourceMemberId: crossAgentFeedback.sourceMemberId,
+      })
+      .from(crossAgentFeedback)
+      .where(eq(crossAgentFeedback.targetMemberId, memberId))
+      .orderBy(desc(crossAgentFeedback.createdAt))
+      .limit(5);
+
+    if (rawFeedback.length > 0) {
+      const allMembers = await db
+        .select({ id: teamMembers.id, name: teamMembers.name })
+        .from(teamMembers);
+      const nameMap = new Map(allMembers.map((m) => [m.id, m.name]));
+
+      crossFeedback = rawFeedback.map((f) => ({
+        content: f.content,
+        sourceName: nameMap.get(f.sourceMemberId) || "a teammate",
+      }));
+    }
+  } catch (err) {
+    console.error("Cross-agent feedback query error (non-fatal):", err);
+  }
+
   const daysInStage = dealRow.stageEnteredAt
     ? Math.floor((Date.now() - new Date(dealRow.stageEnteredAt).getTime()) / 86400000)
     : 0;
@@ -342,17 +500,49 @@ export async function POST(request: Request) {
     prepContextSection = `\n\nThe rep is preparing for: "${prepContext}"\n\nTailor the entire brief to THIS specific type of meeting:\n- For discovery calls: focus on questions to ask, pain points to uncover, qualification gaps\n- For technical reviews: focus on technical talking points, demo flow, integration concerns\n- For executive meetings: focus on ROI, business case, competitive positioning, decision process\n- For negotiations: focus on pricing strategy, concession options, competitive pressure, closing tactics\n\nEvery section (talking points, questions, risks, suggested close) should be relevant to THIS meeting type, not generic deal overview.`;
   }
 
+  // ── Build team intelligence prompt sections ──
+  let teamIntelSection = "";
+  if (teamIntel.length > 0) {
+    teamIntelSection = `\n\nTEAM INTELLIGENCE FOR ${dealVertical.toUpperCase().replace("_", " ")}:
+These insights come from your teammates who specialize in this vertical. They are experts. Weave relevant insights into your talking points and recommendations.
+
+${teamIntel.map((ti) => `From ${ti.name} (${ti.role}):
+Expertise: ${ti.instructions}${ti.guardrails.length > 0 ? `\nKey guidance:\n${ti.guardrails.map((g) => `  - ${g}`).join("\n")}` : ""}${ti.dealStageRule ? `\nFor ${dealRow.stage} stage: ${ti.dealStageRule}` : ""}`).join("\n\n")}`;
+  }
+
+  let crossFeedbackSection = "";
+  if (crossFeedback.length > 0) {
+    crossFeedbackSection = `\n\nRECOMMENDATIONS FROM YOUR TEAMMATES:
+These are specific recommendations directed to you by colleagues who work alongside you.
+
+${crossFeedback.map((f) => `- From ${f.sourceName}: ${f.content}`).join("\n")}`;
+  }
+
+  const teamIntelVisibilityInstruction = teamIntel.length > 0 || crossFeedback.length > 0
+    ? `\n\nIMPORTANT — TEAM INTELLIGENCE VISIBILITY:
+When team intelligence from teammates influences a talking point, risk assessment, or strategic recommendation, tag it clearly so the user can see where the insight came from. Use this format in relevant talking points or risks:
+"📋 Team Intel from [Name] ([Role]): [the insight]"
+
+Include 1-3 of the most relevant team intelligence items in the "team_intelligence" array, formatted as:
+"📋 [Name] ([Role]): [concise insight relevant to this call]"
+
+Do NOT include team intelligence that isn't relevant to this specific deal or meeting type. Only surface insights that would genuinely change how the AE approaches this particular conversation.`
+    : "";
+
   const systemPrompt = `You are an AI sales agent preparing a call brief for ${rep?.name || "a sales rep"}. You have access to comprehensive CRM data, field intelligence from the team, and the rep's personal selling style.
 
 Generate a call brief that the rep can read in 2 minutes and walk into the call prepared.${prepContextSection}${attendeeContext}
 
-${agentConfigRow ? `AGENT CONFIGURATION:
-Instructions: ${agentConfigRow.instructions}
+${agentConfigRow ? `YOUR AGENT CONFIGURATION:
+Persona & Instructions: ${agentConfigRow.instructions}
 Communication style: ${outputPrefs?.communicationStyle || "Professional and data-driven"}
-Guardrails: ${JSON.stringify(outputPrefs?.guardrails || [])}
-Deal stage rules for ${dealRow.stage}: ${outputPrefs?.dealStageRules?.[dealRow.stage] || "Standard approach"}
 
-DO NOT include anything that violates the guardrails above.` : ""}
+Your Guardrails (NEVER violate these):
+${(outputPrefs?.guardrails || []).map((g) => `- ${g}`).join("\n") || "- No guardrails set"}
+
+${outputPrefs?.dealStageRules?.[dealRow.stage] ? `Stage-Specific Guidance for ${dealRow.stage}:\n${outputPrefs.dealStageRules[dealRow.stage]}` : ""}
+
+Follow the persona and communication style above in the tone and approach of the brief. This brief should sound like it was written specifically for ${rep?.name || "this rep"}, not like a generic template.` : ""}${teamIntelSection}${crossFeedbackSection}${teamIntelVisibilityInstruction}
 
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
@@ -396,12 +586,12 @@ Return ONLY valid JSON with this exact structure:
   "risks_and_landmines": [
     {
       "risk": "What could go wrong",
-      "source": "observations | cluster | transcript | crm",
+      "source": "observations | cluster | transcript | crm | team_intel",
       "mitigation": "How to handle it"
     }
   ],
   "team_intelligence": [
-    "Insight from field intelligence relevant to this call"
+    "📋 [Name] ([Role]): Insight from teammate relevant to this call"
   ],
   "competitive_context": "1-2 sentences about competitive situation if relevant, null otherwise",
   "suggested_resources": [
