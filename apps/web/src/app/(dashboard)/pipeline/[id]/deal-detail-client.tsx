@@ -292,10 +292,9 @@ export function DealDetailClient({
 
   function handlePrepCall() {
     if (!currentUser) return;
-    // Show context selector instead of generating immediately
-    const defaultCtx = getDefaultPrepContext();
-    setPrepContext(defaultCtx);
-    setPrepContextHighlight(defaultCtx ? PREP_OPTIONS.indexOf(defaultCtx) : -1);
+    // Show context selector — start blank so user explicitly picks
+    setPrepContext("");
+    setPrepContextHighlight(-1);
     // Pre-check primary contact
     const primaryIds = contacts.filter((c) => c.isPrimary).map((c) => c.id);
     setSelectedAttendeeIds(primaryIds.length > 0 ? primaryIds : contacts.length > 0 ? [contacts[0].id] : []);
