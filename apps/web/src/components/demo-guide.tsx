@@ -96,11 +96,10 @@ const STEPS: StepConfig[] = [
 function getContextualHint(pathname: string, persona: string): string | null {
   if (pathname === "/pipeline") return "Try: Click into MedVista to explore the deal workspace";
   if (pathname.startsWith("/pipeline/")) return 'Try: Click "Prep Call" to see 7 intelligence layers converge';
-  if (pathname === "/intelligence" && persona === "Marcus Thompson") return 'Try: Ask "Are CompetitorX deals recoverable?"';
-  if (pathname === "/intelligence") return "Try: Switch to Marcus Thompson to see the VP view";
+  if (pathname === "/intelligence" && persona === "Marcus Thompson") return 'Try: Check the Patterns tab, then explore Field Feed and Close Intelligence';
+  if (pathname === "/intelligence") return "Try: Switch to Marcus Thompson to see directives and field queries";
   if (pathname === "/agent-config") return 'Try: Type "Never mention competitor pricing" to configure the agent';
-  if (pathname === "/analyze") return "Try: Run a demo transcript analysis";
-  if (pathname === "/observations") return "Try: Review observation clusters and routing status";
+  if (pathname === "/outreach") return "Try: Check the Intelligence Brief at the top for messaging guidance";
   if (pathname === "/command-center") return "Try: Click Pipeline to see the deal board";
   return null;
 }

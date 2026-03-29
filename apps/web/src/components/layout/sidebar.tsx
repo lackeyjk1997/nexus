@@ -36,18 +36,11 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 const NAV_ITEMS = [
-  { label: "Command Center", href: "/command-center", icon: "LayoutDashboard", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
-  { label: "Pipeline", href: "/pipeline", icon: "Kanban", roles: ["AE", "MANAGER"] },
-  { label: "Prospects", href: "/prospects", icon: "Users", roles: ["AE", "BDR", "MANAGER"] },
-  { label: "Outreach", href: "/outreach", icon: "Mail", roles: ["AE", "BDR", "MANAGER"] },
-  { label: "Calls", href: "/calls", icon: "Phone", roles: ["AE", "SA", "MANAGER"] },
-  { label: "Analyze", href: "/analyze", icon: "AudioWaveform", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
-  { label: "Observations", href: "/observations", icon: "Sparkles", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
+  { label: "Command Center", href: "/command-center", icon: "LayoutDashboard", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
+  { label: "Pipeline", href: "/pipeline", icon: "Kanban", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Intelligence", href: "/intelligence", icon: "BarChart3", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
-  { label: "Team", href: "/team", icon: "UsersRound", roles: ["MANAGER"] },
-  { label: "Analytics", href: "/analytics", icon: "BarChart3", roles: ["AE", "MANAGER"] },
-  { label: "Agent Config", href: "/agent-config", icon: "Bot", roles: ["AE", "BDR", "SA", "CSM", "MANAGER"] },
-  { label: "Agent Admin", href: "/agent-admin", icon: "Settings", roles: ["MANAGER"] },
+  { label: "Outreach", href: "/outreach", icon: "Mail", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
+  { label: "Agent Config", href: "/agent-config", icon: "Bot", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
 ];
 
 export function Sidebar() {

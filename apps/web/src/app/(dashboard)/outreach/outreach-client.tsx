@@ -1,9 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, MessageSquare, Phone, Clock, ChevronDown, CheckCircle2, Circle, Pause, Play } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Mail, MessageSquare, Phone, Clock, ChevronDown, CheckCircle2, Circle, Pause, Play, AlertTriangle } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
 import { ObservationInput } from "@/components/observation-input";
+import { Sparkles } from "lucide-react";
+
+type IntelligenceBrief = {
+  competitive: { title: string; summary: string | null; observationCount: number | null; arrImpactTotal: string | null }[];
+  wins: { title: string; summary: string | null; observationCount: number | null }[];
+  directives: { directive: string; scope: string; vertical: string | null }[];
+};
 
 type Sequence = {
   id: string;
@@ -50,7 +57,7 @@ const STEP_STATUS_ICON: Record<string, "sent" | "opened" | "replied" | "pending"
   approved: "pending",
 };
 
-export function OutreachClient({ sequences, steps }: { sequences: Sequence[]; steps: Step[] }) {
+export function OutreachClient({ sequences, steps, intelligenceBrief }: { sequences: Sequence[]; steps: Step[]; intelligenceBrief?: IntelligenceBrief }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedSeqId, setSelectedSeqId] = useState<string | null>(null);
 
@@ -89,6 +96,75 @@ export function OutreachClient({ sequences, steps }: { sequences: Sequence[]; st
           />
         </div>
       </div>
+
+      {/* Intelligence Brief */}
+      {intelligenceBrief && (intelligenceBrief.competitive.length > 0 || intelligenceBrief.wins.length > 0 || intelligenceBrief.directives.length > 0) && (
+        <div className="bg-card rounded-xl border border-border p-5" style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}>
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="h-4 w-4" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Intelligence Brief for Outreach
+            </span>
+          </div>
+          <p className="text-xs mb-4" style={{ color: "#8A8078" }}>
+            Key patterns that should inform your messaging right now.
+          </p>
+
+          <div className="space-y-4">
+            {/* Competitive patterns */}
+            {intelligenceBrief.competitive.length > 0 && (
+              <div className="rounded-lg p-3" style={{ background: "rgba(224,122,95,0.06)" }}>
+                <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: "#C74B3B" }}>
+                  <AlertTriangle className="h-3 w-3" />
+                  COMPETITIVE
+                </p>
+                {intelligenceBrief.competitive.map((c, i) => (
+                  <div key={i} className="mb-1.5 last:mb-0">
+                    <p className="text-sm" style={{ color: "#3D3833" }}>{c.title}</p>
+                    <p className="text-xs" style={{ color: "#8A8078" }}>
+                      {c.observationCount} observations
+                      {c.arrImpactTotal && Number(c.arrImpactTotal) > 0 && ` · ${formatCurrency(Number(c.arrImpactTotal))} at risk`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Win patterns */}
+            {intelligenceBrief.wins.length > 0 && (
+              <div className="rounded-lg p-3" style={{ background: "rgba(45,138,78,0.06)" }}>
+                <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: "#2D8A4E" }}>
+                  <CheckCircle2 className="h-3 w-3" />
+                  WHAT&apos;S WORKING
+                </p>
+                {intelligenceBrief.wins.map((w, i) => (
+                  <div key={i} className="mb-1.5 last:mb-0">
+                    <p className="text-sm" style={{ color: "#3D3833" }}>{w.title}</p>
+                    {w.summary && <p className="text-xs" style={{ color: "#8A8078" }}>{w.summary}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Messaging directives */}
+            {intelligenceBrief.directives.length > 0 && (
+              <div className="rounded-lg p-3" style={{ background: "rgba(0,0,0,0.02)" }}>
+                <p className="text-xs font-semibold mb-2" style={{ color: "#8A8078" }}>
+                  MESSAGING DIRECTIVES
+                </p>
+                {intelligenceBrief.directives.map((d, i) => (
+                  <div key={i} className="flex items-center justify-between mb-1 last:mb-0">
+                    <p className="text-sm" style={{ color: "#3D3833" }}>{d.directive}</p>
+                    <span className="text-xs shrink-0 ml-4" style={{ color: "#8A8078" }}>
+                      {d.scope === "org_wide" ? "org-wide" : d.vertical?.replace("_", " ") || d.scope}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {selectedSeq ? (
         <SequenceDetail

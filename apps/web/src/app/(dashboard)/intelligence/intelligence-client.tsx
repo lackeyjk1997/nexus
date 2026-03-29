@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Swords,
   FileX,
@@ -53,7 +54,38 @@ type Observation = {
   structuredData: unknown;
   createdAt: Date;
   observerId: string;
+  observerName: string | null;
   observerRole: string | null;
+  observerVertical: string | null;
+};
+
+type Directive = {
+  id: string;
+  scope: string;
+  vertical: string | null;
+  directive: string;
+  priority: string;
+  category: string;
+  isActive: boolean;
+};
+
+type TabKey = "patterns" | "feed" | "close";
+
+type Classification = {
+  signals?: { type: string; confidence: number; summary: string }[];
+  sentiment?: string;
+  urgency?: string;
+};
+
+const SIGNAL_COLORS: Record<string, string> = {
+  competitive_intel: "bg-red-50 text-red-700",
+  content_gap: "bg-amber-50 text-amber-700",
+  deal_blocker: "bg-red-50 text-red-700",
+  win_pattern: "bg-emerald-50 text-emerald-700",
+  process_friction: "bg-orange-50 text-orange-700",
+  agent_tuning: "bg-violet-50 text-violet-700",
+  cross_agent: "bg-blue-50 text-blue-700",
+  field_intelligence: "bg-cyan-50 text-cyan-700",
 };
 
 type Quote = { quote: string; role: string; vertical: string; date: string };
@@ -118,14 +150,27 @@ export function IntelligenceClient({
   observations,
   avgResponseTime = "No data",
   closeIntelligence = null,
+  directives = [],
 }: {
   clusters: Cluster[];
   observations: Observation[];
   avgResponseTime?: string;
   closeIntelligence?: CloseIntelligence;
+  directives?: Directive[];
 }) {
   const { currentUser } = usePersona();
   const [signalFilter, setSignalFilter] = useState("all");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialTab = (searchParams.get("tab") as TabKey) || "patterns";
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  const handleTabChange = useCallback((tab: TabKey) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
   const isSupport = (currentUser?.role as string) === "SUPPORT";
   const isAE = currentUser?.role === "AE" || currentUser?.role === "SA" || currentUser?.role === "BDR" || currentUser?.role === "CSM";
@@ -178,70 +223,115 @@ export function IntelligenceClient({
         <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-5 gap-4">
-        <MetricCard icon={Eye} label="Active Patterns" value={activeClusters.length.toString()} />
-        <MetricCard icon={DollarSign} label="Total ARR at Risk" value={formatCurrency(totalArrAtRisk)} color="text-danger" />
-        <MetricCard icon={MessageSquare} label="Observations" value={obsThisMonth.toString()} subtitle="this month" />
-        <MetricCard icon={Clock} label="Avg Response" value={avgResponseTime} />
-        <MetricCard icon={CheckCircle} label="Resolution Rate" value={`${resolutionRate}%`} color="text-success" />
-      </div>
-
-      {/* AE Impact Card — visible to AEs/SAs/BDRs/CSMs only */}
-      {isAE && currentUser && (
-        <AeImpactCard currentUser={currentUser} observations={observations} />
-      )}
-
-      {/* Ask Your Team — visible to MANAGER and SUPPORT only */}
-      {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
-        <AskTeamInput currentUser={currentUser} />
-      )}
-
-      {/* Your Queries — visible to MANAGER and SUPPORT only */}
-      {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
-        <YourQueries currentUser={currentUser} />
-      )}
-
-      {/* Close Intelligence — visible to MANAGER and SUPPORT */}
-      {closeIntelligence && (currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
-        <CloseIntelligenceSection data={closeIntelligence} />
-      )}
-
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        {[
-          { key: "all", label: "All Signals" },
-          { key: "competitive_intel", label: "Competitive" },
-          { key: "content_gap", label: "Content Gaps" },
-          { key: "process_friction", label: "Process" },
-          { key: "win_pattern", label: "Win Patterns" },
-        ].map((f) => (
+      {/* Tab Bar */}
+      <div className="flex items-center gap-6" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)", marginBottom: 24 }}>
+        {([
+          { key: "patterns" as TabKey, label: "Patterns" },
+          { key: "feed" as TabKey, label: "Field Feed" },
+          { key: "close" as TabKey, label: "Close Intelligence" },
+        ]).map((tab) => (
           <button
-            key={f.key}
-            onClick={() => setSignalFilter(f.key)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-              (signalFilter === f.key || (signalFilter === "all" && activeFilter === f.key))
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
+            key={tab.key}
+            onClick={() => handleTabChange(tab.key)}
+            className="pb-3 text-sm transition-colors"
+            style={{
+              fontWeight: activeTab === tab.key ? 600 : 400,
+              color: activeTab === tab.key ? "#3D3833" : "#8A8078",
+              borderBottom: activeTab === tab.key ? "2px solid #E07A5F" : "2px solid transparent",
+            }}
           >
-            {f.label}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Pattern Cards */}
-      <div className="space-y-4">
-        {filtered.map((cluster) => (
-          <PatternCard key={cluster.id} cluster={cluster} observations={observations} />
-        ))}
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            No patterns match the current filter
+      {/* ── Patterns Tab ── */}
+      {activeTab === "patterns" && (
+        <>
+          {/* Metrics */}
+          <div className="grid grid-cols-5 gap-4">
+            <MetricCard icon={Eye} label="Active Patterns" value={activeClusters.length.toString()} />
+            <MetricCard icon={DollarSign} label="Total ARR at Risk" value={formatCurrency(totalArrAtRisk)} color="text-danger" />
+            <MetricCard icon={MessageSquare} label="Observations" value={obsThisMonth.toString()} subtitle="this month" />
+            <MetricCard icon={Clock} label="Avg Response" value={avgResponseTime} />
+            <MetricCard icon={CheckCircle} label="Resolution Rate" value={`${resolutionRate}%`} color="text-success" />
           </div>
-        )}
-      </div>
+
+          {/* AE Impact Card — visible to AEs/SAs/BDRs/CSMs only */}
+          {isAE && currentUser && (
+            <AeImpactCard currentUser={currentUser} observations={observations} />
+          )}
+
+          {/* Ask Your Team — visible to MANAGER and SUPPORT only */}
+          {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
+            <AskTeamInput currentUser={currentUser} />
+          )}
+
+          {/* Your Queries — visible to MANAGER and SUPPORT only */}
+          {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
+            <YourQueries currentUser={currentUser} />
+          )}
+
+          {/* Your Directives — visible to MANAGER only */}
+          {currentUser?.role === "MANAGER" && directives.length > 0 && (
+            <DirectivesSection directives={directives} />
+          )}
+
+          {/* Filters */}
+          <div className="flex items-center gap-2">
+            {[
+              { key: "all", label: "All Signals" },
+              { key: "competitive_intel", label: "Competitive" },
+              { key: "content_gap", label: "Content Gaps" },
+              { key: "process_friction", label: "Process" },
+              { key: "win_pattern", label: "Win Patterns" },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setSignalFilter(f.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                  (signalFilter === f.key || (signalFilter === "all" && activeFilter === f.key))
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Pattern Cards */}
+          <div className="space-y-4">
+            {filtered.map((cluster) => (
+              <PatternCard key={cluster.id} cluster={cluster} observations={observations} />
+            ))}
+            {filtered.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                No patterns match the current filter
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Field Feed Tab ── */}
+      {activeTab === "feed" && (
+        <FieldFeedTab observations={observations} clusters={clusters} onClusterClick={(clusterId) => {
+          handleTabChange("patterns");
+        }} />
+      )}
+
+      {/* ── Close Intelligence Tab ── */}
+      {activeTab === "close" && (
+        closeIntelligence ? (
+          <CloseIntelligenceSection data={closeIntelligence} />
+        ) : (
+          <div className="text-center py-12 text-muted-foreground">
+            No close intelligence data yet. Close deals to see win/loss patterns here.
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -1088,6 +1178,176 @@ function AeImpactCard({
             <span style={{ color: "#8A8078" }}>pending quick checks</span>
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Field Feed Tab ──
+
+function FieldFeedTab({
+  observations,
+  clusters,
+  onClusterClick,
+}: {
+  observations: Observation[];
+  clusters: Cluster[];
+  onClusterClick: (clusterId: string) => void;
+}) {
+  const clusterMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clusters) m.set(c.id, c.title);
+    return m;
+  }, [clusters]);
+
+  const STATUS_FLOW: Record<string, { label: string; color: string }> = {
+    submitted: { label: "Shared", color: "bg-muted text-muted-foreground" },
+    classified: { label: "Classified", color: "bg-muted text-muted-foreground" },
+    clustered: { label: "Clustered", color: "bg-violet-50 text-violet-700" },
+    routed: { label: "Routed", color: "bg-blue-50 text-blue-700" },
+    acknowledged: { label: "Acknowledged", color: "bg-indigo-50 text-indigo-700" },
+    in_progress: { label: "In Progress", color: "bg-amber-50 text-amber-700" },
+    resolved: { label: "Resolved", color: "bg-emerald-50 text-emerald-700" },
+    action_taken: { label: "Action Taken", color: "bg-emerald-50 text-emerald-700" },
+    escalated: { label: "Escalated", color: "bg-red-50 text-red-700" },
+  };
+
+  return (
+    <div className="space-y-3">
+      {observations.map((obs) => {
+        const classification = obs.aiClassification as Classification | null;
+        const signals = classification?.signals || [];
+        const clusterTitle = obs.clusterId ? clusterMap.get(obs.clusterId) : null;
+        const statusInfo = STATUS_FLOW[obs.status || "submitted"] || STATUS_FLOW.submitted!;
+
+        // Anonymize for support functions: show role + vertical instead of name
+        const displayName = obs.observerRole === "SUPPORT"
+          ? `${obs.observerRole}, ${obs.observerVertical || "General"}`
+          : obs.observerName || "Unknown";
+
+        return (
+          <div key={obs.id} className="bg-card rounded-xl border border-border p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                {/* Observer info */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-medium" style={{ color: "#3D3833" }}>
+                    {displayName}
+                  </span>
+                  {obs.observerRole && obs.observerRole !== "SUPPORT" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      {obs.observerRole}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {timeAgo(obs.createdAt)}
+                  </span>
+                </div>
+
+                {/* Raw text */}
+                <p className="text-sm text-foreground mb-2">{obs.rawInput}</p>
+
+                {/* Classification + cluster + status badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {signals.map((s, i) => {
+                    const Icon = SIGNAL_ICONS[s.type] || Eye;
+                    return (
+                      <span
+                        key={i}
+                        className={cn(
+                          "text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1",
+                          SIGNAL_COLORS[s.type] || "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="h-3 w-3" />
+                        {s.type.replace(/_/g, " ")}
+                      </span>
+                    );
+                  })}
+                  {clusterTitle && (
+                    <button
+                      onClick={() => obs.clusterId && onClusterClick(obs.clusterId)}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary-light text-primary hover:underline"
+                    >
+                      {clusterTitle}
+                    </button>
+                  )}
+                  <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", statusInfo.color)}>
+                    {statusInfo.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {observations.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No observations yet. Share what you&apos;re noticing from any page.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Directives Section (MANAGER only) ──
+
+function DirectivesSection({ directives }: { directives: Directive[] }) {
+  const grouped = useMemo(() => {
+    const groups: Record<string, Directive[]> = { mandatory: [], strong: [], guidance: [] };
+    for (const d of directives) {
+      if (groups[d.priority]) groups[d.priority]!.push(d);
+    }
+    return groups;
+  }, [directives]);
+
+  const PRIORITY_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+    mandatory: { label: "MANDATORY", color: "#E07A5F", icon: "\uD83D\uDD34" },
+    strong: { label: "STRONG", color: "#D4A853", icon: "\uD83D\uDFE1" },
+    guidance: { label: "GUIDANCE", color: "#6B9E6B", icon: "\uD83D\uDFE2" },
+  };
+
+  return (
+    <div
+      className="bg-card rounded-xl border border-border p-5"
+      style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+    >
+      <p className="text-base font-semibold mb-1" style={{ color: "#3D3833" }}>
+        Your Directives
+      </p>
+      <p className="text-[13px] mb-5" style={{ color: "#8A8078" }}>
+        These automatically flow into every AE&apos;s call prep and email draft.
+      </p>
+
+      <div className="space-y-5">
+        {(["mandatory", "strong", "guidance"] as const).map((priority) => {
+          const items = grouped[priority];
+          if (!items || items.length === 0) return null;
+          const config = PRIORITY_CONFIG[priority]!;
+
+          return (
+            <div key={priority}>
+              <p className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: config.color }}>
+                <span
+                  className="inline-block rounded-full"
+                  style={{ width: 8, height: 8, background: config.color }}
+                />
+                {config.label}
+              </p>
+              <div className="space-y-1.5">
+                {items.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between">
+                    <span className="text-sm" style={{ color: "#3D3833" }}>{d.directive}</span>
+                    <span className="text-xs shrink-0 ml-4" style={{ color: "#8A8078" }}>
+                      {d.scope === "org_wide" ? "org-wide" : d.vertical?.replace("_", " ") || d.scope}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

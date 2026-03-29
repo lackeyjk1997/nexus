@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { observationClusters, observations, teamMembers, observationRouting, deals } from "@nexus/db";
+import { observationClusters, observations, teamMembers, observationRouting, deals, managerDirectives } from "@nexus/db";
 import { desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import { IntelligenceClient } from "./intelligence-client";
 
@@ -16,7 +16,7 @@ type CloseFactor = {
 };
 
 export default async function IntelligencePage() {
-  const [clusters, allObservations, acknowledgedRoutings, closedDeals] = await Promise.all([
+  const [clusters, allObservations, acknowledgedRoutings, closedDeals, directivesData] = await Promise.all([
     db.select().from(observationClusters).orderBy(desc(observationClusters.lastObserved)),
     db
       .select({
@@ -29,7 +29,9 @@ export default async function IntelligencePage() {
         structuredData: observations.structuredData,
         createdAt: observations.createdAt,
         observerId: observations.observerId,
+        observerName: teamMembers.name,
         observerRole: teamMembers.role,
+        observerVertical: teamMembers.verticalSpecialization,
       })
       .from(observations)
       .leftJoin(teamMembers, eq(observations.observerId, teamMembers.id))
@@ -60,6 +62,19 @@ export default async function IntelligencePage() {
           isNotNull(deals.winFactors)
         )
       ),
+    // Manager directives
+    db
+      .select({
+        id: managerDirectives.id,
+        scope: managerDirectives.scope,
+        vertical: managerDirectives.vertical,
+        directive: managerDirectives.directive,
+        priority: managerDirectives.priority,
+        category: managerDirectives.category,
+        isActive: managerDirectives.isActive,
+      })
+      .from(managerDirectives)
+      .where(eq(managerDirectives.isActive, true)),
   ]);
 
   // Calculate average response time
@@ -133,6 +148,7 @@ export default async function IntelligencePage() {
       observations={allObservations}
       avgResponseTime={avgResponseText}
       closeIntelligence={closeIntelligence}
+      directives={directivesData}
     />
   );
 }

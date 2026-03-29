@@ -99,122 +99,29 @@ export default function LandingPage() {
         {/* Thesis */}
         <div style={{ fontSize: 15, lineHeight: 1.75, color: "#3D3833" }}>
           <p style={{ marginBottom: 16 }}>
-            Anthropic&apos;s Mid-Market team is pioneering a scaled sales
-            playbook where human AEs direct AI Agents to automate the
-            buyer&apos;s journey. But there&apos;s a prerequisite nobody&apos;s
-            solved yet:
+            Your AEs spend 60% of their week assembling information instead of selling.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>The agents need knowledge to work with.</strong>
+            Prepping a call means digging through Slack, chasing the SA for competitive intel, re-reading old transcripts, and hoping someone updated the CRM. Writing a follow-up means reconstructing what was said from memory. Reporting a loss means picking a dropdown value that tells leadership nothing useful.
           </p>
           <p style={{ marginBottom: 16 }}>
-            Product positioning, competitive intelligence, customer objection
-            patterns, what worked on similar deals, what the SA learned on the
-            last call, what the CFO actually cares about — that knowledge exists
-            in your org, but it&apos;s scattered across Slack threads, tribal
-            knowledge, PDFs nobody reads, and CRM fields nobody fills out.
+            Meanwhile, the knowledge that would actually help — what the SA learned about compliance, what three other reps noticed about a competitor&apos;s pricing, what worked on the deal you won last quarter — lives in people&apos;s heads and dies in Slack threads.
           </p>
           <p style={{ marginBottom: 16 }}>
-            So the AE becomes the coordinator — pulling information together
-            from 6 different systems instead of having strategic conversations
-            with customers. They spend 60% of their week on information
-            assembly, not on the moments that actually move deals.
+            <strong>Nexus makes that knowledge usable.</strong>
           </p>
           <p style={{ marginBottom: 16 }}>
-            Nexus solves the prerequisite. It captures field intelligence from
-            natural workflow — a 10-second observation, a call transcript, a
-            deal outcome — and structures it into a knowledge layer that AI
-            agents actually use. Once that layer exists:
+            When Sarah preps a call, the brief already knows her SA recommends leading with compliance, that the CFO hasn&apos;t been engaged in 45 days, that a competitor undercut pricing on three similar deals, and that her manager prohibits discounts over 10%. She didn&apos;t assemble any of it — seven intelligence layers converged in 30 seconds.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A rep preps a call</strong> and the brief knows the CFO
-            hasn&apos;t been engaged, that a competitor undercut pricing on 3
-            similar deals, that the SA recommends leading with compliance, and
-            that the manager wants no discounts over 10%. Seven intelligence
-            layers, 30 seconds, zero information assembly.
+            When she notices something on a call — &ldquo;CompetitorX is offering free pilots&rdquo; — she types one sentence. The system classifies it, links it to affected deals, clusters it with reports from two other reps, calculates &euro;850K in pipeline at risk, and routes it to Product Marketing. A Slack message that would have died becomes structured intelligence.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A rep shares what they&apos;re noticing</strong> and the AI
-            classifies it, links it to affected deals, clusters it with reports
-            from other reps, calculates pipeline at risk, and routes it to the
-            right support function — turning a Slack message that would have
-            died into structured organizational intelligence.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            <strong>A deal closes</strong> and the AI reads every transcript,
-            observation, and MEDDPICC gap to pre-populate the loss analysis.
-            Every confirmed factor becomes intelligence that feeds future deal
-            warnings across verticals.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            <strong>A VP asks a question</strong> and the system either answers
-            from existing data or sends targeted questions to the specific AEs
-            with affected deals — replacing the Monday morning Slack thread with
-            one-tap structured responses.
+            When a deal closes, the AI reads every transcript, observation, and MEDDPICC gap to pre-populate the loss analysis before anyone fills out a form. When Marcus has a question about his pipeline, the system answers from data or sends targeted one-tap questions to the right AEs — not a Monday morning Slack broadcast.
           </p>
           <p style={{ marginBottom: 24 }}>
-            The result: AEs stop coordinating and start selling. The AI agents
-            get smarter with every interaction. The org&apos;s collective
-            intelligence compounds without anyone doing extra work.
+            Every action makes every other action smarter. The SA&apos;s expertise feeds the AE&apos;s call prep. The AE&apos;s observation feeds the VP&apos;s dashboard. The VP&apos;s question feeds back to the AE with a give-back insight. Nobody does extra work. The intelligence just compounds.
           </p>
-        </div>
-
-        {/* Divider */}
-        <div
-          style={{
-            height: 1,
-            background: "rgba(0,0,0,0.06)",
-            marginBottom: 24,
-          }}
-        />
-
-        {/* What to try */}
-        <div>
-          <p
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: "0.08em",
-              color: "#8A8078",
-              marginBottom: 16,
-            }}
-          >
-            WHAT TO TRY
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ fontSize: 14, color: "#3D3833", lineHeight: 1.6 }}>
-              <strong style={{ color: "#E07A5F" }}>1.</strong>{" "}
-              <strong>Prep a Call</strong> — Click Pipeline → MedVista Health
-              Systems → &ldquo;Prep Call.&rdquo; Pick Negotiation, select
-              stakeholders, generate. Watch 7 intelligence layers converge —
-              your SA&apos;s compliance expertise, your manager&apos;s pricing
-              directives, competitive patterns from closed deals, and MEDDPICC
-              gap warnings — into one brief.
-            </div>
-            <div style={{ fontSize: 14, color: "#3D3833", lineHeight: 1.6 }}>
-              <strong style={{ color: "#E07A5F" }}>2.</strong>{" "}
-              <strong>Share Field Intel</strong> — Type anything in the bar at
-              the bottom of any page. Try: &ldquo;security reviews are slowing
-              down every enterprise deal.&rdquo; Watch the AI classify it, ask a
-              smart follow-up, cluster it with similar reports, and give you
-              something useful back — all inline, no page change.
-            </div>
-            <div style={{ fontSize: 14, color: "#3D3833", lineHeight: 1.6 }}>
-              <strong style={{ color: "#E07A5F" }}>3.</strong>{" "}
-              <strong>See the VP View</strong> — Switch to Marcus Thompson (top
-              right). Explore the Intelligence dashboard — real patterns with ARR
-              impact, field voices, and suggested actions. Click &ldquo;Ask about
-              what you&apos;re seeing&rdquo; and ask a question. Or click into
-              any deal and ask about it directly.
-            </div>
-            <div style={{ fontSize: 14, color: "#3D3833", lineHeight: 1.6 }}>
-              <strong style={{ color: "#E07A5F" }}>4.</strong>{" "}
-              <strong>Close a Deal</strong> — As any AE, change a deal to
-              &ldquo;Closed Lost.&rdquo; The AI pre-populates the loss analysis
-              from deal history before you type a word. Confirm what&apos;s
-              right, correct what&apos;s wrong, add what only you know.
-            </div>
-          </div>
         </div>
 
         {/* Divider */}
@@ -238,10 +145,9 @@ export default function LandingPage() {
         >
           You&apos;ll enter as{" "}
           <strong style={{ color: "#3D3833" }}>Sarah Chen</strong>, Account
-          Executive on an enterprise sales team selling Claude to Healthcare
-          and Financial Services accounts. Use the user switcher (top right) to
-          see the system from different perspectives — AE, VP of Sales,
-          Solutions Architect, and Support Functions.
+          Executive selling Claude to Healthcare and Financial Services
+          accounts. Use the user switcher (top right) to experience the system
+          as a VP of Sales, Solutions Architect, or Support Function lead.
         </p>
 
         {/* Enter button */}
