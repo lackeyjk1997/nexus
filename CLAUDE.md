@@ -448,7 +448,7 @@ Intelligence dashboard with clusters, support function personas (Lisa Park, Mich
 ---
 
 ## Known Issues / Gotchas
-- **Field query targeting sends to 0 reps**: Column name mismatch in the targeting query — being fixed next session.
+- **Field query targeting**: Fixed — multi-path targeting (cluster traversal → observation text search → keyword match → vertical fallback) now correctly routes to 3+ reps.
 - **MedVista stage**: May need manual reset to Negotiation stage after testing close/lost capture.
 - **Conversational follow-up engine**: Inline UI may still have edge cases in follow-up flow.
 - **PgArray error**: If schema changes (adding columns/tables), the Next.js dev server may throw `PgArray` errors from stale cache. Fix: `rm -rf apps/web/.next && pnpm dev`.

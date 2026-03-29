@@ -11,6 +11,10 @@ import {
   deals,
   teamMembers,
   companies,
+  meddpiccFields,
+  activities,
+  contacts,
+  crossAgentFeedback,
 } from "@nexus/db";
 import { eq, desc, and, ne, isNotNull, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -120,7 +124,7 @@ export async function GET(request: Request) {
 // ── POST: create a new field query ──
 
 export async function POST(request: Request) {
-  const { rawQuestion, initiatedBy, clusterId } = await request.json();
+  const { rawQuestion, initiatedBy, clusterId, dealId } = await request.json();
 
   if (!rawQuestion || !initiatedBy) {
     return NextResponse.json(
@@ -129,7 +133,12 @@ export async function POST(request: Request) {
     );
   }
 
-  console.log("[Field Query] New query:", rawQuestion, "| clusterId:", clusterId || "none");
+  console.log("[Field Query] New query:", rawQuestion, "| clusterId:", clusterId || "none", "| dealId:", dealId || "none");
+
+  // ── DEAL-SCOPED QUERY: answer from deal data + send to deal owner ──
+  if (dealId) {
+    return handleDealScopedQuery(rawQuestion, initiatedBy, dealId);
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -627,4 +636,215 @@ function fallbackQuestion(rawQuestion: string, dealName: string) {
     question_text: `Quick check on ${shortDeal} — any updates on the situation you'd want leadership to know about?`,
     chips: ["Things are on track", "Could use some help", "Situation has changed", "Not sure"],
   };
+}
+
+// ── Deal-scoped query handler ──
+
+async function handleDealScopedQuery(rawQuestion: string, initiatedBy: string, dealId: string) {
+  console.log("[Deal Query] Processing deal-scoped query for deal:", dealId);
+
+  // Gather rich deal context
+  const [dealData, meddpiccData, dealContacts, dealActivitiesData, dealObs, teamFeedback] = await Promise.all([
+    db
+      .select({
+        id: deals.id,
+        name: deals.name,
+        stage: deals.stage,
+        dealValue: deals.dealValue,
+        vertical: deals.vertical,
+        competitor: deals.competitor,
+        assignedAeId: deals.assignedAeId,
+        companyId: deals.companyId,
+        stageEnteredAt: deals.stageEnteredAt,
+        companyName: companies.name,
+      })
+      .from(deals)
+      .leftJoin(companies, eq(deals.companyId, companies.id))
+      .where(eq(deals.id, dealId))
+      .limit(1),
+    db.select().from(meddpiccFields).where(eq(meddpiccFields.dealId, dealId)).limit(1),
+    db.select().from(contacts).where(
+      sql`company_id = (SELECT company_id FROM deals WHERE id = ${dealId})`
+    ),
+    db
+      .select({ type: activities.type, subject: activities.subject, description: activities.description, createdAt: activities.createdAt })
+      .from(activities)
+      .where(eq(activities.dealId, dealId))
+      .orderBy(desc(activities.createdAt))
+      .limit(10),
+    db
+      .select({ rawInput: observations.rawInput, createdAt: observations.createdAt })
+      .from(observations)
+      .where(sql`source_context->>'dealId' = ${dealId} OR ${dealId}::uuid = ANY(linked_deal_ids)`)
+      .orderBy(desc(observations.createdAt))
+      .limit(5),
+    db
+      .select({ content: crossAgentFeedback.content, sourceName: teamMembers.name })
+      .from(crossAgentFeedback)
+      .leftJoin(teamMembers, eq(crossAgentFeedback.sourceMemberId, teamMembers.id))
+      .where(eq(crossAgentFeedback.accountId, sql`(SELECT company_id FROM deals WHERE id = ${dealId})`))
+      .limit(5),
+  ]);
+
+  const deal = dealData[0];
+  if (!deal) {
+    return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+  }
+
+  const meddpicc = meddpiccData[0] || null;
+
+  // Get AE name
+  let aeName = "the deal owner";
+  if (deal.assignedAeId) {
+    const [ae] = await db.select({ name: teamMembers.name }).from(teamMembers).where(eq(teamMembers.id, deal.assignedAeId)).limit(1);
+    aeName = ae?.name || aeName;
+  }
+
+  // Build answer from deal data
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  let answer: string;
+  let needsAeInput = false;
+
+  if (apiKey) {
+    try {
+      const client = new Anthropic({ apiKey });
+
+      const dealContext = {
+        name: deal.name,
+        stage: deal.stage,
+        value: deal.dealValue,
+        competitor: deal.competitor,
+        ae: aeName,
+        company: deal.companyName,
+        meddpicc: meddpicc ? {
+          metrics: { text: meddpicc.metrics, confidence: meddpicc.metricsConfidence },
+          economicBuyer: { text: meddpicc.economicBuyer, confidence: meddpicc.economicBuyerConfidence },
+          decisionCriteria: { text: meddpicc.decisionCriteria, confidence: meddpicc.decisionCriteriaConfidence },
+          decisionProcess: { text: meddpicc.decisionProcess, confidence: meddpicc.decisionProcessConfidence },
+          identifyPain: { text: meddpicc.identifyPain, confidence: meddpicc.identifyPainConfidence },
+          champion: { text: meddpicc.champion, confidence: meddpicc.championConfidence },
+          competition: { text: meddpicc.competition, confidence: meddpicc.competitionConfidence },
+        } : null,
+        contacts: dealContacts.map((c) => ({ name: `${c.firstName} ${c.lastName}`, title: c.title, role: c.roleInDeal })),
+        recentActivities: dealActivitiesData.map((a) => ({ type: a.type, subject: a.subject, date: a.createdAt, description: a.description })),
+        observations: dealObs.map((o) => ({ text: o.rawInput, date: o.createdAt })),
+        teamFeedback: teamFeedback.map((f) => ({ from: f.sourceName, content: f.content })),
+      };
+
+      const msg = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 600,
+        messages: [{
+          role: "user",
+          content: `You are a sales intelligence system answering a manager's question about a specific deal.
+
+DEAL DATA:
+${JSON.stringify(dealContext, null, 2)}
+
+MANAGER'S QUESTION: "${rawQuestion}"
+
+Answer concisely using ONLY the deal data above. Include:
+- Specific MEDDPICC scores and what they mean
+- Contact engagement gaps (who hasn't been contacted recently)
+- Relevant team intelligence
+- Whether you have enough data to fully answer or need rep input
+
+Format as plain text, 3-5 sentences. Include confidence levels and specific names/dates when available.
+End with either "NEEDS_AE_INPUT: true" or "NEEDS_AE_INPUT: false" on its own line.`,
+        }],
+      });
+
+      const responseText = (msg.content[0] as { type: string; text: string }).text;
+      needsAeInput = responseText.includes("NEEDS_AE_INPUT: true");
+      answer = responseText.replace(/NEEDS_AE_INPUT:\s*(true|false)/g, "").trim();
+    } catch (err) {
+      console.error("[Deal Query] AI failed:", err);
+      answer = buildFallbackDealAnswer(rawQuestion, deal, meddpicc, dealContacts, dealActivitiesData);
+      needsAeInput = true;
+    }
+  } else {
+    answer = buildFallbackDealAnswer(rawQuestion, deal, meddpicc, dealContacts, dealActivitiesData);
+    needsAeInput = true;
+  }
+
+  // Add team feedback to answer if available
+  if (teamFeedback.length > 0) {
+    const fbLines = teamFeedback.map((f) => `Team intel from ${f.sourceName}: "${f.content}"`);
+    answer += "\n\n" + fbLines.join("\n");
+  }
+
+  // Create the query record
+  const [query] = await db
+    .insert(fieldQueries)
+    .values({
+      initiatedBy,
+      rawQuestion,
+      clusterId: null,
+      aggregatedAnswer: {
+        summary: answer,
+        response_count: 0,
+        target_count: needsAeInput ? 1 : 0,
+        answered_from_data: !needsAeInput,
+        updated_at: new Date().toISOString(),
+      },
+      status: needsAeInput ? "active" : "answered",
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    })
+    .returning();
+
+  // Send targeted question to deal owner if needed
+  let questionsSent = 0;
+  if (needsAeInput && deal.assignedAeId) {
+    const shortDeal = deal.name.split(" — ")[0] || deal.name;
+    await db.insert(fieldQueryQuestions).values({
+      queryId: query!.id,
+      targetMemberId: deal.assignedAeId,
+      questionText: `Quick check on ${shortDeal} — ${rawQuestion.charAt(0).toLowerCase() + rawQuestion.slice(1).replace(/\?$/, "")}? Any updates you'd want leadership to know?`,
+      chips: ["Making progress", "Needs attention", "Situation changed", "On track"],
+      dealId: deal.id,
+      accountId: deal.companyId,
+      status: "pending",
+    });
+    questionsSent = 1;
+    console.log("[Deal Query] Question sent to", aeName);
+  }
+
+  return NextResponse.json({
+    id: query!.id,
+    status: needsAeInput ? "active" : "answered",
+    immediate_answer: answer,
+    questionsSent,
+    targetName: aeName,
+  });
+}
+
+function buildFallbackDealAnswer(
+  question: string,
+  deal: { name: string; stage: string; dealValue: string | null; competitor: string | null },
+  meddpicc: { economicBuyerConfidence: number | null; championConfidence: number | null; identifyPainConfidence: number | null } | null,
+  dealContacts: { firstName: string; lastName: string; title: string | null; roleInDeal: string | null }[],
+  recentActivities: { type: string; subject: string | null; createdAt: Date }[],
+): string {
+  const parts: string[] = [];
+  parts.push(`${deal.name} is in ${deal.stage.replace("_", " ")} stage (€${Number(deal.dealValue || 0).toLocaleString()}).`);
+
+  if (meddpicc) {
+    const gaps: string[] = [];
+    if ((meddpicc.economicBuyerConfidence ?? 0) < 50) gaps.push(`Economic Buyer (${meddpicc.economicBuyerConfidence}%)`);
+    if ((meddpicc.championConfidence ?? 0) < 50) gaps.push(`Champion (${meddpicc.championConfidence}%)`);
+    if (gaps.length > 0) parts.push(`MEDDPICC gaps: ${gaps.join(", ")}.`);
+  }
+
+  if (deal.competitor) parts.push(`Active competitor: ${deal.competitor}.`);
+
+  if (recentActivities.length > 0) {
+    const latest = recentActivities[0]!;
+    const daysAgo = Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+    parts.push(`Last activity: "${latest.subject}" (${daysAgo}d ago).`);
+  }
+
+  const eb = dealContacts.find((c) => c.roleInDeal === "economic_buyer");
+  if (eb) parts.push(`Economic Buyer: ${eb.firstName} ${eb.lastName} (${eb.title}).`);
+
+  return parts.join(" ");
 }

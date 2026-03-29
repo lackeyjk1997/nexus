@@ -41,6 +41,7 @@ import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared"
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
 import { ObservationInput } from "@/components/observation-input";
+import { DealQuestionInput } from "@/components/deal-question-input";
 import { usePersona } from "@/components/providers";
 
 // ── Types ──
@@ -58,6 +59,16 @@ type Deal = {
   product: string | null;
   leadSource: string | null;
   competitor: string | null;
+  lossReason: string | null;
+  closeCompetitor: string | null;
+  closeNotes: string | null;
+  closeImprovement: string | null;
+  winTurningPoint: string | null;
+  winReplicable: string | null;
+  closeAiAnalysis: unknown;
+  closeFactors: unknown;
+  winFactors: unknown;
+  closedAt: Date | null;
   stageEnteredAt: Date | null;
   createdAt: Date;
   companyId: string;
@@ -676,6 +687,25 @@ export function DealDetailClient({
         </div>
       </div>
 
+      {/* Manager Deal Question Input */}
+      {currentUser?.role === "MANAGER" && (
+        <DealQuestionInput
+          deal={{
+            id: deal.id,
+            name: deal.name,
+            competitor: deal.competitor,
+            stage: deal.stage,
+            stageEnteredAt: deal.stageEnteredAt,
+          }}
+          meddpicc={meddpicc ? {
+            economicBuyerConfidence: meddpicc.economicBuyerConfidence,
+            championConfidence: meddpicc.championConfidence,
+            decisionProcessConfidence: meddpicc.decisionProcessConfidence,
+            metricsConfidence: meddpicc.metricsConfidence,
+          } : null}
+        />
+      )}
+
       {/* Call Prep Context Selector */}
       {callPrepPhase === "context" && (
         <div
@@ -1209,7 +1239,13 @@ export function DealDetailClient({
 
       {/* Tab Content */}
       {activeTab === "overview" && (
-        <OverviewTab deal={deal} milestones={milestones} />
+        <>
+          {/* Close Analysis for closed deals */}
+          {(deal.stage === "closed_won" || deal.stage === "closed_lost") && deal.closeAiAnalysis && (
+            <CloseAnalysisCard deal={deal} meddpicc={meddpicc} contacts={contacts} />
+          )}
+          <OverviewTab deal={deal} milestones={milestones} />
+        </>
       )}
       {activeTab === "meddpicc" && <MeddpiccTab meddpicc={meddpicc} />}
       {activeTab === "stakeholders" && <StakeholdersTab contacts={contacts} />}
@@ -1238,6 +1274,154 @@ export function DealDetailClient({
           trigger: "manual",
         }}
       />
+    </div>
+  );
+}
+
+// ── Close Analysis Card ──
+
+function CloseAnalysisCard({ deal, meddpicc, contacts }: { deal: Deal; meddpicc: Meddpicc; contacts: Contact[] }) {
+  const isWon = deal.stage === "closed_won";
+  const aiAnalysis = deal.closeAiAnalysis as { summary?: string; key_factors?: string[] } | null;
+  const factors = (isWon ? deal.winFactors : deal.closeFactors) as string[] | null;
+
+  const IMPROVEMENT_LABELS: Record<string, string> = {
+    addressed_pricing_earlier: "Addressed pricing earlier",
+    engaged_exec_sooner: "Engaged exec sponsor sooner",
+    started_security_earlier: "Started security review earlier",
+    better_competitive_positioning: "Better competitive positioning",
+  };
+  const TURNING_POINT_LABELS: Record<string, string> = {
+    champion_sold_internally: "Champion sold internally",
+    compliance_advantage: "Compliance advantage",
+    technical_win: "Technical superiority",
+    executive_sponsorship: "Executive sponsorship",
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-5 mb-4"
+      style={{
+        borderColor: isWon ? "rgba(45,138,78,0.2)" : "rgba(199,75,59,0.2)",
+        background: isWon ? "rgba(45,138,78,0.03)" : "rgba(199,75,59,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="h-4 w-4" style={{ color: isWon ? "#2D8A4E" : "#E07A5F" }} />
+        <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+          Close Analysis — {deal.companyName || deal.name.split(" — ")[0]}
+        </span>
+        {deal.closedAt && (
+          <span className="text-xs" style={{ color: "#8A8078" }}>
+            {new Date(deal.closedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        )}
+      </div>
+
+      {/* AI Summary */}
+      {aiAnalysis?.summary && (
+        <p className="text-sm leading-relaxed mb-4" style={{ color: "#3D3833" }}>
+          {aiAnalysis.summary}
+        </p>
+      )}
+
+      {/* Key Factors */}
+      {factors && factors.length > 0 && (
+        <div className="mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            Key Factors
+          </p>
+          <div className="space-y-1.5">
+            {factors.map((factor, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm" style={{ color: "#3D3833" }}>
+                <span style={{ color: isWon ? "#2D8A4E" : "#C74B3B" }}>{isWon ? "✓" : "✕"}</span>
+                <span>{typeof factor === "string" ? factor : JSON.stringify(factor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loss-specific info */}
+      {!isWon && (
+        <div className="space-y-2 mb-4">
+          {deal.lossReason && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ background: "rgba(199,75,59,0.1)", color: "#C74B3B" }}>
+                {deal.lossReason.replace(/_/g, " ")}
+              </span>
+              {deal.closeCompetitor && (
+                <span style={{ color: "#8A8078" }}>Lost to {deal.closeCompetitor}</span>
+              )}
+            </div>
+          )}
+          {deal.closeImprovement && (
+            <p className="text-xs" style={{ color: "#8A8078" }}>
+              Improvement: {IMPROVEMENT_LABELS[deal.closeImprovement] || deal.closeImprovement}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Win-specific info */}
+      {isWon && (
+        <div className="space-y-2 mb-4">
+          {deal.winTurningPoint && (
+            <div className="flex items-center gap-2 text-sm">
+              <Trophy className="h-3.5 w-3.5" style={{ color: "#2D8A4E" }} />
+              <span style={{ color: "#3D3833" }}>
+                Turning point: {TURNING_POINT_LABELS[deal.winTurningPoint] || deal.winTurningPoint}
+              </span>
+            </div>
+          )}
+          {deal.winReplicable && (
+            <p className="text-xs leading-relaxed" style={{ color: "#8A8078" }}>
+              {deal.winReplicable}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* MEDDPICC Gaps at Close */}
+      {meddpicc && (
+        <div className="pt-3 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            MEDDPICC at Close
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: "Economic Buyer", val: meddpicc.economicBuyerConfidence },
+              { label: "Champion", val: meddpicc.championConfidence },
+              { label: "Decision Process", val: meddpicc.decisionProcessConfidence },
+              { label: "Metrics", val: meddpicc.metricsConfidence },
+              { label: "Pain", val: meddpicc.identifyPainConfidence },
+            ].map((field) => (
+              <span key={field.label} className="text-xs" style={{ color: (field.val ?? 0) < 50 ? "#C74B3B" : "#8A8078" }}>
+                {field.label}: {field.val ?? 0}%
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stakeholder Flags */}
+      {contacts.length > 0 && (
+        <div className="pt-3 mt-3 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            Key Stakeholders
+          </p>
+          <div className="space-y-1">
+            {contacts.filter((c) => c.roleInDeal === "champion" || c.roleInDeal === "economic_buyer" || c.roleInDeal === "blocker").map((c) => (
+              <div key={c.id} className="flex items-center gap-2 text-xs" style={{ color: "#3D3833" }}>
+                <span style={{ color: c.roleInDeal === "blocker" ? "#C74B3B" : c.roleInDeal === "champion" ? "#2D8A4E" : "#D4A843" }}>
+                  {c.roleInDeal === "blocker" ? "⚠" : c.roleInDeal === "champion" ? "★" : "●"}
+                </span>
+                {c.firstName} {c.lastName} ({c.title}) — {c.roleInDeal?.replace("_", " ")}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { PersonaProvider, type TeamMemberInfo } from "@/components/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
+import { WalkthroughOverlay } from "@/components/walkthrough";
 import { db } from "@/lib/db";
 import { teamMembers, supportFunctionMembers } from "@nexus/db";
 import type { Role } from "@nexus/shared";
@@ -34,11 +35,21 @@ export default async function DashboardLayout({
     })),
   ];
 
-  const sortedUsers = users.sort((a, b) => {
-    if (a.name === "Sarah Chen") return -1;
-    if (b.name === "Sarah Chen") return 1;
-    return a.name.localeCompare(b.name);
-  });
+  // Demo-curated user order: primary AEs → manager → SA → support functions
+  const DEMO_ORDER = [
+    "Sarah Chen",
+    "David Park",
+    "Ryan Foster",
+    "Marcus Thompson",
+    "Alex Kim",
+    "Lisa Park",
+    "Michael Torres",
+    "Rachel Kim",
+  ];
+  const demoSet = new Set(DEMO_ORDER);
+  const sortedUsers = users
+    .filter((u) => demoSet.has(u.name))
+    .sort((a, b) => DEMO_ORDER.indexOf(a.name) - DEMO_ORDER.indexOf(b.name));
 
   return (
     <PersonaProvider initialUsers={sortedUsers}>
@@ -49,6 +60,7 @@ export default async function DashboardLayout({
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
       </div>
+      <WalkthroughOverlay />
     </PersonaProvider>
   );
 }

@@ -2,6 +2,7 @@
 
 import { Bell, ChevronDown, User, X, Undo2, Clock } from "lucide-react";
 import { usePersona, type TeamMemberInfo } from "@/components/providers";
+import { TourButton } from "@/components/walkthrough";
 import { useState, useRef, useEffect } from "react";
 import type { Role } from "@nexus/shared";
 import { cn } from "@/lib/utils";
@@ -67,12 +68,17 @@ export function TopBar() {
     return `${Math.floor(seconds / 86400)}d ago`;
   }
 
-  // Group users by role for the switcher
-  const roleGroups: Record<string, typeof allUsers> = {};
-  for (const u of allUsers) {
-    if (!roleGroups[u.role]) roleGroups[u.role] = [];
-    roleGroups[u.role]!.push(u);
-  }
+  // Demo-curated sections for the switcher
+  const SALES_TEAM = ["Sarah Chen", "David Park", "Ryan Foster"];
+  const LEADERSHIP = ["Marcus Thompson"];
+  const SOLUTIONS = ["Alex Kim"];
+  const SUPPORT_FNS = ["Lisa Park", "Michael Torres", "Rachel Kim"];
+  const sections: { label: string; users: typeof allUsers; collapsed?: boolean }[] = [
+    { label: "Sales Team", users: allUsers.filter((u) => SALES_TEAM.includes(u.name)) },
+    { label: "Leadership", users: allUsers.filter((u) => LEADERSHIP.includes(u.name)) },
+    { label: "Solutions & Support", users: allUsers.filter((u) => SOLUTIONS.includes(u.name)) },
+    { label: "Support Functions", users: allUsers.filter((u) => SUPPORT_FNS.includes(u.name)), collapsed: true },
+  ];
 
   return (
     <>
@@ -85,6 +91,7 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <TourButton />
           {/* User Switcher */}
           <div ref={userRef} className="relative">
             <button
@@ -111,41 +118,12 @@ export function TopBar() {
             </button>
 
             {userOpen && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-card rounded-lg border border-border shadow-lg z-50 max-h-[70vh] overflow-y-auto">
-                <div className="px-3 py-2 border-b border-border">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Switch User
-                  </p>
-                </div>
-                {(["MANAGER", "AE", "SA", "BDR", "CSM"] as Role[]).map(
-                  (r) =>
-                    roleGroups[r] && (
-                      <div key={r}>
-                        <div className="px-3 pt-2 pb-1">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                            {ROLE_LABELS[r]}
-                          </p>
-                        </div>
-                        {roleGroups[r]!.map((user) => (
-                          <UserButton key={user.id} user={user} currentUser={currentUser} setCurrentUser={setCurrentUser} setUserOpen={setUserOpen} />
-                        ))}
-                      </div>
-                    )
-                )}
-                {/* Support Functions */}
-                {roleGroups["SUPPORT"] && roleGroups["SUPPORT"].length > 0 && (
-                  <div>
-                    <div className="px-3 pt-3 pb-1 border-t border-border mt-1">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Support Functions
-                      </p>
-                    </div>
-                    {roleGroups["SUPPORT"]!.map((user) => (
-                      <UserButton key={user.id} user={user} currentUser={currentUser} setCurrentUser={setCurrentUser} setUserOpen={setUserOpen} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <SwitcherDropdown
+                sections={sections}
+                currentUser={currentUser}
+                setCurrentUser={setCurrentUser}
+                setUserOpen={setUserOpen}
+              />
             )}
           </div>
 
@@ -261,6 +239,61 @@ export function TopBar() {
         </div>
       )}
     </>
+  );
+}
+
+function SwitcherDropdown({
+  sections,
+  currentUser,
+  setCurrentUser,
+  setUserOpen,
+}: {
+  sections: { label: string; users: TeamMemberInfo[]; collapsed?: boolean }[];
+  currentUser: TeamMemberInfo | null;
+  setCurrentUser: (u: TeamMemberInfo) => void;
+  setUserOpen: (v: boolean) => void;
+}) {
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+  return (
+    <div className="absolute right-0 top-full mt-1 w-72 bg-card rounded-lg border border-border shadow-lg z-50 max-h-[70vh] overflow-y-auto">
+      <div className="px-3 py-2 border-b border-border">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Switch User
+        </p>
+      </div>
+      {sections.map((section) => {
+        if (section.users.length === 0) return null;
+        const isCollapsed = section.collapsed && !expandedSections.has(section.label);
+        return (
+          <div key={section.label}>
+            <div
+              className={cn("px-3 pt-2 pb-1", section.collapsed && "cursor-pointer hover:bg-muted/30")}
+              onClick={() => {
+                if (section.collapsed) {
+                  setExpandedSections((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(section.label)) next.delete(section.label);
+                    else next.add(section.label);
+                    return next;
+                  });
+                }
+              }}
+            >
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                {section.label}
+                {section.collapsed && (
+                  <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", !isCollapsed && "rotate-180")} />
+                )}
+              </p>
+            </div>
+            {!isCollapsed && section.users.map((user) => (
+              <UserButton key={user.id} user={user} currentUser={currentUser} setCurrentUser={setCurrentUser} setUserOpen={setUserOpen} />
+            ))}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
