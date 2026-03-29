@@ -99,49 +99,63 @@ export default function LandingPage() {
         {/* Thesis */}
         <div style={{ fontSize: 15, lineHeight: 1.75, color: "#3D3833" }}>
           <p style={{ marginBottom: 16 }}>
-            Your AEs know things that never make it into your CRM.
+            Anthropic&apos;s Mid-Market team is pioneering a scaled sales
+            playbook where human AEs direct AI Agents to automate the
+            buyer&apos;s journey. But there&apos;s a prerequisite nobody&apos;s
+            solved yet:
           </p>
           <p style={{ marginBottom: 16 }}>
-            They&apos;re telling each other in Slack that CompetitorX dropped
-            pricing, that security reviews are killing deal velocity, that the
-            only case study you have is 18 months old. By the time that reaches
-            you, it&apos;s too late, it&apos;s distorted, or it&apos;s lost.
+            <strong>The agents need knowledge to work with.</strong>
           </p>
           <p style={{ marginBottom: 16 }}>
-            Nexus is what happens when you build AI into the sales workflow
-            instead of bolting it on top. Every action makes the system smarter:
+            Product positioning, competitive intelligence, customer objection
+            patterns, what worked on similar deals, what the SA learned on the
+            last call, what the CFO actually cares about — that knowledge exists
+            in your org, but it&apos;s scattered across Slack threads, tribal
+            knowledge, PDFs nobody reads, and CRM fields nobody fills out.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A rep preps a call</strong> — the brief pulls from 14 data
-            sources including teammate expertise, competitive patterns, manager
-            directives, and win/loss intelligence from closed deals. Not a
-            generic template. A brief that knows the CFO hasn&apos;t been
-            engaged, that a competitor undercut pricing on 3 similar deals, and
-            that the SA recommends leading with compliance.
+            So the AE becomes the coordinator — pulling information together
+            from 6 different systems instead of having strategic conversations
+            with customers. They spend 60% of their week on information
+            assembly, not on the moments that actually move deals.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A rep shares a 10-second observation</strong> — the AI
+            Nexus solves the prerequisite. It captures field intelligence from
+            natural workflow — a 10-second observation, a call transcript, a
+            deal outcome — and structures it into a knowledge layer that AI
+            agents actually use. Once that layer exists:
+          </p>
+          <p style={{ marginBottom: 16 }}>
+            <strong>A rep preps a call</strong> and the brief knows the CFO
+            hasn&apos;t been engaged, that a competitor undercut pricing on 3
+            similar deals, that the SA recommends leading with compliance, and
+            that the manager wants no discounts over 10%. Seven intelligence
+            layers, 30 seconds, zero information assembly.
+          </p>
+          <p style={{ marginBottom: 16 }}>
+            <strong>A rep shares what they&apos;re noticing</strong> and the AI
             classifies it, links it to affected deals, clusters it with reports
-            from other reps, calculates pipeline at risk, routes it to the right
-            support function, and gives the rep something useful back. No forms.
-            No categories. No routing.
+            from other reps, calculates pipeline at risk, and routes it to the
+            right support function — turning a Slack message that would have
+            died into structured organizational intelligence.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A deal closes</strong> — the AI reads every transcript,
-            observation, and MEDDPICC gap to pre-populate the loss analysis. The
-            rep confirms what&apos;s right, adds what only they know. Every
-            factor becomes intelligence that feeds future deal warnings across
-            the org.
+            <strong>A deal closes</strong> and the AI reads every transcript,
+            observation, and MEDDPICC gap to pre-populate the loss analysis.
+            Every confirmed factor becomes intelligence that feeds future deal
+            warnings across verticals.
           </p>
           <p style={{ marginBottom: 16 }}>
-            <strong>A VP asks a question</strong> — the system checks if it
-            already knows the answer. If not, it sends targeted questions to the
-            specific AEs with affected deals. Not a broadcast. Deal-specific
-            questions that take one tap to answer.
+            <strong>A VP asks a question</strong> and the system either answers
+            from existing data or sends targeted questions to the specific AEs
+            with affected deals — replacing the Monday morning Slack thread with
+            one-tap structured responses.
           </p>
           <p style={{ marginBottom: 24 }}>
-            The result: your team&apos;s collective intelligence compounds with
-            every interaction, without anyone doing extra work.
+            The result: AEs stop coordinating and start selling. The AI agents
+            get smarter with every interaction. The org&apos;s collective
+            intelligence compounds without anyone doing extra work.
           </p>
         </div>
 
@@ -224,8 +238,9 @@ export default function LandingPage() {
         >
           You&apos;ll enter as{" "}
           <strong style={{ color: "#3D3833" }}>Sarah Chen</strong>, Account
-          Executive on a 14-person enterprise sales team. Use the user switcher
-          (top right) to see the system from different perspectives — AE, VP,
+          Executive on an enterprise sales team selling Claude to Healthcare
+          and Financial Services accounts. Use the user switcher (top right) to
+          see the system from different perspectives — AE, VP of Sales,
           Solutions Architect, and Support Functions.
         </p>
 
