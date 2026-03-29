@@ -87,7 +87,7 @@ async function seed() {
     {
       dealId: medvista.id,
       teamMemberId: sarahChen.id,
-      type: "note_added",
+      type: "call_analysis",
       subject: "Call Analyzed — Score: 75/100",
       description: "Strong discovery. Good talk ratio (35/65). Pain points identified around manual processing and scaling. Risk: CFO not yet engaged.",
       metadata: {
@@ -143,7 +143,7 @@ async function seed() {
     {
       dealId: medvista.id,
       teamMemberId: sarahChen.id,
-      type: "note_added",
+      type: "call_prep",
       subject: "AI Call Prep — Negotiation / pricing discussion",
       description: "Economic Buyer confidence is 39% — CFO Emma Mueller hasn't been directly engaged yet.",
       metadata: {
@@ -203,7 +203,7 @@ async function seed() {
     {
       dealId: medvista.id,
       teamMemberId: sarahChen.id,
-      type: "note_added",
+      type: "email_draft",
       subject: "Follow-up email drafted for Oliver Laurent",
       description: "Subject: Next steps — data residency docs + CFO intro",
       metadata: {

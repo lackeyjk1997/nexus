@@ -83,6 +83,12 @@ export const activityTypeEnum = pgEnum("activity_type", [
   "stage_changed",
   "task_completed",
   "document_shared",
+  "call_prep",
+  "email_draft",
+  "call_analysis",
+  "observation",
+  "agent_feedback",
+  "competitive_intel",
 ]);
 
 export const enrichmentSourceEnum = pgEnum("enrichment_source", [

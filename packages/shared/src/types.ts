@@ -86,6 +86,12 @@ export const ACTIVITY_TYPES = [
   "stage_changed",
   "task_completed",
   "document_shared",
+  "call_prep",
+  "email_draft",
+  "call_analysis",
+  "observation",
+  "agent_feedback",
+  "competitive_intel",
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 

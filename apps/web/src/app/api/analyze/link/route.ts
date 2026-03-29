@@ -39,10 +39,10 @@ export async function POST(request: Request) {
   await db.insert(activities).values({
     dealId: dealId || null,
     teamMemberId: memberId,
-    type: "note_added",
+    type: "call_analysis",
     subject: `AI Transcript Analysis — Deal Score: ${analysis.dealScore?.score ?? "N/A"}/100`,
     description: analysis.summary,
-    metadata: analysis,
+    metadata: { ...analysis, source: "call_analysis" },
   });
 
   return NextResponse.json({ success: true });

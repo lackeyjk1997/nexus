@@ -342,6 +342,7 @@ export function DealDetailClient({
       body: JSON.stringify({
         dealId: deal.id,
         memberId: currentUser.id,
+        activityType: "call_prep",
         title: `AI Call Prep — ${prepContext || deal.companyName}`,
         description: callBrief.headline,
         fullMetadata: {
@@ -444,6 +445,7 @@ export function DealDetailClient({
       body: JSON.stringify({
         dealId: deal.id,
         memberId: currentUser.id,
+        activityType: "email_draft",
         title: `Follow-up email drafted${emailDraft.to ? ` for ${emailDraft.to}` : ""}`,
         description: `Subject: ${editedSubject}`,
         fullMetadata: {

@@ -63,11 +63,11 @@ async function seedAgentActions() {
   await db.insert(schema.activities).values({
     dealId: medcoreDeal.id,
     teamMemberId: memberId,
-    type: "note_added",
+    type: "call_prep",
     subject: "AI Call Prep Generated",
     description:
       "Call prep brief for MedCore Health Systems. Key focus: Address GDPR compliance questions — 3 other reps hit the same wall this quarter. CompetitorX is offering free pilots.",
-    metadata: { source: "agent_action", action: "call_prep" },
+    metadata: { source: "call_prep", action: "call_prep" },
     createdAt: oneDayAgo,
   });
 
@@ -75,11 +75,11 @@ async function seedAgentActions() {
   await db.insert(schema.activities).values({
     dealId: medcoreDeal.id,
     teamMemberId: memberId,
-    type: "note_added",
+    type: "email_draft",
     subject: "Follow-up email drafted for Oliver Laurent",
     description:
       "AI-drafted follow-up email. Subject: Next steps on Claude Enterprise integration",
-    metadata: { source: "agent_action", action: "email_draft" },
+    metadata: { source: "email_draft", action: "email_draft" },
     createdAt: twelveHoursAgo,
   });
 

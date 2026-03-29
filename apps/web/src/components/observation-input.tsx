@@ -562,12 +562,15 @@ export function ObservationInput({
   // ── Save actions ──
   async function saveToDeals(title: string, description: string, dealId: string | null, type: "email" | "brief" = "brief", fullMetadata?: Record<string, unknown>) {
     if (!dealId || !currentUser) return;
+    // Determine real activity type from the feedback type
+    const activityType = type === "brief" ? "call_prep" : "email_draft";
     await fetch("/api/agent/save-to-deal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         dealId,
         memberId: currentUser.id,
+        activityType,
         title,
         description,
         fullMetadata,

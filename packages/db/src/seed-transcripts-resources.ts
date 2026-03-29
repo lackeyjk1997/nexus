@@ -328,19 +328,19 @@ async function seed() {
         {
           dealId: medvistaDeal.id,
           teamMemberId: sarahChen.id,
-          type: "note_added",
+          type: "call_prep",
           subject: "AI Call Prep Generated",
           description: "Call prep brief for MedVista Health Systems. Key focus: Address GDPR compliance questions — 3 other reps hit the same wall this quarter. CompetitorX offering free pilots.",
-          metadata: { source: "agent_action" },
+          metadata: { source: "call_prep" },
           createdAt: daysAgo(1),
         },
         {
           dealId: medvistaDeal.id,
           teamMemberId: sarahChen.id,
-          type: "note_added",
+          type: "email_draft",
           subject: "Follow-up email drafted for Oliver Laurent",
           description: "AI-drafted follow-up email. Subject: Next steps on Claude Enterprise integration",
-          metadata: { source: "agent_action" },
+          metadata: { source: "email_draft" },
           createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12 hours ago
         },
       ]);
