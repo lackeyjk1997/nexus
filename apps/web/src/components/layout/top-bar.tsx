@@ -2,8 +2,8 @@
 
 import { Bell, ChevronDown, User, X, Undo2, Clock } from "lucide-react";
 import { usePersona, type TeamMemberInfo } from "@/components/providers";
-import { TourButton } from "@/components/walkthrough";
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import type { Role } from "@nexus/shared";
 import { cn } from "@/lib/utils";
 
@@ -90,8 +90,16 @@ export function TopBar() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <TourButton />
+        <div className="flex items-center gap-4">
+          {/* Guide link */}
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:text-[#E07A5F]"
+            style={{ color: "#8A8078" }}
+          >
+            <span style={{ color: "#E07A5F" }}>✦</span>
+            Guide
+          </Link>
           {/* User Switcher */}
           <div ref={userRef} className="relative">
             <button
