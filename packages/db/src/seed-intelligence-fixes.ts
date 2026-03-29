@@ -31,7 +31,7 @@ async function seedFixes() {
     SELECT id FROM ranked WHERE rn > 1
   `);
 
-  const dupeIds = (dupes.rows || dupes) as Array<{ id: string }>;
+  const dupeIds = dupes as unknown as Array<{ id: string }>;
   if (dupeIds.length > 0) {
     for (const row of dupeIds) {
       // Delete routing records that reference this observation first
