@@ -1720,6 +1720,7 @@ export function ObservationInput({
 
   return (
     <div
+      data-tour="agent-bar"
       className="sticky bottom-0 z-30 border-t"
       style={{
         borderColor: "rgba(0,0,0,0.06)",

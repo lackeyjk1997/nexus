@@ -229,7 +229,7 @@ function DealCard({ deal }: { deal: Deal }) {
   const vertColor = getVerticalColor(deal.vertical);
 
   return (
-    <Link href={`/pipeline/${deal.id}`} className="block bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden">
+    <Link href={`/pipeline/${deal.id}`} className="block bg-card rounded-lg border border-border p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden" data-tour={deal.companyName?.includes("MedVista") ? "deal-medvista" : undefined}>
       {/* Vertical color stripe */}
       <div
         className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"

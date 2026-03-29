@@ -586,6 +586,7 @@ export function DealDetailClient({
           {/* Quick Actions */}
           <div className="flex items-center gap-2 shrink-0 ml-4">
             <button
+              data-tour="prep-call"
               onClick={handlePrepCall}
               disabled={callPrepPhase === "loading"}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
@@ -867,6 +868,7 @@ export function DealDetailClient({
       {/* Call Prep Panel */}
       {callPrepPhase === "result" && callBrief && (
         <div
+          data-tour="call-brief"
           className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
           style={{ borderColor: "rgba(224,122,95,0.2)" }}
         >

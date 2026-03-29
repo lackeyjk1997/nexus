@@ -18,8 +18,9 @@ export default function LandingPage() {
     try {
       localStorage.removeItem("nexus_persona_id");
       localStorage.removeItem("nexus_walkthrough_seen");
+      localStorage.setItem("nexus_demo_step", "1");
     } catch {}
-    window.location.href = "/command-center";
+    window.location.href = "/pipeline";
   }
 
   return (

@@ -498,6 +498,7 @@ function AskTeamInput({ currentUser }: { currentUser: { id: string; name: string
   if (phase === "collapsed") {
     return (
       <button
+        data-tour="ask-input"
         onClick={() => setPhase("expanded")}
         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200"
         style={{
