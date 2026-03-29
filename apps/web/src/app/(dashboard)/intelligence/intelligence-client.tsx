@@ -52,10 +52,20 @@ type Observation = {
   arrImpact: unknown;
   structuredData: unknown;
   createdAt: Date;
+  observerId: string;
   observerRole: string | null;
 };
 
 type Quote = { quote: string; role: string; vertical: string; date: string };
+type CloseFactorRow = { category: string; count: number; totalArr: number; labels: string[] };
+type CloseIntelligence = {
+  lostDealCount: number;
+  wonDealCount: number;
+  totalLostArr: number;
+  totalWonArr: number;
+  lossFactors: CloseFactorRow[];
+  winFactors: CloseFactorRow[];
+} | null;
 type ArrDetails = {
   deals?: { name: string; value: number; stage: string }[];
   by_stage?: Record<string, { count: number; value: number }>;
@@ -107,15 +117,18 @@ export function IntelligenceClient({
   clusters,
   observations,
   avgResponseTime = "No data",
+  closeIntelligence = null,
 }: {
   clusters: Cluster[];
   observations: Observation[];
   avgResponseTime?: string;
+  closeIntelligence?: CloseIntelligence;
 }) {
   const { currentUser } = usePersona();
   const [signalFilter, setSignalFilter] = useState("all");
 
   const isSupport = (currentUser?.role as string) === "SUPPORT";
+  const isAE = currentUser?.role === "AE" || currentUser?.role === "SA" || currentUser?.role === "BDR" || currentUser?.role === "CSM";
   const userFunction = isSupport ? currentUser?.verticalSpecialization : null;
 
   // Default filter based on support function
@@ -174,6 +187,11 @@ export function IntelligenceClient({
         <MetricCard icon={CheckCircle} label="Resolution Rate" value={`${resolutionRate}%`} color="text-success" />
       </div>
 
+      {/* AE Impact Card — visible to AEs/SAs/BDRs/CSMs only */}
+      {isAE && currentUser && (
+        <AeImpactCard currentUser={currentUser} observations={observations} />
+      )}
+
       {/* Ask Your Team — visible to MANAGER and SUPPORT only */}
       {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
         <AskTeamInput currentUser={currentUser} />
@@ -182,6 +200,11 @@ export function IntelligenceClient({
       {/* Your Queries — visible to MANAGER and SUPPORT only */}
       {(currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
         <YourQueries currentUser={currentUser} />
+      )}
+
+      {/* Close Intelligence — visible to MANAGER and SUPPORT */}
+      {closeIntelligence && (currentUser?.role === "MANAGER" || (currentUser?.role as string) === "SUPPORT") && (
+        <CloseIntelligenceSection data={closeIntelligence} />
       )}
 
       {/* Filters */}
@@ -228,7 +251,8 @@ function PatternCard({ cluster, observations }: { cluster: Cluster; observations
   const Icon = SIGNAL_ICONS[cluster.signalType] || Eye;
   const severity = SEVERITY_STYLES[cluster.severity || "informational"] || SEVERITY_STYLES.informational!;
   const status = STATUS_STYLES[cluster.resolutionStatus || "emerging"] || STATUS_STYLES.emerging!;
-  const quotes = (cluster.unstructuredQuotes as Quote[]) || [];
+  const rawQuotes = (cluster.unstructuredQuotes as Quote[]) || [];
+  const quotes = Array.from(new Map(rawQuotes.map((q) => [q.quote, q])).values());
   const arrDetails = cluster.arrImpactDetails as ArrDetails | null;
   const structSummary = cluster.structuredSummary as StructuredSummary | null;
   const arrTotal = Number(cluster.arrImpactTotal || 0);
@@ -357,6 +381,17 @@ function PatternCard({ cluster, observations }: { cluster: Cluster; observations
               )}
             </div>
           )}
+
+          {/* Action Recommendation */}
+          {(() => {
+            const action = getRecommendedAction(cluster);
+            return action ? (
+              <div className="flex items-start gap-2 text-xs pt-1" style={{ color: "#8A8078" }}>
+                <TrendingUp className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>{action}</span>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
     </div>
@@ -616,6 +651,20 @@ function QueryCard({ query }: { query: QueryResult }) {
             </span>
           </div>
 
+          {/* Progress bar */}
+          {query.targetCount > 0 && (
+            <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "#E8E5E0" }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.round((query.responseCount / query.targetCount) * 100)}%`,
+                  background: allResponded ? "#2D8A4E" : "#D4A843",
+                  minWidth: query.responseCount > 0 ? "8px" : "0",
+                }}
+              />
+            </div>
+          )}
+
           {answer?.summary && (
             <p className="text-[13.5px] leading-[1.5] mt-3" style={{ color: "#3D3833" }}>
               {answer.summary}
@@ -626,6 +675,187 @@ function QueryCard({ query }: { query: QueryResult }) {
         <span className="text-[12px] shrink-0" style={{ color: "#8A8078" }}>
           {age}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Action Recommendations (P5) ──
+
+function getRecommendedAction(cluster: Cluster): string | null {
+  if (cluster.resolutionStatus === "resolved" && (cluster.effectivenessScore || 0) > 70) {
+    return null;
+  }
+  if (cluster.severity === "critical" && cluster.resolutionStatus !== "resolved") {
+    return "Suggested: Schedule team huddle this week to develop response strategy";
+  }
+  if (cluster.severity === "concerning" && cluster.resolutionStatus === "emerging") {
+    return "Suggested: Assign an owner to investigate and propose a fix";
+  }
+  if (cluster.severity === "concerning" && cluster.resolutionStatus === "in_progress") {
+    return "In progress — check back in 1 week for effectiveness data";
+  }
+  if (
+    (cluster.observationCount || 0) >= 3 &&
+    (cluster.signalType === "content_gap" || cluster.signalType === "process_friction")
+  ) {
+    return "Suggested: Create or update documentation to address this pattern";
+  }
+  if (cluster.signalType === "win_pattern") {
+    return "Suggested: Document this approach and share with the team as a playbook";
+  }
+  if (cluster.resolutionStatus === "acknowledged") {
+    return "Acknowledged but no action taken yet — consider next steps";
+  }
+  return null;
+}
+
+// ── Close Intelligence Section (P4) ──
+
+function CloseIntelligenceSection({ data }: { data: NonNullable<CloseIntelligence> }) {
+  const categoryLabels: Record<string, string> = {
+    competitor: "Competitor",
+    stakeholder: "Stakeholder",
+    process: "Process",
+    product: "Product",
+    pricing: "Pricing",
+    timing: "Timing",
+    internal: "Internal",
+    champion: "Champion",
+    competitive_wedge: "Competitive wedge",
+    technical_fit: "Technical fit",
+    timeline: "Timeline",
+    relationship: "Relationship",
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {/* Lost card */}
+      {data.lostDealCount > 0 && (
+        <div
+          className="bg-card rounded-xl border border-border p-5"
+          style={{ borderLeft: "3px solid #C74B3B" }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Deals Lost
+            </span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: "#8A8078" }}>
+            {data.lostDealCount} deal{data.lostDealCount !== 1 ? "s" : ""} · {formatCurrency(data.totalLostArr)} total
+          </p>
+          <div className="space-y-2">
+            {data.lossFactors.slice(0, 5).map((f) => (
+              <div key={f.category} className="flex items-center justify-between text-xs">
+                <span style={{ color: "#3D3833" }}>
+                  {categoryLabels[f.category] || f.category} ({f.count})
+                </span>
+                <span className="font-medium" style={{ color: "#C74B3B" }}>
+                  {formatCurrency(f.totalArr)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {data.lossFactors[0] && (
+            <p className="text-[11px] mt-3 pt-2" style={{ color: "#8A8078", borderTop: "1px solid #E8E5E0" }}>
+              Top factor: {data.lossFactors[0].labels[0]}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Won card */}
+      {data.wonDealCount > 0 && (
+        <div
+          className="bg-card rounded-xl border border-border p-5"
+          style={{ borderLeft: "3px solid #2D8A4E" }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Deals Won
+            </span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: "#8A8078" }}>
+            {data.wonDealCount} deal{data.wonDealCount !== 1 ? "s" : ""} · {formatCurrency(data.totalWonArr)} total
+          </p>
+          <div className="space-y-2">
+            {data.winFactors.slice(0, 5).map((f) => (
+              <div key={f.category} className="flex items-center justify-between text-xs">
+                <span style={{ color: "#3D3833" }}>
+                  {categoryLabels[f.category] || f.category} ({f.count})
+                </span>
+                <span className="font-medium" style={{ color: "#2D8A4E" }}>
+                  {formatCurrency(f.totalArr)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {data.winFactors[0] && (
+            <p className="text-[11px] mt-3 pt-2" style={{ color: "#8A8078", borderTop: "1px solid #E8E5E0" }}>
+              Top factor: {data.winFactors[0].labels[0]}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AE Impact Card (P7) ──
+
+function AeImpactCard({
+  currentUser,
+  observations,
+}: {
+  currentUser: { id: string; name: string; role: string };
+  observations: Observation[];
+}) {
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchPending() {
+      try {
+        const res = await fetch(`/api/field-queries?targetMemberId=${currentUser.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPendingCount(data.length);
+        }
+      } catch {}
+    }
+    fetchPending();
+  }, [currentUser.id]);
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const myObs = observations.filter(
+    (o) => o.observerId === currentUser.id && new Date(o.createdAt) >= startOfMonth
+  );
+  const inClusters = myObs.filter((o) => o.clusterId).length;
+
+  return (
+    <div
+      className="bg-card rounded-xl border border-border p-5"
+      style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+    >
+      <p className="text-sm font-semibold mb-3" style={{ color: "#3D3833" }}>
+        Your Impact This Month
+      </p>
+      <div className="flex items-center gap-6 text-xs" style={{ color: "#3D3833" }}>
+        <span>
+          <span className="font-medium">{myObs.length}</span>{" "}
+          <span style={{ color: "#8A8078" }}>observations shared</span>
+        </span>
+        <span>
+          <span className="font-medium">{inClusters}</span>{" "}
+          <span style={{ color: "#8A8078" }}>became patterns</span>
+        </span>
+        {pendingCount > 0 && (
+          <span>
+            <span className="font-medium" style={{ color: "#E07A5F" }}>{pendingCount}</span>{" "}
+            <span style={{ color: "#8A8078" }}>pending quick checks</span>
+          </span>
+        )}
       </div>
     </div>
   );

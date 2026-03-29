@@ -202,16 +202,47 @@ export async function POST(request: Request) {
   }
 
   // Step 3b: Generate deal-specific questions for AEs
-  const targetDealIds = aiAnalysis.needs_input_from?.deal_ids || [];
-  let targetDeals = allDeals.filter((d) => targetDealIds.includes(d.id));
+  // Multi-path targeting: AI deal IDs + cluster observations + competitor keyword match + vertical fallback
+  const targetDealIdSet = new Set<string>(aiAnalysis.needs_input_from?.deal_ids || []);
 
-  // If no specific deals targeted, find relevant deals
+  // Path 1: If a cluster is linked, find all deals referenced by cluster observations
+  if (clusterId) {
+    try {
+      const clusterObs = await db
+        .select({
+          sourceContext: observations.sourceContext,
+          linkedDealIds: observations.linkedDealIds,
+        })
+        .from(observations)
+        .where(eq(observations.clusterId, clusterId));
+
+      for (const obs of clusterObs) {
+        const ctx = obs.sourceContext as { dealId?: string } | null;
+        if (ctx?.dealId) targetDealIdSet.add(ctx.dealId);
+        if (obs.linkedDealIds) obs.linkedDealIds.forEach((id) => targetDealIdSet.add(id));
+      }
+    } catch (err) {
+      console.error("Cluster observation query failed (non-fatal):", err);
+    }
+  }
+
+  // Path 2: Keyword match — search for deals where competitor name appears in the question
+  const qLower = rawQuestion.toLowerCase();
+  for (const deal of allDeals) {
+    if (deal.competitor && qLower.includes(deal.competitor.toLowerCase())) {
+      targetDealIdSet.add(deal.id);
+    }
+  }
+
+  let targetDeals = allDeals.filter((d) => targetDealIdSet.has(d.id));
+
+  // Path 3: Vertical fallback — if no specific deals found, use AI-suggested verticals
   if (targetDeals.length === 0) {
     const targetVerticals = aiAnalysis.needs_input_from?.verticals || [];
     targetDeals = allDeals.filter((d) => {
       if (targetVerticals.length > 0) return targetVerticals.includes(d.vertical);
       return true;
-    }).slice(0, 6); // Cap at 6 deals max
+    }).slice(0, 8); // Cap at 8 deals max
   }
 
   // Group by AE and limit to one question per AE (pick highest value deal)
