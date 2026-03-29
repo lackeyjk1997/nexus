@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X } from "lucide-react";
+import { X, Send } from "lucide-react";
 import { usePersona } from "@/components/providers";
 
 // ── Step definitions ────────────────────────────────────────────────────────────
@@ -36,7 +36,6 @@ function setTourStepStorage(value: string) {
 }
 
 const STEPS: StepConfig[] = [
-  // Step 1 — Pipeline → MedVista
   {
     route: "/pipeline",
     title: "Click into MedVista Health Systems",
@@ -45,7 +44,6 @@ const STEPS: StepConfig[] = [
     buttonText: "Next",
     autoAdvanceOnClick: true,
   },
-  // Step 2 — Deal Page → Prep Call
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
     title: 'Click "Prep Call" to generate a brief',
@@ -61,7 +59,6 @@ const STEPS: StepConfig[] = [
       nextRoute: "/pipeline",
     },
   },
-  // Step 3 — Pipeline → Agent Bar → Observation
   {
     route: "/pipeline",
     title: "Share an observation",
@@ -69,7 +66,6 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='agent-bar']",
     buttonText: "Next: VP View",
   },
-  // Step 4 — Intelligence Dashboard (as Marcus)
   {
     route: "/intelligence",
     personaSwitch: "Marcus Thompson",
@@ -78,7 +74,6 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='ask-input']",
     buttonText: "Next",
   },
-  // Step 5 — Sarah's quick check (new step 4b)
   {
     route: "/pipeline",
     personaSwitch: "Sarah Chen",
@@ -87,7 +82,6 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='agent-bar']",
     buttonText: "Next",
   },
-  // Step 6 — Wrap-up
   {
     route: null,
     title: "The system compounds",
@@ -100,25 +94,22 @@ const STEPS: StepConfig[] = [
 // ── Contextual hints ────────────────────────────────────────────────────────────
 
 function getContextualHint(pathname: string, persona: string): string | null {
-  if (pathname === "/pipeline") {
-    return "Try: Click into MedVista Health Systems to explore the deal workspace";
-  }
-  if (pathname.startsWith("/pipeline/")) {
-    return 'Try: Click "Prep Call" to see 7 intelligence layers converge into one brief';
-  }
-  if (pathname === "/intelligence" && persona !== "Marcus Thompson") {
-    return "Try: Switch to Marcus Thompson to see the VP intelligence view";
-  }
-  if (pathname === "/intelligence" && persona === "Marcus Thompson") {
-    return 'Try: Ask "Are CompetitorX deals recoverable?" to see targeted field queries';
-  }
-  if (pathname === "/agent-config") {
-    return 'Try: Type "Never mention competitor pricing" to see agent configuration';
-  }
-  if (pathname === "/analyze") {
-    return "Try: Run a demo transcript analysis to see AI coaching insights";
-  }
+  if (pathname === "/pipeline") return "Try: Click into MedVista to explore the deal workspace";
+  if (pathname.startsWith("/pipeline/")) return 'Try: Click "Prep Call" to see 7 intelligence layers converge';
+  if (pathname === "/intelligence" && persona === "Marcus Thompson") return 'Try: Ask "Are CompetitorX deals recoverable?"';
+  if (pathname === "/intelligence") return "Try: Switch to Marcus Thompson to see the VP view";
+  if (pathname === "/agent-config") return 'Try: Type "Never mention competitor pricing" to configure the agent';
+  if (pathname === "/analyze") return "Try: Run a demo transcript analysis";
+  if (pathname === "/observations") return "Try: Review observation clusters and routing status";
+  if (pathname === "/command-center") return "Try: Click Pipeline to see the deal board";
   return null;
+}
+
+// ── Chat message type ───────────────────────────────────────────────────────────
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
 }
 
 // ── Main Component ──────────────────────────────────────────────────────────────
@@ -126,14 +117,22 @@ function getContextualHint(pathname: string, persona: string): string | null {
 export function DemoGuide() {
   const router = useRouter();
   const pathname = usePathname();
-  const { allUsers, setCurrentUser, personaName } = usePersona();
-  const [step, setStep] = useState(0); // 0 = inactive, 1-6 = active steps
+  const { allUsers, setCurrentUser, personaName, currentUser } = usePersona();
+
+  // Tour state
+  const [step, setStep] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [inSubStep, setInSubStep] = useState(false);
   const [visible, setVisible] = useState(false);
-  const [showHint, setShowHint] = useState(false);
-  const [hintDismissedPages, setHintDismissedPages] = useState<Set<string>>(new Set());
   const subStepObserverRef = useRef<MutationObserver | null>(null);
+
+  // Assistant state
+  const [assistantMode, setAssistantMode] = useState(false);
+  const [assistantDismissed, setAssistantDismissed] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // ── Initialize from localStorage ──
   useEffect(() => {
@@ -145,7 +144,7 @@ export function DemoGuide() {
           setStep(n);
           setDismissed(false);
         } else if (saved === "done") {
-          setShowHint(true);
+          setAssistantMode(true);
         }
       }
     } catch {}
@@ -159,6 +158,13 @@ export function DemoGuide() {
     }
     setVisible(false);
   }, [step, dismissed]);
+
+  // ── Auto-scroll chat ──
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
 
   // ── Highlight management ──
   const applyHighlight = useCallback((selector: string | null) => {
@@ -190,8 +196,6 @@ export function DemoGuide() {
       } else if (attempts < 10) {
         attempts++;
         setTimeout(tryHighlight, 500);
-      } else {
-        console.warn(`[DemoGuide] Could not find element: ${selector}`);
       }
     };
     tryHighlight();
@@ -209,51 +213,33 @@ export function DemoGuide() {
       removeHighlight();
       return;
     }
-
     const config = STEPS[step - 1]!;
-
-    if (config.route && pathname !== config.route) {
-      return;
-    }
-
-    const selector = inSubStep && config.subStep
-      ? config.subStep.highlightSelector
-      : config.highlightSelector;
-
+    if (config.route && pathname !== config.route) return;
+    const selector = inSubStep && config.subStep ? config.subStep.highlightSelector : config.highlightSelector;
     const t = setTimeout(() => applyHighlight(selector), 600);
     return () => clearTimeout(t);
   }, [step, pathname, dismissed, inSubStep, applyHighlight, removeHighlight]);
 
-  // ── Watch for sub-step trigger (call brief appearing) ──
+  // ── Watch for sub-step trigger ──
   useEffect(() => {
     if (step < 1 || step > TOTAL_STEPS || dismissed || inSubStep) return;
     const config = STEPS[step - 1]!;
     if (!config.subStep) return;
-
     const waitSelector = config.subStep.waitForSelector;
-    if (document.querySelector(waitSelector)) {
-      setInSubStep(true);
-      return;
-    }
-
+    if (document.querySelector(waitSelector)) { setInSubStep(true); return; }
     const observer = new MutationObserver(() => {
-      if (document.querySelector(waitSelector)) {
-        setInSubStep(true);
-        observer.disconnect();
-      }
+      if (document.querySelector(waitSelector)) { setInSubStep(true); observer.disconnect(); }
     });
     observer.observe(document.body, { childList: true, subtree: true });
     subStepObserverRef.current = observer;
-
     return () => observer.disconnect();
   }, [step, dismissed, inSubStep]);
 
-  // ── Auto-advance when highlighted element is clicked ──
+  // ── Auto-advance on click ──
   useEffect(() => {
     if (step < 1 || step > TOTAL_STEPS || dismissed) return;
     const config = STEPS[step - 1]!;
     if (!config.autoAdvanceOnClick || !config.highlightSelector) return;
-
     const handleClick = (e: Event) => {
       const target = e.target as HTMLElement;
       const highlighted = document.querySelector(config.highlightSelector!);
@@ -261,7 +247,6 @@ export function DemoGuide() {
         setTimeout(() => advanceStep(), 500);
       }
     };
-
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,42 +256,27 @@ export function DemoGuide() {
   const advanceStep = useCallback(() => {
     removeHighlight();
     setInSubStep(false);
-
-    if (subStepObserverRef.current) {
-      subStepObserverRef.current.disconnect();
-      subStepObserverRef.current = null;
-    }
-
+    if (subStepObserverRef.current) { subStepObserverRef.current.disconnect(); subStepObserverRef.current = null; }
     const nextStep = step + 1;
-
     if (nextStep > TOTAL_STEPS) {
-      // Tour complete — transition to contextual hints
       setStep(0);
       setDismissed(false);
-      setShowHint(true);
+      setAssistantMode(true);
       setTourStepStorage("done");
       return;
     }
-
     const config = STEPS[nextStep - 1]!;
-
     if (config.personaSwitch) {
       const user = allUsers.find((u) => u.name === config.personaSwitch);
       if (user) setCurrentUser(user);
     }
-
-    if (config.route && pathname !== config.route) {
-      router.push(config.route);
-    }
-
+    if (config.route && pathname !== config.route) router.push(config.route);
     setStep(nextStep);
     setTourStepStorage(String(nextStep));
   }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight]);
 
   const handleNext = useCallback(() => {
     const config = STEPS[step - 1]!;
-
-    // If in sub-step, navigate to sub-step's nextRoute
     if (inSubStep && config.subStep?.nextRoute) {
       removeHighlight();
       setInSubStep(false);
@@ -321,68 +291,196 @@ export function DemoGuide() {
       setTourStepStorage(String(nextStep));
       return;
     }
-
-    // Last step — transition to hints
     if (step === TOTAL_STEPS) {
       removeHighlight();
       setStep(0);
-      setShowHint(true);
+      setAssistantMode(true);
       setTourStepStorage("done");
       return;
     }
-
     advanceStep();
   }, [step, inSubStep, advanceStep, removeHighlight, router, allUsers, setCurrentUser]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
+    setAssistantMode(true);
     removeHighlight();
   }, [removeHighlight]);
 
-  // ── Contextual hint after tour completion ──
-  if (showHint && !dismissed && step === 0) {
+  // ── Chat ──
+  async function handleAsk() {
+    if (!chatInput.trim() || chatLoading) return;
+    const question = chatInput.trim();
+    setChatMessages((prev) => [...prev, { role: "user", text: question }]);
+    setChatInput("");
+    setChatLoading(true);
+    try {
+      const res = await fetch("/api/demo/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          currentPage: pathname,
+          currentPersona: currentUser?.name || "Sarah Chen",
+        }),
+      });
+      const data = await res.json();
+      setChatMessages((prev) => [...prev, { role: "assistant", text: data.answer }]);
+    } catch {
+      setChatMessages((prev) => [...prev, { role: "assistant", text: "Sorry, I couldn\u2019t process that." }]);
+    }
+    setChatLoading(false);
+  }
+
+  // ── Render: Assistant mode ──
+  if (assistantMode && !assistantDismissed && step === 0) {
     const hint = getContextualHint(pathname, personaName);
-    if (!hint || hintDismissedPages.has(pathname)) return null;
 
     return (
       <div
-        className="fixed z-[9999] transition-all duration-300"
-        style={{
-          bottom: 24,
-          left: 24,
-          opacity: 1,
-          transform: "translateY(0)",
-        }}
+        className="fixed z-[9999]"
+        style={{ bottom: 24, left: 24 }}
       >
         <div
-          className="flex items-center gap-2"
           style={{
             background: "#3D3833",
             color: "#FFFFFF",
-            maxWidth: 340,
-            borderRadius: 10,
+            width: 360,
+            borderRadius: 14,
             boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
-            padding: "12px 16px",
             fontFamily: "'DM Sans', sans-serif",
-            fontSize: 13,
+            overflow: "hidden",
           }}
         >
-          <span style={{ color: "#E07A5F", flexShrink: 0 }}>{"\u2726"}</span>
-          <span style={{ flex: 1, color: "rgba(255,255,255,0.9)" }}>{hint}</span>
-          <button
-            onClick={() => {
-              setHintDismissedPages((prev) => new Set(prev).add(pathname));
-            }}
-            className="p-0.5 rounded hover:bg-white/10 transition-colors flex-shrink-0"
+          {/* Header */}
+          <div
+            className="flex items-center justify-between"
+            style={{ padding: "14px 16px 10px" }}
           >
-            <X className="h-3 w-3" style={{ color: "rgba(255,255,255,0.4)" }} />
-          </button>
+            <span className="text-[12px] font-semibold tracking-[0.05em]" style={{ color: "rgba(255,255,255,0.6)" }}>
+              <span style={{ color: "#E07A5F" }}>{"\u2726"} </span>
+              Nexus Assistant
+            </span>
+            <button
+              onClick={() => setAssistantDismissed(true)}
+              className="p-1 rounded hover:bg-white/10 transition-colors"
+            >
+              <X className="h-3 w-3" style={{ color: "rgba(255,255,255,0.4)" }} />
+            </button>
+          </div>
+
+          {/* Contextual hint */}
+          {hint && (
+            <div style={{ padding: "0 16px 8px" }}>
+              <div
+                className="flex items-center gap-2"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.7)",
+                }}
+              >
+                <span style={{ color: "#E07A5F", flexShrink: 0 }}>{"\u2726"}</span>
+                {hint}
+              </div>
+            </div>
+          )}
+
+          {/* Chat messages */}
+          {chatMessages.length > 0 && (
+            <div
+              ref={chatScrollRef}
+              style={{
+                maxHeight: 200,
+                overflowY: "auto",
+                padding: "4px 16px 8px",
+              }}
+            >
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                    marginBottom: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: "85%",
+                      padding: "8px 12px",
+                      borderRadius: msg.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                      background: msg.role === "user" ? "rgba(255,255,255,0.1)" : "transparent",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: msg.role === "user" ? "#FFFFFF" : "rgba(255,255,255,0.85)",
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div style={{ display: "flex", gap: 4, padding: "8px 0" }}>
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="rounded-full"
+                      style={{
+                        width: 6,
+                        height: 6,
+                        background: "#E07A5F",
+                        animation: `demo-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Divider */}
+          <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 16px" }} />
+
+          {/* Input */}
+          <div style={{ padding: "10px 16px 14px", display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAsk(); }}
+              placeholder="Ask about how Nexus works..."
+              style={{
+                flex: 1,
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 8,
+                color: "#FFFFFF",
+                padding: "8px 12px",
+                fontSize: 13,
+                fontFamily: "'DM Sans', sans-serif",
+                outline: "none",
+              }}
+            />
+            {chatInput.trim() && (
+              <button
+                onClick={handleAsk}
+                disabled={chatLoading}
+                className="transition-opacity hover:opacity-80"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <Send className="h-4 w-4" style={{ color: "#E07A5F" }} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Don't render if inactive ──
+  // ── Render: Tour mode ──
   if (step < 1 || step > TOTAL_STEPS || dismissed) return null;
 
   const config = STEPS[step - 1]!;
@@ -411,7 +509,6 @@ export function DemoGuide() {
           fontFamily: "'DM Sans', sans-serif",
         }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <span
             className="text-[11px] font-semibold tracking-[0.08em] uppercase"
@@ -428,18 +525,12 @@ export function DemoGuide() {
           </button>
         </div>
 
-        {/* Title */}
         <h3 className="text-[16px] font-semibold mb-2 leading-snug">{displayTitle}</h3>
 
-        {/* Body */}
-        <p
-          className="text-[13.5px] leading-relaxed mb-5"
-          style={{ color: "rgba(255,255,255,0.8)" }}
-        >
+        <p className="text-[13.5px] leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.8)" }}>
           {displayBody}
         </p>
 
-        {/* Progress dots + button */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((i) => (
@@ -473,7 +564,7 @@ export function DemoGuide() {
   );
 }
 
-// ── Tour state hook (used in top bar) ────────────────────────────────────────────
+// ── Tour state hook ─────────────────────────────────────────────────────────────
 
 export function useTourState() {
   const [tourStep, setTourStep] = useState<string | null>(null);
@@ -482,11 +573,8 @@ export function useTourState() {
     try {
       setTourStep(localStorage.getItem("nexus_demo_step"));
     } catch {}
-
     const handler = () => {
-      try {
-        setTourStep(localStorage.getItem("nexus_demo_step"));
-      } catch {}
+      try { setTourStep(localStorage.getItem("nexus_demo_step")); } catch {}
     };
     window.addEventListener("storage", handler);
     window.addEventListener("nexus-tour-update", handler);

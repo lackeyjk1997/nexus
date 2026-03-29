@@ -36,20 +36,27 @@ export async function POST() {
     // 3. Delete very recent test observations (last 2 hours)
     await db.execute(sql`
       DELETE FROM observation_routing WHERE observation_id IN (
-        SELECT id FROM observations WHERE created_at > NOW() - INTERVAL '2 hours'
+        SELECT id FROM observations WHERE created_at > NOW() - INTERVAL '4 hours'
       )
     `);
-    await db.execute(sql`DELETE FROM observations WHERE created_at > NOW() - INTERVAL '2 hours'`);
+    await db.execute(sql`DELETE FROM observations WHERE created_at > NOW() - INTERVAL '4 hours'`);
 
     // 4. Delete recent test field queries and their questions
-    await db.execute(sql`DELETE FROM field_query_questions WHERE created_at > NOW() - INTERVAL '2 hours'`);
-    await db.execute(sql`DELETE FROM field_queries WHERE created_at > NOW() - INTERVAL '2 hours'`);
+    await db.execute(sql`DELETE FROM field_query_questions WHERE created_at > NOW() - INTERVAL '4 hours'`);
+    await db.execute(sql`DELETE FROM field_queries WHERE created_at > NOW() - INTERVAL '4 hours'`);
 
     // 5. Delete test activities
     await db.execute(sql`
       DELETE FROM activities
-      WHERE created_at > NOW() - INTERVAL '2 hours'
-      AND (subject ILIKE '%intelligence update%' OR subject ILIKE '%close%lost%' OR subject ILIKE '%field intel%' OR subject ILIKE '%stage change%')
+      WHERE created_at > NOW() - INTERVAL '4 hours'
+      AND (
+        subject ILIKE '%intelligence update%'
+        OR subject ILIKE '%close%lost%'
+        OR subject ILIKE '%field intel%'
+        OR subject ILIKE '%stage change%'
+        OR subject ILIKE '%deal closed%'
+        OR subject ILIKE '%stage changed from closed%'
+      )
     `);
 
     // 6. Mark all notifications as unread

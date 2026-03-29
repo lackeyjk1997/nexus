@@ -368,6 +368,23 @@ function GuideLink() {
     );
   }
 
+  // Tour complete or not started — show Assistant (re-opens the card)
+  if (isComplete) {
+    return (
+      <button
+        onClick={() => {
+          window.dispatchEvent(new Event("nexus-tour-update"));
+          window.location.reload();
+        }}
+        className="flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:text-[#E07A5F]"
+        style={{ color: "#8A8078" }}
+      >
+        <span style={{ color: "#E07A5F" }}>{"\u2726"}</span>
+        Assistant
+      </button>
+    );
+  }
+
   // Default: link to landing page
   return (
     <Link
