@@ -16,7 +16,8 @@ The platform has three layers:
 - **AI:** Claude API (`@anthropic-ai/sdk`, model: `claude-sonnet-4-20250514`)
 - **Hosting:** Vercel (frontend)
 - **Auth:** None (public demo) — persona switching via PersonaProvider context
-- **Dev server:** `pnpm dev` runs on port 3000 (Turbopack)
+- **Dev server:** `pnpm dev` runs on port 3001 (Turbopack)
+- **Deploy:** Vercel at nexus-web-plum-iota.vercel.app
 
 ## Code Conventions
 - TypeScript strict mode everywhere
@@ -361,48 +362,56 @@ When a deal moves to Closed-Won or Closed-Lost via the stage change modal:
 | `seed-cross-feedback.ts` | 8 cross-agent feedback records + enriched SC/CSM configs with vertical insights |
 | `seed-system-intelligence.ts` | 10 system intelligence insights + 6 manager directives + 5 closed deals with outcome data |
 | `backfill-routing.ts` | Creates 34 routing records from existing observations |
+| `seed-intelligence-fixes.ts` | Session C fixes: dedup observations, seed acknowledged_at, recalculate cluster ARR, expand field query targeting |
 | `backfill-entities.ts` | Links 4 observations to accounts/deals via fuzzy matching |
 
 ---
 
 ## Session Build History
 
-### Sessions 1–4: Foundation
-CRM data model, pipeline management, deal detail pages, contact management, activity tracking, Kanban board with drag-to-move.
+### S1–S2: Foundation + Deal Details
+CRM data model, pipeline management (Kanban/table/chart views), deal detail pages, contact management, activity tracking, MEDDPICC scoring.
 
-### Session 5: Call Intelligence
+### S3: Transcript Analyzer
 Transcript upload/paste/demo, streaming Claude analysis, coaching tips, MEDDPICC extraction, deal scoring, sentiment arcs, link-to-deal.
 
-### Session 6: Agent Configuration + Prospects/Outreach/Analytics/Calls
-Per-member agent config, natural language instructions, version history, feedback loop with approval workflow. Added Prospects, Outreach, Analytics, and Calls pages.
+### S4: Agent Configuration
+Per-member agent config, natural language instructions, version history, feedback loop with approval workflow.
 
-### Session 7: Observation System
-6-phase observation input, Claude classification with signal types, follow-up questions, give-back insights, observation feed page.
+### S5: Organization Network
+14-person org with role assignments and agent configs, notifications system, user/persona switcher via PersonaProvider.
 
-### Session 8: Intelligence Dashboard + ARR Impact + Support Functions
-Intelligence dashboard with clusters, observation routing to support functions, ARR impact calculation, support function members, notification chains.
+### S6: Outreach + Prospects + Analytics
+Added Prospects, Outreach, Analytics, and Calls pages. Email sequence builder.
 
-### Session 9: Field Query Engine + System Audit + Remediation
-- Field query engine: bidirectional manager↔AE intelligence flow
+### S7: Observation System
+Unified observation system with ObservationInput on 5 pages. 6-phase observation input, Claude classification with signal types, follow-up questions, give-back insights, /observations page. AI classification pipeline.
+
+### S8: Intelligence Dashboard
+Intelligence dashboard with clusters, support function personas (Lisa Park, Michael Torres, Rachel Kim), observation routing to support functions, ARR impact calculation, role-based views, notification chains.
+
+### S9: Field Query Engine
+- Field query engine: bidirectional manager↔AE intelligence flow, "Ask your team" on Intelligence dashboard
+- QuickQuestions component for AE responses
 - Full 11-point system audit (identified 2 FAKE, 3 PARTIAL systems)
 - Remediation: fixed observation routing, deal page observations, cluster auto-creation, dashboard metrics, cross-agent feedback
 - AI entity extraction: Claude extracts accounts/deals/competitors from observations, fuzzy matches to CRM
 - Semantic clustering: Claude-based cluster matching replaces keyword overlap (confidence >= 0.6)
 - Context follow-ups: auto-generates "Which deal?" with rep's deals as chips when deal context missing
 
-### Session 9 cont: Agent Action Layer
-- Universal agent bar: evolved ObservationInput into multi-mode interaction surface with intent detection
-- AI call prep: structured brief from deal + MEDDPICC + observations + clusters + agent config
-- AI email drafting: personalized emails in AE's voice from deal + transcript + agent config
-- Agent config wiring: persona/guardrails/style feed into all AI actions
-- Post-action activities: call prep and email drafts logged to deal timelines
-- Quick checks merged into agent bar (removed standalone QuickQuestions from pipeline)
-- "Prep Call" button on deal detail page, "Draft Follow-Up" button on analyze page
+### Post-Session Builds (between S9 and Session A)
+- **Schema migration**: expanded activity type enum with call_prep, email_draft, call_analysis, observation, agent_feedback, competitive_intel. Data migration moved note_added records to real types.
+- **Seed data cleanup**: 3 hero deals (MedVista, HealthFirst, TrustBank) with deep activity timelines. Activity timeline redesign with typed entries, distinct icons, click to expand, dedup logic.
+- **Call prep context flow**: meeting type selector (4 chips, starts blank), attendee selection, full brief stored in activity metadata, "View full brief" modal.
+- **Agent action layer**: universal agent bar with intent detection (observe/call_prep/draft_email), call prep API gathering 9 data sources, email draft API, QuickQuestions merged into agent bar.
+- **Demo polish**: 4 seeded transcripts, resources table with 12 docs, promptable email regeneration, save-to-timeline buttons.
+- **Follow-up engine**: AI-driven follow-up decisions (no keyword gating), restyled inline UI with chat bubbles, numbered card chips, sparkle give-back cards. No toasts.
+- **Entity extraction and semantic clustering**: Claude-based fuzzy entity matching, semantic cluster comparison, context follow-ups for ambiguous deals.
 
-### Session A: Make Agent Configs Matter
+### Session A: Agent Config Wiring
 - **Team intelligence read layer**: call prep and email draft API routes now query teammates' agent configs by deal vertical and inject expertise into the Claude prompt
 - **Vertical matching**: uses both `verticalSpecialization` (enum) and `outputPreferences.industryFocus` (jsonb array) for comprehensive matching
-- **Cross-agent feedback table**: new `crossAgentFeedback` table for teammate-to-teammate recommendations (8 seeded records)
+- **Cross-agent feedback table**: new `crossAgentFeedback` table for teammate-to-teammate recommendations (6 seeded records)
 - **Persona-driven output**: rep's communication style, guardrails, and deal stage rules shape the tone and constraints of every generated brief/email
 - **Enriched SC/CSM configs**: Maya Johnson, Tom Bradley, Nina Patel, Chris Okafor configs updated with vertical-specific expertise
 - **Meeting type default**: prep type selector starts blank (no auto-selection from deal stage)
@@ -411,11 +420,21 @@ Intelligence dashboard with clusters, observation routing to support functions, 
 ### Session B: System Intelligence Layer
 - **System intelligence table**: `systemIntelligence` with 10 seeded data-driven pattern insights across Healthcare (5), FinServ (2), Tech (1), org-wide (2)
 - **Manager directives table**: `managerDirectives` with 6 seeded directives from Marcus Thompson (pricing caps, process requirements, messaging guidance, vertical-specific positioning)
-- **Close/Lost capture UI**: stage change modal now shows contextual outcome capture when moving to Closed-Won or Closed-Lost (chip UI for reasons, improvements, turning points)
+- **Close/Lost capture UI**: stage change modal with AI summary card, dynamic factor chips, fixed chips, dynamic questions. closeAiAnalysis, closeFactors, winFactors, closeAiRanAtTimestamp on deals table. Observations auto-created from confirmed loss factors.
 - **Deal outcome columns**: closeCompetitor, closeNotes, closeImprovement, winTurningPoint, winReplicable, closedAt added to deals table
-- **5 seeded closed deals**: 3 lost (security review, pricing, no decision) + 2 won (champion-driven, compliance advantage) with full outcome data
+- **5 seeded closed deals**: 3 lost (security review, pricing, no decision) + 2 won (champion-driven, compliance advantage) with full outcome data and AI analysis
 - **Full intelligence wiring**: call prep prompt now includes system intelligence patterns, win/loss intelligence, stakeholder engagement alerts, and manager directives alongside team intelligence from Session A
 - **Email draft intelligence**: competitive/win/loss patterns and messaging directives also flow into email generation
+
+### Session C: Intelligence Dashboard Upgrade
+- **Field query multi-AE targeting**: multi-path targeting (cluster observations → linkedDealIds, competitor keyword match, vertical fallback). Still has column name bug — sends to 0 reps.
+- **Duplicate field voices**: deduplicated via Map keyed on quote text
+- **Avg Response metric**: seeded acknowledged_at on 15 routing records, shows "5.9h" instead of "No data"
+- **ARR restored on clusters**: recalculation script preserves seeded values when no linked deals found
+- **Close Intelligence cards**: Deals Lost/Won summary visible to MANAGER/SUPPORT roles on intelligence dashboard
+- **Cluster action recommendations**: `getRecommendedAction()` generates context-specific suggestions based on severity/status/signalType
+- **Progress bars on field queries**: visual response tracking in QueryCard (amber in-progress, green complete)
+- **AE Impact card**: personal stats visible to AE/SA/BDR/CSM — observations shared, patterns contributed, pending quick checks
 
 ### Bug Fixes (across sessions)
 - Follow-up fix: Removed keyword gating for follow-up decisions. Claude API now controls whether to ask follow-ups.
@@ -424,16 +443,28 @@ Intelligence dashboard with clusters, observation routing to support functions, 
 - PgArray error: Stale `.next` cache after schema changes — fix with `rm -rf .next`.
 - Call prep 500 errors: fixed missing resource table reference, added error feedback to buttons.
 - Activity deduplication: `save-to-deal` now dedupes same activity type + deal within 1 hour.
+- FK constraint on observation delete: must delete observation_routing records before deleting observations.
 
 ---
 
 ## Known Issues / Gotchas
+- **Field query targeting sends to 0 reps**: Column name mismatch in the targeting query — being fixed next session.
+- **MedVista stage**: May need manual reset to Negotiation stage after testing close/lost capture.
+- **Conversational follow-up engine**: Inline UI may still have edge cases in follow-up flow.
 - **PgArray error**: If schema changes (adding columns/tables), the Next.js dev server may throw `PgArray` errors from stale cache. Fix: `rm -rf apps/web/.next && pnpm dev`.
 - **No auth**: The app uses persona switching via PersonaProvider context. There is no real authentication — any user can switch to any persona via the dropdown.
 - **`verticalSpecialization` is a single enum**: Team members have ONE vertical, not an array. The `outputPreferences.industryFocus` array in agent configs provides broader coverage.
 - **`initiatedBy` on `fieldQueries` has no FK**: Can reference either `teamMembers` or `supportFunctionMembers` (different tables).
-- **Dev server port**: Default is 3000 but auto-increments if occupied.
+- **Dev server port**: Default is 3001 but auto-increments if occupied.
 - **ReadableStream error**: Next.js 14 occasionally throws `ReadableStream is already closed` on page navigation — this is a known Next.js internal issue, not app code.
+
+---
+
+## Design Principles
+- **One input → multiple outputs** is the core product thesis. A single observation, question, or action triggers classification, routing, clustering, feedback, and intelligence updates across the system.
+- **All conversational UIs use inline responses** (no toasts), numbered card chips + text input, React state for chip selection, "Nexus Intelligence" framing.
+- **Seed data and live generation must produce identical data shapes.** Any structure written by seed scripts must match what the API routes produce at runtime.
+- **Model string**: Always use `claude-sonnet-4-20250514` (full identifier, not shorthand).
 
 ---
 

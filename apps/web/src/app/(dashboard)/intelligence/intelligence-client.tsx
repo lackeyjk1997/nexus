@@ -16,7 +16,7 @@ import {
   ChevronDown,
   Sparkles,
   Send,
-  Loader2,
+  X,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -432,27 +432,34 @@ function MetricCard({ icon: Icon, label, value, subtitle, color }: {
   );
 }
 
-// ── Ask Your Team Input ──
+// ── Conversational Ask Input ──
 
-type AskPhase = "idle" | "submitting" | "sent" | "answered";
+type Suggestion = { question: string; fullQuestion: string; clusterId: string };
+type AskPhase = "collapsed" | "expanded" | "submitting" | "sent" | "answered";
+type AskResult = { status: string; questions_sent?: number; immediate_answer?: string | null };
 
 function AskTeamInput({ currentUser }: { currentUser: { id: string; name: string; role: string; verticalSpecialization: string } | null }) {
   const [input, setInput] = useState("");
-  const [phase, setPhase] = useState<AskPhase>("idle");
-  const [result, setResult] = useState<{ status: string; questions_sent?: number; immediate_answer?: string } | null>(null);
+  const [phase, setPhase] = useState<AskPhase>("collapsed");
+  const [result, setResult] = useState<AskResult | null>(null);
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [highlightedSuggestion, setHighlightedSuggestion] = useState(-1);
 
-  const placeholders: Record<string, string> = {
-    MANAGER: 'e.g. "Are any of the CompetitorX deals recoverable if we adjust pricing?"',
-    enablement: 'e.g. "Which reps are struggling most with the new competitive battlecard?"',
-    product_marketing: 'e.g. "Is CompetitorX\'s free pilot actually winning deals or just delaying decisions?"',
-    deal_desk: 'e.g. "Is the legal review delay specific to healthcare or happening everywhere?"',
-  };
+  // Load suggestions when expanded
+  useEffect(() => {
+    if (phase === "expanded" && suggestions.length === 0) {
+      fetch("/api/field-queries/suggestions")
+        .then((r) => r.json())
+        .then((data) => { if (Array.isArray(data)) setSuggestions(data); })
+        .catch(() => {});
+    }
+  }, [phase, suggestions.length]);
 
-  const placeholderKey = currentUser?.role === "MANAGER" ? "MANAGER" : currentUser?.verticalSpecialization || "MANAGER";
-  const placeholder = placeholders[placeholderKey] || placeholders.MANAGER!;
-
-  async function handleSubmit() {
-    if (!input.trim() || !currentUser) return;
+  async function handleSubmit(question?: string, clusterId?: string) {
+    const q = question || input.trim();
+    if (!q || !currentUser) return;
+    setSubmittedQuestion(q);
     setPhase("submitting");
 
     try {
@@ -460,8 +467,9 @@ function AskTeamInput({ currentUser }: { currentUser: { id: string; name: string
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rawQuestion: input.trim(),
+          rawQuestion: q,
           initiatedBy: currentUser.id,
+          clusterId: clusterId || undefined,
         }),
       });
 
@@ -469,109 +477,289 @@ function AskTeamInput({ currentUser }: { currentUser: { id: string; name: string
         const data = await res.json();
         setResult(data);
         setPhase(data.status === "answered" ? "answered" : "sent");
-        setTimeout(() => {
-          setPhase("idle");
-          setInput("");
-          setResult(null);
-        }, 8000);
+        setInput("");
       } else {
-        setPhase("idle");
+        setPhase("expanded");
       }
     } catch {
-      setPhase("idle");
+      setPhase("expanded");
     }
   }
 
-  return (
-    <div
-      className="bg-card rounded-xl border border-border p-5"
-      style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="h-4 w-4" style={{ color: "#E07A5F" }} />
-        <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+  function handleReset() {
+    setPhase("collapsed");
+    setInput("");
+    setResult(null);
+    setSubmittedQuestion("");
+    setHighlightedSuggestion(-1);
+  }
+
+  // ── Collapsed state ──
+  if (phase === "collapsed") {
+    return (
+      <button
+        onClick={() => setPhase("expanded")}
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200"
+        style={{
+          background: "#FFFFFF",
+          border: "1px solid #E8E5E0",
+          boxShadow: "0 2px 8px rgba(107,79,57,0.04)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "rgba(224,122,95,0.3)";
+          e.currentTarget.style.boxShadow = "0 4px 16px rgba(107,79,57,0.08)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "#E8E5E0";
+          e.currentTarget.style.boxShadow = "0 2px 8px rgba(107,79,57,0.04)";
+        }}
+      >
+        <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+        <span className="text-[13.5px] flex-1 text-left" style={{ color: "#8A8078" }}>
           Ask about what you&apos;re seeing
         </span>
-      </div>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 rotate-180" style={{ color: "#D4C9BD" }} />
+      </button>
+    );
+  }
 
-      {phase === "submitting" && (
-        <div className="flex items-center gap-2.5 py-3">
-          <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#E07A5F" }} />
-          <span className="text-[13px] animate-pulse" style={{ color: "#8A8078" }}>
-            Checking existing data…
-          </span>
-        </div>
-      )}
-
-      {phase === "sent" && result && (
-        <div className="py-3">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle className="h-4 w-4" style={{ color: "#2D8A4E" }} />
-            <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
-              Questions sent to {result.questions_sent} rep{result.questions_sent !== 1 ? "s" : ""}
-            </span>
-          </div>
-          <p className="text-[12px]" style={{ color: "#8A8078" }}>
-            Responses will appear below as they come in. Questions expire in 24 hours.
-          </p>
-        </div>
-      )}
-
-      {phase === "answered" && result?.immediate_answer && (
-        <div className="py-3">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="h-4 w-4" style={{ color: "#2D8A4E" }} />
-            <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
-              Answered from existing data
-            </span>
-          </div>
-          <p className="text-[13px] leading-[1.55]" style={{ color: "#3D3833" }}>
-            {result.immediate_answer}
-          </p>
-        </div>
-      )}
-
-      {phase === "idle" && (
-        <>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.metaKey) handleSubmit();
-            }}
-            placeholder={placeholder}
-            rows={2}
-            className="w-full px-3 py-2.5 rounded-lg text-sm resize-none focus:outline-none focus:ring-2"
-            style={{
-              border: "1px solid #E8E5E0",
-              background: "#FFFFFF",
-              color: "#3D3833",
-              maxHeight: "120px",
-            }}
-          />
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
-              style={{
-                background: input.trim() ? "#E07A5F" : "#D4C9BD",
-                color: input.trim() ? "#FFFFFF" : "#8A8078",
-                opacity: input.trim() ? 1 : 0.6,
-                cursor: input.trim() ? "pointer" : "not-allowed",
-              }}
+  // ── Submitting state ──
+  if (phase === "submitting") {
+    return (
+      <div
+        className="rounded-xl overflow-hidden animate-[fadeSlideUp_0.3s_ease]"
+        style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+      >
+        <div className="p-5 space-y-3">
+          {/* User question bubble */}
+          <div className="flex justify-end">
+            <div
+              className="max-w-[85%] px-4 py-2.5 text-[14px] leading-[1.55]"
+              style={{ background: "#E8DDD3", color: "#3D3833", borderRadius: "16px 16px 4px 16px" }}
             >
-              <Send className="h-3.5 w-3.5" />
-              Ask
-            </button>
+              {submittedQuestion}
+            </div>
           </div>
-        </>
-      )}
+          {/* Loading */}
+          <div className="flex items-center gap-2.5">
+            <span
+              className="h-4 w-4 rounded-full border-2 animate-spin shrink-0"
+              style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }}
+            />
+            <span className="text-[13px] animate-pulse" style={{ color: "#8A8078" }}>
+              Checking existing intelligence…
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Answered state (from existing data) ──
+  if (phase === "answered" && result?.immediate_answer) {
+    return (
+      <div
+        className="rounded-xl overflow-hidden animate-[fadeSlideUp_0.4s_ease]"
+        style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+      >
+        <div className="p-5 space-y-3">
+          {/* User question bubble */}
+          <div className="flex justify-end">
+            <div
+              className="max-w-[85%] px-4 py-2.5 text-[14px] leading-[1.55]"
+              style={{ background: "#E8DDD3", color: "#3D3833", borderRadius: "16px 16px 4px 16px" }}
+            >
+              {submittedQuestion}
+            </div>
+          </div>
+          {/* Sparkle response card */}
+          <div style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "12px" }}>
+            <div className="flex items-center gap-2 px-[18px] py-3" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+              <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "#E07A5F" }} />
+              <span className="text-[13px] font-semibold tracking-[0.01em]" style={{ color: "#3D3833" }}>
+                Nexus Intelligence
+              </span>
+              <button onClick={handleReset} className="ml-auto p-0.5 transition-colors hover:opacity-70" style={{ color: "#8A8078" }}>
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="px-[18px] py-3.5">
+              <p className="text-[13.5px] leading-[1.55]" style={{ color: "#3D3833" }}>
+                {result.immediate_answer}
+              </p>
+              <p className="text-[11px] mt-3 pt-2" style={{ color: "#8A8078", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                Answered from existing data
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sent state (questions dispatched to AEs) ──
+  if (phase === "sent" && result) {
+    return (
+      <div
+        className="rounded-xl overflow-hidden animate-[fadeSlideUp_0.4s_ease]"
+        style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+      >
+        <div className="p-5 space-y-3">
+          {/* User question bubble */}
+          <div className="flex justify-end">
+            <div
+              className="max-w-[85%] px-4 py-2.5 text-[14px] leading-[1.55]"
+              style={{ background: "#E8DDD3", color: "#3D3833", borderRadius: "16px 16px 4px 16px" }}
+            >
+              {submittedQuestion}
+            </div>
+          </div>
+          {/* Sparkle response card */}
+          <div style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "12px" }}>
+            <div className="flex items-center gap-2 px-[18px] py-3" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+              <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "#E07A5F" }} />
+              <span className="text-[13px] font-semibold tracking-[0.01em]" style={{ color: "#3D3833" }}>
+                Nexus Intelligence
+              </span>
+              <button onClick={handleReset} className="ml-auto p-0.5 transition-colors hover:opacity-70" style={{ color: "#8A8078" }}>
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="px-[18px] py-3.5">
+              {result.immediate_answer && (
+                <p className="text-[13.5px] leading-[1.55] mb-3" style={{ color: "#3D3833" }}>
+                  {result.immediate_answer}
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-3.5 w-3.5 shrink-0" style={{ color: "#2D8A4E" }} />
+                <p className="text-[13px]" style={{ color: "#3D3833" }}>
+                  Sent targeted questions to {result.questions_sent} rep{result.questions_sent !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <p className="text-[11px] mt-2" style={{ color: "#8A8078" }}>
+                Responses will appear in Your Queries below. Questions expire in 24 hours.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expanded state (input form) ──
+  return (
+    <div
+      className="rounded-xl overflow-hidden animate-[fadeSlideUp_0.3s_ease]"
+      style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
+    >
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" style={{ color: "#E07A5F" }} />
+            <span className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+              What patterns are you curious about?
+            </span>
+          </div>
+          <button onClick={handleReset} className="p-0.5 transition-colors hover:opacity-70" style={{ color: "#8A8078" }}>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Textarea */}
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
+          placeholder='e.g., "Are CompetitorX deals recoverable? Is compliance slowing healthcare?"'
+          rows={2}
+          autoFocus
+          className="w-full px-3 py-2.5 rounded-lg text-[14px] resize-none focus:outline-none"
+          style={{
+            border: "1px solid #E8E5E0",
+            background: "#FFFFFF",
+            color: "#3D3833",
+            maxHeight: "120px",
+          }}
+        />
+
+        {/* Quick suggestions */}
+        {suggestions.length > 0 && !input.trim() && (
+          <>
+            <div className="flex items-center gap-2 mt-4 mb-2">
+              <div className="h-px flex-1" style={{ background: "rgba(0,0,0,0.06)" }} />
+              <span className="text-[11px] px-2" style={{ color: "#8A8078" }}>
+                Suggested from dashboard
+              </span>
+              <div className="h-px flex-1" style={{ background: "rgba(0,0,0,0.06)" }} />
+            </div>
+
+            <div className="space-y-0.5">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSubmit(s.fullQuestion, s.clusterId)}
+                  onMouseEnter={() => setHighlightedSuggestion(i)}
+                  onMouseLeave={() => setHighlightedSuggestion(-1)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                  style={{ background: highlightedSuggestion === i ? "#F3EDE7" : "transparent" }}
+                >
+                  <span
+                    className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "6px",
+                      border: `1.5px solid ${highlightedSuggestion === i ? "#E07A5F" : "#D4C9BD"}`,
+                      color: highlightedSuggestion === i ? "#E07A5F" : "#8A8078",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-[14px] flex-1 text-left" style={{ color: "#3D3833" }}>
+                    {s.question}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[11px] mt-2 px-3" style={{ color: "rgba(138,128,120,0.5)" }}>
+              1-{suggestions.length} select · or type your own question
+            </p>
+          </>
+        )}
+
+        {/* Submit button */}
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={() => handleSubmit()}
+            disabled={!input.trim()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-200"
+            style={{
+              background: input.trim() ? "#E07A5F" : "#D4C9BD",
+              color: input.trim() ? "#FFFFFF" : "#8A8078",
+              opacity: input.trim() ? 1 : 0.6,
+              cursor: input.trim() ? "pointer" : "not-allowed",
+            }}
+          >
+            <Send className="h-3.5 w-3.5" />
+            Ask Nexus
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ── Your Queries Section ──
+
+type QueryResponse = { memberName: string; dealName: string; answer: string };
 
 type QueryResult = {
   id: string;
@@ -581,11 +769,14 @@ type QueryResult = {
     summary?: string;
     response_count?: number;
     target_count?: number;
+    answered_from_data?: boolean;
     updated_at?: string;
   } | null;
   createdAt: string;
   targetCount: number;
   responseCount: number;
+  responses?: QueryResponse[];
+  waitingFor?: string[];
 };
 
 function YourQueries({ currentUser }: { currentUser: { id: string } | null }) {
@@ -603,7 +794,6 @@ function YourQueries({ currentUser }: { currentUser: { id: string } | null }) {
       } catch {}
     }
     fetchQueries();
-    // Refresh every 30 seconds
     const interval = setInterval(fetchQueries, 30000);
     return () => clearInterval(interval);
   }, [currentUser?.id]);
@@ -623,58 +813,99 @@ function YourQueries({ currentUser }: { currentUser: { id: string } | null }) {
 function QueryCard({ query }: { query: QueryResult }) {
   const hasResponses = query.responseCount > 0;
   const allResponded = query.responseCount >= query.targetCount && query.targetCount > 0;
-  const age = timeAgo(query.createdAt);
   const answer = query.aggregatedAnswer;
+  const isDataAnswer = answer?.answered_from_data || query.targetCount === 0;
+  const responses = query.responses || [];
+  const waitingFor = query.waitingFor || [];
+
+  // Calculate hours remaining
+  const expiresIn = (() => {
+    const created = new Date(query.createdAt);
+    const expiresAt = new Date(created.getTime() + 24 * 60 * 60 * 1000);
+    const hoursLeft = Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
+    return hoursLeft;
+  })();
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4" style={{ boxShadow: "0 2px 8px rgba(107,79,57,0.04)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-medium" style={{ color: "#3D3833" }}>
-            &ldquo;{query.rawQuestion}&rdquo;
-          </p>
+    <div className="space-y-3">
+      {/* User question bubble */}
+      <div className="flex justify-end">
+        <div
+          className="max-w-[85%] px-4 py-2.5 text-[14px] leading-[1.55]"
+          style={{ background: "#E8DDD3", color: "#3D3833", borderRadius: "16px 16px 4px 16px" }}
+        >
+          {query.rawQuestion}
+        </div>
+      </div>
 
-          <div className="flex items-center gap-2 mt-2">
-            <span
-              className="inline-block h-2 w-2 rounded-full shrink-0"
-              style={{
-                background: allResponded ? "#2D8A4E" : hasResponses ? "#D4A843" : "#D4C9BD",
-                animation: !allResponded && query.targetCount > 0 ? "pulse 2s infinite" : "none",
-              }}
-            />
-            <span className="text-[12px]" style={{ color: "#8A8078" }}>
-              {query.targetCount === 0
-                ? "Answered from existing data"
-                : hasResponses
-                  ? `${query.responseCount} of ${query.targetCount} responded`
-                  : `Waiting for responses (${query.targetCount} sent)`}
-            </span>
-          </div>
+      {/* Sparkle response card */}
+      <div style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "12px", boxShadow: "0 2px 12px rgba(107,79,57,0.04)" }}>
+        <div className="flex items-center gap-2 px-[18px] py-3" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+          <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "#E07A5F" }} />
+          <span className="text-[13px] font-semibold tracking-[0.01em]" style={{ color: "#3D3833" }}>
+            Nexus Intelligence
+          </span>
+          <span className="text-[11px] ml-auto" style={{ color: "#8A8078" }}>
+            {timeAgo(query.createdAt)}
+          </span>
+        </div>
 
-          {/* Progress bar */}
-          {query.targetCount > 0 && (
-            <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "#E8E5E0" }}>
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.round((query.responseCount / query.targetCount) * 100)}%`,
-                  background: allResponded ? "#2D8A4E" : "#D4A843",
-                  minWidth: query.responseCount > 0 ? "8px" : "0",
-                }}
-              />
-            </div>
-          )}
-
+        <div className="px-[18px] py-3.5 space-y-3">
+          {/* Summary / answer */}
           {answer?.summary && (
-            <p className="text-[13.5px] leading-[1.5] mt-3" style={{ color: "#3D3833" }}>
+            <p className="text-[13.5px] leading-[1.55]" style={{ color: "#3D3833" }}>
               {answer.summary}
             </p>
           )}
-        </div>
 
-        <span className="text-[12px] shrink-0" style={{ color: "#8A8078" }}>
-          {age}
-        </span>
+          {/* Progress bar (if questions were sent) */}
+          {query.targetCount > 0 && (
+            <div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#F3EDE7" }}>
+                <div
+                  className="h-1.5 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${query.targetCount > 0 ? Math.round((query.responseCount / query.targetCount) * 100) : 0}%`,
+                    background: allResponded ? "#2D8A4E" : "#E07A5F",
+                    minWidth: query.responseCount > 0 ? "8px" : "0",
+                  }}
+                />
+              </div>
+              <span className="text-[11px] mt-1 inline-block" style={{ color: "#8A8078" }}>
+                {query.responseCount} of {query.targetCount} responded
+              </span>
+            </div>
+          )}
+
+          {/* Individual responses */}
+          {responses.length > 0 && (
+            <div className="space-y-2">
+              {responses.map((r, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>📋</span>
+                  <p className="text-[13px] leading-[1.5]" style={{ color: "#3D3833" }}>
+                    <span className="font-medium">{r.memberName}</span>
+                    <span style={{ color: "#8A8078" }}> ({r.dealName})</span>: &ldquo;{r.answer}&rdquo;
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Waiting for */}
+          {waitingFor.length > 0 && !allResponded && (
+            <p className="text-[11px]" style={{ color: "#8A8078" }}>
+              ⏳ Waiting: {waitingFor.join(", ")} · {expiresIn > 0 ? `expires in ${expiresIn}h` : "expired"}
+            </p>
+          )}
+
+          {/* Footer */}
+          {isDataAnswer && (
+            <p className="text-[11px] pt-1" style={{ color: "#8A8078", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+              Answered from existing data
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
