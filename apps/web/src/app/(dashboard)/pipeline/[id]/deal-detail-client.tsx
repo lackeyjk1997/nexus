@@ -703,8 +703,8 @@ export function DealDetailClient({
           {/* Meeting type options */}
           <div className="px-2 pt-2 pb-1">
             {PREP_OPTIONS.map((option, i) => {
-              const isDefault = option === getDefaultPrepContext();
-              const isHighlighted = prepContextHighlight === i;
+              const isSelected = prepContext === option;
+              const isHovered = prepContextHighlight === i && !isSelected;
               return (
                 <button
                   key={option}
@@ -713,9 +713,10 @@ export function DealDetailClient({
                     setPrepContextHighlight(i);
                   }}
                   onMouseEnter={() => setPrepContextHighlight(i)}
+                  onMouseLeave={() => setPrepContextHighlight(-1)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
                   style={{
-                    background: isHighlighted ? "#F3EDE7" : isDefault ? "rgba(243,237,231,0.5)" : "transparent",
+                    background: isSelected ? "#3D3833" : isHovered ? "#F3EDE7" : "transparent",
                   }}
                 >
                   <span
@@ -724,13 +725,13 @@ export function DealDetailClient({
                       width: "24px",
                       height: "24px",
                       borderRadius: "6px",
-                      border: `1.5px solid ${isHighlighted ? "#E07A5F" : "#D4C9BD"}`,
-                      color: isHighlighted ? "#E07A5F" : "#8A8078",
+                      border: `1.5px solid ${isSelected ? "rgba(255,255,255,0.4)" : isHovered ? "#E07A5F" : "#D4C9BD"}`,
+                      color: isSelected ? "white" : isHovered ? "#E07A5F" : "#8A8078",
                     }}
                   >
                     {i + 1}
                   </span>
-                  <span className="text-[14px] flex-1 text-left" style={{ color: "#3D3833" }}>
+                  <span className="text-[14px] flex-1 text-left" style={{ color: isSelected ? "white" : "#3D3833" }}>
                     {option}
                   </span>
                 </button>

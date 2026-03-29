@@ -1100,28 +1100,29 @@ export function ObservationInput({
 
                 <div className="px-2 pt-2 pb-1">
                   {PREP_OPTIONS.map((option, i) => {
-                    const isHighlighted = agentPrepHighlight === i;
-                    const isDefault = option === getDefaultPrepFromStage(agentDealStage);
+                    const isSelected = agentPrepContext === option;
+                    const isHovered = agentPrepHighlight === i && !isSelected;
                     return (
                       <button
                         key={option}
                         onClick={() => { setAgentPrepContext(option); setAgentPrepHighlight(i); }}
                         onMouseEnter={() => setAgentPrepHighlight(i)}
+                        onMouseLeave={() => setAgentPrepHighlight(-1)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
-                        style={{ background: isHighlighted ? "#F3EDE7" : isDefault ? "rgba(243,237,231,0.5)" : "transparent" }}
+                        style={{ background: isSelected ? "#3D3833" : isHovered ? "#F3EDE7" : "transparent" }}
                       >
                         <span
                           className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
                           style={{
                             width: "24px", height: "24px", borderRadius: "6px",
-                            border: `1.5px solid ${isHighlighted ? "#E07A5F" : "#D4C9BD"}`,
-                            color: isHighlighted ? "#E07A5F" : "#8A8078",
+                            border: `1.5px solid ${isSelected ? "rgba(255,255,255,0.4)" : isHovered ? "#E07A5F" : "#D4C9BD"}`,
+                            color: isSelected ? "white" : isHovered ? "#E07A5F" : "#8A8078",
                           }}
                         >
                           {i + 1}
                         </span>
-                        <span className="text-[14px] flex-1 text-left" style={{ color: "#3D3833" }}>{option}</span>
-                        {isHighlighted && <CornerDownLeft className="h-3 w-3 shrink-0" style={{ color: "rgba(138,128,120,0.6)" }} />}
+                        <span className="text-[14px] flex-1 text-left" style={{ color: isSelected ? "white" : "#3D3833" }}>{option}</span>
+                        {isHovered && <CornerDownLeft className="h-3 w-3 shrink-0" style={{ color: "rgba(138,128,120,0.6)" }} />}
                       </button>
                     );
                   })}

@@ -153,7 +153,7 @@ function FullBriefModal({ brief, prepContext, onClose }: { brief: CallBriefData;
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-white flex items-center gap-2 px-5 py-3 rounded-t-xl" style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}>
+        <div className="sticky top-0 z-10 flex items-center gap-2 px-5 py-3 rounded-t-xl" style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "#FFFBF9" }}>
           <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
           <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
             Call Brief{prepContext ? ` — ${prepContext}` : ""}
