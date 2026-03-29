@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, ArrowRight } from "lucide-react";
+import { X } from "lucide-react";
 import { usePersona } from "@/components/providers";
 
 // ── Step definitions ────────────────────────────────────────────────────────────
@@ -14,9 +14,7 @@ interface StepConfig {
   highlightSelector: string | null;
   buttonText: string;
   personaSwitch?: string;
-  /** If true, clicking the highlighted element auto-advances */
   autoAdvanceOnClick?: boolean;
-  /** A sub-step that replaces the card content after a DOM event */
   subStep?: {
     waitForSelector: string;
     title: string;
@@ -28,8 +26,9 @@ interface StepConfig {
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
+const TOTAL_STEPS = 6;
 
-function setTourStep(value: string) {
+function setTourStepStorage(value: string) {
   try {
     localStorage.setItem("nexus_demo_step", value);
     window.dispatchEvent(new Event("nexus-tour-update"));
@@ -37,44 +36,58 @@ function setTourStep(value: string) {
 }
 
 const STEPS: StepConfig[] = [
+  // Step 1 — Pipeline → MedVista
   {
     route: "/pipeline",
     title: "Click into MedVista Health Systems",
     body: "This is Sarah\u2019s biggest deal in negotiation \u2014 \u20ac2.4M. The deal workspace shows everything the AI knows: MEDDPICC gaps, stakeholder engagement, transcript analyses, and AI actions \u2014 all in one place.",
     highlightSelector: "[data-tour='deal-medvista']",
-    buttonText: "Next \u2192",
+    buttonText: "Next",
     autoAdvanceOnClick: true,
   },
+  // Step 2 — Deal Page → Prep Call
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
     title: 'Click "Prep Call" to generate a brief',
     body: "The AI pulls from 7 intelligence layers \u2014 her SA\u2019s compliance expertise, manager pricing directives, competitive patterns from closed deals, MEDDPICC gap warnings, transcript analyses, field observations, and team resources. Watch what a 30-second prep looks like.",
     highlightSelector: "[data-tour='prep-call']",
-    buttonText: "Next \u2192",
+    buttonText: "Next",
     subStep: {
       waitForSelector: "[data-tour='call-brief']",
       title: "Look at what just happened",
       body: "Notice the Team Intelligence section \u2014 Alex Kim\u2019s compliance expertise was injected automatically. The Manager Directives section enforces Marcus\u2019s pricing constraints. The MEDDPICC Questions map to scoring gaps on this deal. Every section pulls from a different intelligence layer.",
       highlightSelector: "[data-tour='call-brief']",
-      buttonText: "Next: Share Field Intel \u2192",
+      buttonText: "Next: Share Field Intel",
       nextRoute: "/pipeline",
     },
   },
+  // Step 3 — Pipeline → Agent Bar → Observation
   {
     route: "/pipeline",
     title: "Share an observation",
     body: "Type something in the bar below \u2014 try: \u201csecurity reviews are adding 3 weeks to every enterprise deal\u201d \u2014 and watch what happens. The AI classifies it, may ask a follow-up, clusters it with similar reports, and gives you something useful back.",
     highlightSelector: "[data-tour='agent-bar']",
-    buttonText: "Next: VP View \u2192",
+    buttonText: "Next: VP View",
   },
+  // Step 4 — Intelligence Dashboard (as Marcus)
   {
     route: "/intelligence",
     personaSwitch: "Marcus Thompson",
     title: "Now you\u2019re Marcus Thompson, VP of Sales",
     body: "Everything your team shared is structured here \u2014 patterns with ARR impact, severity levels, field voices, and suggested actions. Each cluster is intelligence that would normally be scattered across Slack and 1:1s. Click \u201cAsk about what you\u2019re seeing\u201d to query your team \u2014 the system answers from existing data or sends targeted questions to the right AEs.",
     highlightSelector: "[data-tour='ask-input']",
-    buttonText: "Next \u2192",
+    buttonText: "Next",
   },
+  // Step 5 — Sarah's quick check (new step 4b)
+  {
+    route: "/pipeline",
+    personaSwitch: "Sarah Chen",
+    title: "Sarah just got a quick check",
+    body: "The question Marcus asked was turned into a deal-specific quick check for Sarah. Look for the \u201c\u2726 Quick check waiting\u201d badge in the agent bar at the bottom. This is how intelligence flows bidirectionally \u2014 VP asks, system routes to the right AE, AE answers with one tap, VP gets the aggregated answer.",
+    highlightSelector: "[data-tour='agent-bar']",
+    buttonText: "Next",
+  },
+  // Step 6 — Wrap-up
   {
     route: null,
     title: "The system compounds",
@@ -84,16 +97,42 @@ const STEPS: StepConfig[] = [
   },
 ];
 
-// ── Component ───────────────────────────────────────────────────────────────────
+// ── Contextual hints ────────────────────────────────────────────────────────────
+
+function getContextualHint(pathname: string, persona: string): string | null {
+  if (pathname === "/pipeline") {
+    return "Try: Click into MedVista Health Systems to explore the deal workspace";
+  }
+  if (pathname.startsWith("/pipeline/")) {
+    return 'Try: Click "Prep Call" to see 7 intelligence layers converge into one brief';
+  }
+  if (pathname === "/intelligence" && persona !== "Marcus Thompson") {
+    return "Try: Switch to Marcus Thompson to see the VP intelligence view";
+  }
+  if (pathname === "/intelligence" && persona === "Marcus Thompson") {
+    return 'Try: Ask "Are CompetitorX deals recoverable?" to see targeted field queries';
+  }
+  if (pathname === "/agent-config") {
+    return 'Try: Type "Never mention competitor pricing" to see agent configuration';
+  }
+  if (pathname === "/analyze") {
+    return "Try: Run a demo transcript analysis to see AI coaching insights";
+  }
+  return null;
+}
+
+// ── Main Component ──────────────────────────────────────────────────────────────
 
 export function DemoGuide() {
   const router = useRouter();
   const pathname = usePathname();
-  const { allUsers, setCurrentUser } = usePersona();
-  const [step, setStep] = useState(0); // 0 = inactive, 1-5 = active steps
+  const { allUsers, setCurrentUser, personaName } = usePersona();
+  const [step, setStep] = useState(0); // 0 = inactive, 1-6 = active steps
   const [dismissed, setDismissed] = useState(false);
   const [inSubStep, setInSubStep] = useState(false);
-  const [visible, setVisible] = useState(false); // for entrance animation
+  const [visible, setVisible] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [hintDismissedPages, setHintDismissedPages] = useState<Set<string>>(new Set());
   const subStepObserverRef = useRef<MutationObserver | null>(null);
 
   // ── Initialize from localStorage ──
@@ -102,17 +141,19 @@ export function DemoGuide() {
       const saved = localStorage.getItem("nexus_demo_step");
       if (saved) {
         const n = parseInt(saved, 10);
-        if (n >= 1 && n <= 5) {
+        if (n >= 1 && n <= TOTAL_STEPS) {
           setStep(n);
           setDismissed(false);
+        } else if (saved === "done") {
+          setShowHint(true);
         }
       }
     } catch {}
   }, []);
 
-  // ── Show with entrance animation when step becomes active ──
+  // ── Entrance animation ──
   useEffect(() => {
-    if (step >= 1 && step <= 5 && !dismissed) {
+    if (step >= 1 && step <= TOTAL_STEPS && !dismissed) {
       const t = setTimeout(() => setVisible(true), 300);
       return () => clearTimeout(t);
     }
@@ -121,20 +162,16 @@ export function DemoGuide() {
 
   // ── Highlight management ──
   const applyHighlight = useCallback((selector: string | null) => {
-    // Remove old highlight
     document.querySelectorAll(".demo-highlight").forEach((el) => {
       el.classList.remove("demo-highlight");
     });
     if (!selector) return;
-    // Retry a few times for elements that render async
     let attempts = 0;
     const tryHighlight = () => {
       const el = document.querySelector(selector);
       if (el) {
         el.classList.add("demo-highlight");
-        // Scroll both the element and any overflow parent into view
         try {
-          // Find scrollable ancestor (for kanban horizontal scroll)
           let parent = el.parentElement;
           while (parent) {
             const style = getComputedStyle(parent);
@@ -168,16 +205,15 @@ export function DemoGuide() {
 
   // ── Apply highlight when step or pathname changes ──
   useEffect(() => {
-    if (step < 1 || step > 5 || dismissed) {
+    if (step < 1 || step > TOTAL_STEPS || dismissed) {
       removeHighlight();
       return;
     }
 
     const config = STEPS[step - 1]!;
 
-    // If we need to navigate to the right route first
     if (config.route && pathname !== config.route) {
-      return; // Wait until we're on the correct route
+      return;
     }
 
     const selector = inSubStep && config.subStep
@@ -190,18 +226,16 @@ export function DemoGuide() {
 
   // ── Watch for sub-step trigger (call brief appearing) ──
   useEffect(() => {
-    if (step < 1 || step > 5 || dismissed || inSubStep) return;
+    if (step < 1 || step > TOTAL_STEPS || dismissed || inSubStep) return;
     const config = STEPS[step - 1]!;
     if (!config.subStep) return;
 
     const waitSelector = config.subStep.waitForSelector;
-    // Check if already present
     if (document.querySelector(waitSelector)) {
       setInSubStep(true);
       return;
     }
 
-    // Watch for it
     const observer = new MutationObserver(() => {
       if (document.querySelector(waitSelector)) {
         setInSubStep(true);
@@ -216,7 +250,7 @@ export function DemoGuide() {
 
   // ── Auto-advance when highlighted element is clicked ──
   useEffect(() => {
-    if (step < 1 || step > 5 || dismissed) return;
+    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
     const config = STEPS[step - 1]!;
     if (!config.autoAdvanceOnClick || !config.highlightSelector) return;
 
@@ -224,7 +258,6 @@ export function DemoGuide() {
       const target = e.target as HTMLElement;
       const highlighted = document.querySelector(config.highlightSelector!);
       if (highlighted && (highlighted === target || highlighted.contains(target))) {
-        // Auto-advance after a brief delay to let navigation happen
         setTimeout(() => advanceStep(), 500);
       }
     };
@@ -246,29 +279,28 @@ export function DemoGuide() {
 
     const nextStep = step + 1;
 
-    if (nextStep > 5) {
-      // Tour complete
+    if (nextStep > TOTAL_STEPS) {
+      // Tour complete — transition to contextual hints
       setStep(0);
       setDismissed(false);
-      setTourStep("done");
+      setShowHint(true);
+      setTourStepStorage("done");
       return;
     }
 
     const config = STEPS[nextStep - 1]!;
 
-    // Switch persona if needed
     if (config.personaSwitch) {
       const user = allUsers.find((u) => u.name === config.personaSwitch);
       if (user) setCurrentUser(user);
     }
 
-    // Navigate if needed
     if (config.route && pathname !== config.route) {
       router.push(config.route);
     }
 
     setStep(nextStep);
-    setTourStep(String(nextStep));
+    setTourStepStorage(String(nextStep));
   }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight]);
 
   const handleNext = useCallback(() => {
@@ -286,15 +318,16 @@ export function DemoGuide() {
         if (user) setCurrentUser(user);
       }
       setStep(nextStep);
-      setTourStep(String(nextStep));
+      setTourStepStorage(String(nextStep));
       return;
     }
 
-    // Last step — dismiss
-    if (step === 5) {
+    // Last step — transition to hints
+    if (step === TOTAL_STEPS) {
       removeHighlight();
       setStep(0);
-      setTourStep("done");
+      setShowHint(true);
+      setTourStepStorage("done");
       return;
     }
 
@@ -306,8 +339,51 @@ export function DemoGuide() {
     removeHighlight();
   }, [removeHighlight]);
 
+  // ── Contextual hint after tour completion ──
+  if (showHint && !dismissed && step === 0) {
+    const hint = getContextualHint(pathname, personaName);
+    if (!hint || hintDismissedPages.has(pathname)) return null;
+
+    return (
+      <div
+        className="fixed z-[9999] transition-all duration-300"
+        style={{
+          bottom: 24,
+          left: 24,
+          opacity: 1,
+          transform: "translateY(0)",
+        }}
+      >
+        <div
+          className="flex items-center gap-2"
+          style={{
+            background: "#3D3833",
+            color: "#FFFFFF",
+            maxWidth: 340,
+            borderRadius: 10,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+            padding: "12px 16px",
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 13,
+          }}
+        >
+          <span style={{ color: "#E07A5F", flexShrink: 0 }}>{"\u2726"}</span>
+          <span style={{ flex: 1, color: "rgba(255,255,255,0.9)" }}>{hint}</span>
+          <button
+            onClick={() => {
+              setHintDismissedPages((prev) => new Set(prev).add(pathname));
+            }}
+            className="p-0.5 rounded hover:bg-white/10 transition-colors flex-shrink-0"
+          >
+            <X className="h-3 w-3" style={{ color: "rgba(255,255,255,0.4)" }} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Don't render if inactive ──
-  if (step < 1 || step > 5 || dismissed) return null;
+  if (step < 1 || step > TOTAL_STEPS || dismissed) return null;
 
   const config = STEPS[step - 1]!;
   const displayTitle = inSubStep && config.subStep ? config.subStep.title : config.title;
@@ -342,7 +418,7 @@ export function DemoGuide() {
             style={{ color: "rgba(255,255,255,0.5)" }}
           >
             <span style={{ color: "#E07A5F" }}>{"\u2726"} </span>
-            STEP {step} OF 5
+            STEP {step} OF {TOTAL_STEPS}
           </span>
           <button
             onClick={handleDismiss}
@@ -366,14 +442,14 @@ export function DemoGuide() {
         {/* Progress dots + button */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4, 5].map((i) => (
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((i) => (
               <div
                 key={i}
                 className="rounded-full"
                 style={{
                   width: 8,
                   height: 8,
-                  background: i === step ? "#E07A5F" : i < step ? "#E07A5F" : "rgba(255,255,255,0.2)",
+                  background: i <= step ? "#E07A5F" : "rgba(255,255,255,0.2)",
                   opacity: i < step ? 0.5 : 1,
                 }}
               />
@@ -381,7 +457,7 @@ export function DemoGuide() {
           </div>
           <button
             onClick={handleNext}
-            className="flex items-center gap-1.5 text-[13px] font-semibold text-white transition-colors hover:opacity-90"
+            className="text-[13px] font-semibold text-white transition-colors hover:opacity-90"
             style={{
               background: "#E07A5F",
               padding: "8px 20px",
@@ -389,8 +465,7 @@ export function DemoGuide() {
               border: "none",
             }}
           >
-            {displayButton}
-            {step < 5 && <ArrowRight className="h-3.5 w-3.5" />}
+            {displayButton} {step < TOTAL_STEPS ? "\u2192" : ""}
           </button>
         </div>
       </div>
@@ -398,7 +473,7 @@ export function DemoGuide() {
   );
 }
 
-// ── Resume Tour Button (used in top bar) ──
+// ── Tour state hook (used in top bar) ────────────────────────────────────────────
 
 export function useTourState() {
   const [tourStep, setTourStep] = useState<string | null>(null);
@@ -408,7 +483,6 @@ export function useTourState() {
       setTourStep(localStorage.getItem("nexus_demo_step"));
     } catch {}
 
-    // Listen for storage changes (cross-tab) and custom tour events (same-tab)
     const handler = () => {
       try {
         setTourStep(localStorage.getItem("nexus_demo_step"));

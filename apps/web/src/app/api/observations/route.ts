@@ -313,6 +313,8 @@ Ask a follow-up ONLY when:
 - The observation is vague and a nudge would extract key structured data
 - You cannot determine which account/deal this is about AND it's about a specific situation (not a general market trend) — ask which deal
 
+Bias toward asking a follow-up question when the observation mentions a pattern across multiple deals. Even if the scope seems clear, asking about specific affected deals or the source of the information produces more valuable structured data.
+
 Do NOT ask a follow-up when:
 - The observation names a specific deal, competitor, AND dollar amount
 - The observation describes a specific win/loss with details

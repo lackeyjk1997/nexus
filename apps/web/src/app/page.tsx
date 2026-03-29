@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function LandingPage() {
+  const [resetting, setResetting] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("reset") === "true") {
-        localStorage.clear();
-        window.history.replaceState({}, "", "/");
+        // Call the reset API, then clear localStorage
+        fetch("/api/demo/reset", { method: "POST" })
+          .catch(() => {})
+          .finally(() => {
+            localStorage.clear();
+            window.history.replaceState({}, "", "/");
+          });
       }
     }
   }, []);
@@ -255,7 +262,7 @@ export default function LandingPage() {
           <p style={{ fontSize: 13, color: "#8A8078", margin: "0 0 4px 0" }}>
             Built by Jeff Lackey
           </p>
-          <p style={{ fontSize: 12, color: "#8A8078", margin: 0 }}>
+          <p style={{ fontSize: 12, color: "#8A8078", margin: "0 0 12px 0" }}>
             <a
               href="mailto:jeff.lackey97@gmail.com"
               style={{ color: "#8A8078", textDecoration: "none" }}
@@ -279,6 +286,31 @@ export default function LandingPage() {
               LinkedIn
             </a>
           </p>
+          <button
+            onClick={async () => {
+              setResetting(true);
+              try {
+                await fetch("/api/demo/reset", { method: "POST" });
+                localStorage.clear();
+                window.location.reload();
+              } catch {
+                setResetting(false);
+              }
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 11,
+              color: resetting ? "#E07A5F" : "#D4C9BD",
+              cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+              transition: "color 0.2s ease",
+            }}
+            onMouseOver={(e) => { if (!resetting) e.currentTarget.style.color = "#E07A5F"; }}
+            onMouseOut={(e) => { if (!resetting) e.currentTarget.style.color = "#D4C9BD"; }}
+          >
+            {resetting ? "Resetting..." : "\u21BB Reset Demo Data"}
+          </button>
         </div>
       </div>
     </div>
