@@ -50,6 +50,10 @@ function getPlaceholder(pathname: string): string {
 
 export function LayoutAgentBar() {
   const pathname = usePathname();
+
+  // Agent Config has its own input — don't show the global agent bar
+  if (pathname === "/agent-config") return null;
+
   const context = getContextFromPathname(pathname);
   const placeholder = getPlaceholder(pathname);
 

@@ -317,10 +317,14 @@ export function ObservationInput({
           setInput("");
         }
       } else {
-        setPhase("expanded");
+        setGiveback({ acknowledgment: "Something went wrong — please try again." });
+        setPhase("giveback");
+        setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
       }
     } catch {
-      setPhase("expanded");
+      setGiveback({ acknowledgment: "Couldn't reach AI. Your input was saved." });
+      setPhase("giveback");
+      setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
     }
   }
 

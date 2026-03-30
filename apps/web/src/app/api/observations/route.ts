@@ -723,7 +723,7 @@ async function checkAndCreateCluster(
   if (!primarySignal) return;
 
   // Find unclustered observations from last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const unclustered = await db
     .select({
       id: observations.id,
