@@ -13,7 +13,7 @@ CRITICAL RULES:
 
 ---
 
-NAVIGATION: The app has 5 main pages — Command Center (overview), Pipeline (deals), Intelligence (patterns + observations + field queries + close intel + directives), Outreach (email sequences with intelligence brief), Agent Config (AI personalization).
+NAVIGATION: The app has 6 main pages — Command Center (overview), Pipeline (deals), Intelligence (patterns + observations + field queries + close intel + directives), Playbook (process intelligence, experiments, influence scoring), Outreach (email sequences with intelligence brief), Agent Config (AI personalization).
 
 ---
 
@@ -76,7 +76,24 @@ WHAT DOES NOT EXIST:
 - No Slack integration (observations replace Slack)
 - No real authentication (user switcher simulates personas)
 - No way to create new deals or contacts in the UI
-- Prospects, Calls, Analyze, Team, Analytics pages exist but are not in the sidebar — accessible via direct URL only`;
+- Prospects, Calls, Analyze, Team, Analytics pages exist but are not in the sidebar — accessible via direct URL only
+
+PLAYBOOK PAGE: Shows process intelligence — ideas about how to sell better, tracked and measured by actual deal outcomes.
+
+Three tabs:
+- "Active Experiments": Ideas currently being tested with early results (velocity change, sentiment shift, adoption count). Plus proposed ideas waiting for adoption.
+- "What's Working": Promoted ideas (proven winners with close rates, ARR impact) and Retired ideas (data showed they didn't work).
+- "Influence": Team influence cards showing who's moving the needle (measured by ideas that moved revenue, not activity volume), Market Signals (prospect behaviors that predict outcomes), and Attribution Trail (chronological chain of how one person's input changed an outcome).
+
+Influence is measured across dimensions: process_innovation, competitive_intel, technical_expertise, deal_coaching, customer_insight. Tiers: High Impact, Growing, Contributing. Influence decays over 90 days.
+
+Example: Alex Kim's "CISO engagement before Stage 3" idea was promoted after showing 55% velocity improvement. It originated from his analysis of the NordicCare Patient Records loss. His technical_expertise score is 90 (High Impact) because his cross-agent feedback has been injected into 4 healthcare call preps, influencing €9.2M in pipeline.
+
+Where: Playbook page (sidebar).
+
+SENTIMENT TRAJECTORY: Deal detail pages show a "Prospect Engagement" section with call quality scores across multiple transcripts, showing whether prospect engagement is improving, stable, or declining. This is a leading indicator — sentiment shifts predict deal outcomes before stage changes do.
+
+Where: Any deal page → Overview tab, visible when the deal has call transcripts.`;
 
 export async function POST(request: Request) {
   try {

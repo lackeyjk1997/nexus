@@ -797,3 +797,40 @@ export const resources = pgTable("resources", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ── Playbook Intelligence ────────────────────────
+
+export const playbookIdeas = pgTable("playbook_ideas", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  originatorId: uuid("originator_id").references(() => teamMembers.id).notNull(),
+  originatedFrom: text("originated_from"), // observation, close_analysis, manual, system_detected, cross_agent
+  sourceObservationId: uuid("source_observation_id").references(() => observations.id),
+  title: text("title").notNull(),
+  hypothesis: text("hypothesis").notNull(),
+  category: text("category").notNull(), // process, messaging, positioning, discovery, closing, engagement
+  vertical: text("vertical"),
+  status: text("status").notNull().default("proposed"), // proposed, testing, promoted, retired
+  testStartDate: timestamp("test_start_date"),
+  testEndDate: timestamp("test_end_date"),
+  testGroupDeals: text("test_group_deals").array(),
+  controlGroupDeals: text("control_group_deals").array(),
+  results: jsonb("results"),
+  followers: text("followers").array(),
+  followerCount: integer("follower_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const influenceScores = pgTable("influence_scores", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  memberId: uuid("member_id").references(() => teamMembers.id).notNull(),
+  dimension: text("dimension").notNull(), // process_innovation, competitive_intel, technical_expertise, deal_coaching, customer_insight
+  vertical: text("vertical"),
+  score: integer("score").default(0),
+  tier: text("tier").default("contributing"), // high_impact, growing, contributing, new
+  attributions: jsonb("attributions"),
+  lastContributionAt: timestamp("last_contribution_at"),
+  decayAppliedAt: timestamp("decay_applied_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

@@ -54,6 +54,7 @@ const SIGNAL_ROUTES: Record<string, string> = {
   agent_tuning: "Your Agent (config updated)",
   cross_agent: "Team Agents (cross-agent update)",
   field_intelligence: "Leadership (field intelligence)",
+  process_innovation: "Playbook (process idea captured)",
 };
 
 // ── POST: create observation ──
@@ -259,6 +260,26 @@ export async function POST(request: Request) {
   // Create routing records for support functions
   await createRoutingRecords(inserted!.id, classification);
 
+  // Auto-create playbook idea for process_innovation signals
+  try {
+    const processSignal = classification.signals.find((s: { type: string; summary?: string }) => s.type === "process_innovation");
+    if (processSignal) {
+      const { playbookIdeas } = await import("@nexus/db");
+      await db.insert(playbookIdeas).values({
+        originatorId: observerId,
+        originatedFrom: "observation",
+        sourceObservationId: inserted!.id,
+        title: processSignal.summary || rawInput.substring(0, 80),
+        hypothesis: rawInput,
+        category: "process",
+        vertical: observer?.verticalSpecialization || null,
+        status: "proposed",
+      });
+    }
+  } catch (err) {
+    console.error("Playbook idea creation failed (non-fatal):", err);
+  }
+
   // Process agent signals (agent_tuning, cross_agent)
   if (client) {
     await processAgentSignals(inserted!, classification, client);
@@ -298,6 +319,7 @@ async function classifyWithClaude(
 - "agent_tuning": feedback about AI agent behavior
 - "cross_agent": insight that should influence another team member's AI agent
 - "field_intelligence": general market pattern or trend
+- "process_innovation": a suggestion about how to change the sales process, try a new approach, or replicate something that worked. Examples: "We should hold two discos before demo", "I built a prototype after the call and sent it — they loved it", "Leading with compliance gets better engagement in healthcare"
 
 2. For each signal, extract:
 - type, confidence (0-1), summary (one sentence)

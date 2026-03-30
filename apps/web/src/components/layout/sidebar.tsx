@@ -16,6 +16,7 @@ import {
   ChevronRight,
   AudioWaveform,
   Sparkles,
+  FlaskConical,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -33,12 +34,14 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Settings,
   AudioWaveform,
   Sparkles,
+  FlaskConical,
 };
 
 const NAV_ITEMS = [
   { label: "Command Center", href: "/command-center", icon: "LayoutDashboard", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Pipeline", href: "/pipeline", icon: "Kanban", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Intelligence", href: "/intelligence", icon: "BarChart3", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
+  { label: "Playbook", href: "/playbook", icon: "FlaskConical", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Outreach", href: "/outreach", icon: "Mail", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Agent Config", href: "/agent-config", icon: "Bot", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
 ];

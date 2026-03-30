@@ -1242,6 +1242,10 @@ export function DealDetailClient({
       {/* Tab Content */}
       {activeTab === "overview" && (
         <>
+          {/* Sentiment Trajectory */}
+          {transcripts.filter(t => t.callQualityScore != null).length > 0 && (
+            <SentimentTrajectory transcripts={transcripts} />
+          )}
           {/* Close Analysis for closed deals */}
           {(deal.stage === "closed_won" || deal.stage === "closed_lost") && deal.closeAiAnalysis && (
             <CloseAnalysisCard deal={deal} meddpicc={meddpicc} contacts={contacts} />
@@ -1276,6 +1280,79 @@ export function DealDetailClient({
           trigger: "manual",
         }}
       />
+    </div>
+  );
+}
+
+// ── Sentiment Trajectory ──
+
+function SentimentTrajectory({ transcripts }: { transcripts: Transcript[] }) {
+  const scored = transcripts
+    .filter((t) => t.callQualityScore != null)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (scored.length === 0) return null;
+
+  const first = scored[0]!.callQualityScore!;
+  const last = scored[scored.length - 1]!.callQualityScore!;
+  const delta = last - first;
+  const trend = scored.length > 1
+    ? delta > 5 ? "improving" : delta < -5 ? "declining" : "stable"
+    : null;
+
+  function getScoreColor(score: number): string {
+    if (score >= 80) return "#2D8A4E";
+    if (score >= 60) return "#D4A843";
+    return "#C74B3B";
+  }
+
+  function getSentimentLabel(score: number): string {
+    if (score >= 85) return "Committed";
+    if (score >= 75) return "Engaged";
+    if (score >= 65) return "Interested";
+    if (score >= 55) return "Cautious";
+    return "Uncertain";
+  }
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-5" style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}>
+      <p className="text-sm font-semibold mb-3" style={{ color: "#3D3833" }}>
+        Prospect Engagement
+      </p>
+      <div className="space-y-2.5">
+        {scored.map((t, i) => {
+          const score = t.callQualityScore!;
+          const color = getScoreColor(score);
+          const label = getSentimentLabel(score);
+          const dateStr = new Date(t.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+          return (
+            <div key={t.id} className="flex items-center gap-3">
+              <span className="text-xs shrink-0 w-16" style={{ color: "#8A8078" }}>
+                Call {i + 1} ({dateStr})
+              </span>
+              <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#F3EDE7" }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${score}%`, background: color }}
+                />
+              </div>
+              <span className="text-sm font-semibold shrink-0 w-8 text-right" style={{ color }}>
+                {score}
+              </span>
+              <span className="text-xs shrink-0 w-20" style={{ color: "#8A8078" }}>
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {trend && scored.length > 1 && (
+        <p className="text-xs mt-3 pt-2" style={{ color: "#8A8078", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+          Trend: {trend === "improving" ? "↑" : trend === "declining" ? "↓" : "→"}{" "}
+          {trend === "improving" ? "Improving" : trend === "declining" ? "Declining" : "Stable"}
+          {" "}({delta > 0 ? "+" : ""}{delta} pts across {scored.length} calls)
+        </p>
+      )}
     </div>
   );
 }

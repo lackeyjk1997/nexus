@@ -496,6 +496,40 @@ export async function POST(request: Request) {
     console.error("Win/loss patterns query error (non-fatal):", err);
   }
 
+  // ── Playbook intelligence ──
+  type PlaybookInsight = { title: string; hypothesis: string; results: { stage_velocity_change?: number; confidence?: string } | null };
+  let playbookInsights: PlaybookInsight[] = [];
+  let testingIdeas: PlaybookInsight[] = [];
+  try {
+    const { playbookIdeas } = await import("@nexus/db");
+    playbookInsights = await db
+      .select({ title: playbookIdeas.title, hypothesis: playbookIdeas.hypothesis, results: playbookIdeas.results })
+      .from(playbookIdeas)
+      .where(
+        and(
+          eq(playbookIdeas.status, "promoted"),
+          or(
+            eq(playbookIdeas.vertical, dealVertical),
+            isNull(playbookIdeas.vertical)
+          )
+        )
+      )
+      .limit(3) as PlaybookInsight[];
+
+    testingIdeas = await db
+      .select({ title: playbookIdeas.title, hypothesis: playbookIdeas.hypothesis, results: playbookIdeas.results })
+      .from(playbookIdeas)
+      .where(
+        and(
+          eq(playbookIdeas.status, "testing"),
+          sql`${playbookIdeas.testGroupDeals} @> ARRAY[${resolvedDealId}]::text[]`
+        )
+      )
+      .limit(2) as PlaybookInsight[];
+  } catch (err) {
+    console.error("Playbook intelligence query error (non-fatal):", err);
+  }
+
   // ── Stakeholder engagement alerts ──
   type StakeholderAlert = { name: string; title: string | null; role: string | null; activityCount: number };
   let underEngagedStakeholders: StakeholderAlert[] = [];
@@ -705,6 +739,18 @@ ${directives.map((d) => {
 }).join("\n")}
 
 IMPORTANT: Mandatory directives are hard constraints. NEVER suggest actions that violate them (e.g., do not suggest discounts exceeding the stated limit). Strong directives should be followed. Guidance directives should inform your approach.
+` : ""}
+${playbookInsights.length > 0 ? `PLAYBOOK — PROVEN APPROACHES:
+These approaches have been tested and proven effective for deals like this:
+${playbookInsights.map(p => {
+  const r = p.results as { stage_velocity_change?: number; confidence?: string } | null;
+  return `- ${p.title}: ${p.hypothesis}${r?.stage_velocity_change ? ` (${r.stage_velocity_change}% velocity improvement, ${r.confidence || "medium"} confidence)` : ""}`;
+}).join("\n")}
+` : ""}
+${testingIdeas.length > 0 ? `PLAYBOOK — ACTIVE EXPERIMENTS:
+This deal is part of an active experiment. Apply the following approach:
+${testingIdeas.map(p => `- ${p.title}: ${p.hypothesis}`).join("\n")}
+Note: This is being tested. Include the approach in your recommendations.
 ` : ""}
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
