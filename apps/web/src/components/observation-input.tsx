@@ -77,6 +77,7 @@ type CallBrief = {
   competitive_context: string | null;
   suggested_resources?: Array<{ title: string; type: string; why: string }>;
   suggested_next_steps: string[];
+  active_experiments?: Array<{ name: string; application: string }>;
 };
 
 type EmailDraft = {
@@ -198,6 +199,7 @@ export function ObservationInput({
   const [callBriefDealId, setCallBriefDealId] = useState<string | null>(null);
   const [callBriefDealName, setCallBriefDealName] = useState<string | null>(null);
   const [callBriefAccountId, setCallBriefAccountId] = useState<string | null>(null);
+  const [callBriefActiveExperiments, setCallBriefActiveExperiments] = useState<string[]>([]);
 
   // Prep context state (meeting type + attendee selection)
   const [agentPrepContext, setAgentPrepContext] = useState("");
@@ -266,6 +268,7 @@ export function ObservationInput({
     setGiveback(null);
     setHighlightedOption(-1);
     setCallBrief(null);
+    setCallBriefActiveExperiments([]);
     setEmailDraft(null);
     setSaveFeedback(null);
     setPlaybookIdeaId(null);
@@ -430,6 +433,7 @@ export function ObservationInput({
         const data = await res.json();
         setCallBrief(data.brief);
         setCallBriefDealName(data.dealName ?? data.accountName ?? null);
+        setCallBriefActiveExperiments(data.activeExperimentNames ?? []);
         setPhase("call_prep_result");
       } else {
         setPhase("expanded");
@@ -1542,6 +1546,34 @@ export function ObservationInput({
                     {callBrief.headline}
                   </p>
                 </div>
+
+                {/* Experiment Badge */}
+                {callBriefActiveExperiments.length > 0 && (
+                  <div
+                    className="mx-3 mt-2"
+                    style={{
+                      background: "rgba(224,122,95,0.08)",
+                      borderLeft: "3px solid #E07A5F",
+                      borderRadius: "0 8px 8px 0",
+                      padding: "10px 14px",
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span style={{ fontSize: 12 }}>🧪</span>
+                      <span className="text-[11px] font-semibold tracking-[0.05em] uppercase" style={{ color: "#E07A5F" }}>
+                        Active Experiment
+                      </span>
+                    </div>
+                    {callBriefActiveExperiments.map((name, i) => (
+                      <p key={i} className="text-[13px] font-semibold" style={{ color: "#3D3833" }}>
+                        &ldquo;{name}&rdquo;
+                      </p>
+                    ))}
+                    <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>
+                      Applied to this prep
+                    </p>
+                  </div>
+                )}
 
                 <div className="px-5 py-4 space-y-4">
                   {/* Deal Snapshot */}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { playbookIdeas } from "@nexus/db";
+import { playbookIdeas, observations, teamMembers } from "@nexus/db";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +87,46 @@ export async function PATCH(
         updatedAt: now,
       })
       .where(eq(playbookIdeas.id, id));
+
+    // ── On graduation, create a process_innovation observation for Intelligence dashboard ──
+    if (body.status === "graduated") {
+      try {
+        const metrics = existing.currentMetrics as {
+          velocity_pct?: number;
+          sentiment_pts?: number;
+          close_rate_pct?: number;
+          deals_tested?: number;
+        } | null;
+
+        const velocityStr = metrics?.velocity_pct ? `Velocity improved ${metrics.velocity_pct}% for test group.` : "";
+        const sentimentStr = metrics?.sentiment_pts ? `Sentiment +${metrics.sentiment_pts} pts.` : "";
+
+        const [originator] = await db
+          .select({ name: teamMembers.name })
+          .from(teamMembers)
+          .where(eq(teamMembers.id, existing.originatorId))
+          .limit(1);
+
+        const rawInput = `Playbook experiment "${existing.title}" graduated after meeting success thresholds. ${velocityStr} ${sentimentStr} Proposed by ${originator?.name ?? "a team member"}. Now scaling to all AEs.`.trim();
+
+        await db.insert(observations).values({
+          observerId: existing.originatorId,
+          rawInput,
+          aiClassification: {
+            signals: [{ type: "process_innovation", confidence: 0.95 }],
+            scope: "team",
+            urgency: "medium",
+            impact_severity: "high",
+            source: "playbook_experiment",
+            experiment_id: id,
+            experiment_outcome: "graduated",
+          },
+          extractedEntities: {},
+        });
+      } catch (obsErr) {
+        console.error("Failed to create graduation observation (non-fatal):", obsErr);
+      }
+    }
 
     return NextResponse.json({ success: true, id });
   } catch (error) {

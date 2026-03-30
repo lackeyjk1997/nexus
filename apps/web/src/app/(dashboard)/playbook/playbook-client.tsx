@@ -825,11 +825,24 @@ function PromotedCard({
   members: Member[];
 }) {
   const originator = members.find((m) => m.id === idea.originatorId);
-  const days = daysAgo(idea.testEndDate ?? idea.createdAt);
+  const isGraduated = idea.status === "graduated";
+  const days = daysAgo(idea.graduatedAt ?? idea.testEndDate ?? idea.createdAt);
   const r = idea.results;
+  const metrics = idea.currentMetrics as CurrentMetrics | null;
   const followerNames = (idea.followers ?? [])
     .map((fid) => members.find((m) => m.id === fid)?.name)
     .filter(Boolean) as string[];
+
+  // Attribution
+  const attribution = idea.attribution as {
+    proposed_by?: string;
+    approved_by?: string;
+    impact_arr?: number;
+  } | null;
+  const approverName = attribution?.approved_by
+    ? members.find((m) => m.id === attribution.approved_by)?.name
+    : null;
+  const allAEs = members.filter((m) => m.role === "AE");
 
   return (
     <div
@@ -837,7 +850,7 @@ function PromotedCard({
         background: "#FFFFFF",
         borderRadius: 12,
         border: "1px solid #E8E5E0",
-        borderLeft: "3px solid #2D8A4E",
+        borderLeft: `3px solid ${isGraduated ? "#0C7489" : "#2D8A4E"}`,
         padding: 20,
         boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
         display: "flex",
@@ -855,14 +868,18 @@ function PromotedCard({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-          <CheckCircle size={15} color="#2D8A4E" />
+          {isGraduated ? (
+            <span style={{ fontSize: 14 }}>🎯</span>
+          ) : (
+            <CheckCircle size={15} color="#2D8A4E" />
+          )}
           <span
             style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A", flex: 1 }}
           >
             {idea.title}
           </span>
         </div>
-        <StatusBadge status="promoted" />
+        <StatusBadge status={idea.status} />
       </div>
 
       {/* Meta */}
@@ -873,20 +890,23 @@ function PromotedCard({
           display: "flex",
           gap: 8,
           alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
         <span style={{ fontWeight: 500, color: "#6B6B6B" }}>
-          {originator?.name ?? "Unknown"}
+          Proposed by {originator?.name ?? "Unknown"}
         </span>
-        <span>·</span>
-        <span>Promoted {days}d ago</span>
+        {idea.vertical && (
+          <><span>·</span><span>{formatVertical(idea.vertical)}</span></>
+        )}
       </div>
 
       <p style={{ fontSize: 13, color: "#6B6B6B", margin: 0, lineHeight: 1.5 }}>
         {idea.hypothesis}
       </p>
 
-      {r && (
+      {/* Results — prefer currentMetrics for graduated, fall back to results */}
+      {(metrics || r) && (
         <div>
           <div
             style={{
@@ -897,68 +917,109 @@ function PromotedCard({
               marginBottom: 8,
             }}
           >
-            PROVEN RESULTS
+            RESULTS
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <MetricBox
               label="Velocity"
               value={
-                r.stage_velocity_change !== undefined
+                metrics?.velocity_pct !== undefined
+                  ? `+${metrics.velocity_pct}%`
+                  : r?.stage_velocity_change !== undefined
                   ? `+${r.stage_velocity_change}%`
                   : "—"
               }
               positive
             />
-            {r.close_rate_test != null && r.close_rate_control != null && (
+            {(metrics?.sentiment_pts !== undefined || r?.sentiment_shift !== undefined) && (
+              <MetricBox
+                label="Sentiment"
+                value={`+${metrics?.sentiment_pts ?? r?.sentiment_shift} pts`}
+                positive
+              />
+            )}
+            {metrics?.close_rate_pct !== undefined ? (
+              <MetricBox label="Close Rate" value={`+${metrics.close_rate_pct}%`} positive />
+            ) : r?.close_rate_test != null && r?.close_rate_control != null ? (
               <MetricBox
                 label="Close Rate"
                 value={`${r.close_rate_test}% vs ${r.close_rate_control}%`}
                 positive
               />
-            )}
-            {r.arr_influenced !== undefined && r.arr_influenced > 0 && (
+            ) : null}
+            {(metrics?.deals_tested || r?.deals_influenced) && (
               <MetricBox
-                label="ARR Impact"
-                value={formatCurrency(r.arr_influenced)}
-                positive
+                label="Deals"
+                value={`${metrics?.deals_tested ?? r?.deals_influenced}`}
               />
             )}
-            {r.sentiment_shift !== undefined && (
-              <MetricBox
-                label="Sentiment"
-                value={`+${r.sentiment_shift} pts`}
-                positive
-              />
+            {r?.arr_influenced !== undefined && r.arr_influenced > 0 && (
+              <MetricBox label="ARR Impact" value={formatCurrency(r.arr_influenced)} positive />
             )}
           </div>
         </div>
       )}
 
-      {idea.vertical && (
-        <div
-          style={{
-            fontSize: 12,
-            color: "#2D8A4E",
-            fontWeight: 500,
-          }}
-        >
-          Now part of the standard {formatVertical(idea.vertical)} playbook
-        </div>
+      {/* Graduated: NOW SCALING TO + Attribution trail */}
+      {isGraduated && (
+        <>
+          <div
+            style={{
+              background: "#E6F4F7",
+              borderRadius: 8,
+              padding: "10px 14px",
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#0C7489", letterSpacing: "0.06em", marginBottom: 4 }}>
+              NOW SCALING TO
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#0C7489" }}>
+              All AEs · Started{" "}
+              {idea.graduatedAt
+                ? new Date(idea.graduatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : "recently"}
+            </div>
+            <div style={{ fontSize: 11, color: "#6B6B6B", marginTop: 2 }}>
+              Adopted by {allAEs.length} of {allAEs.length} AEs
+            </div>
+          </div>
+
+          {(originator || approverName) && (
+            <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.06em", marginBottom: 6 }}>
+                ATTRIBUTION
+              </div>
+              <div style={{ fontSize: 12, color: "#6B6B6B", lineHeight: 1.6 }}>
+                {originator?.name && (
+                  <><span style={{ color: "#3D3833", fontWeight: 600 }}>{originator.name}</span> proposed</>
+                )}
+                {approverName && (
+                  <> → <span style={{ color: "#3D3833", fontWeight: 600 }}>{approverName}</span> approved</>
+                )}
+                {attribution?.impact_arr && attribution.impact_arr > 0 && (
+                  <> → <span style={{ color: "#2D8A4E", fontWeight: 600 }}>{formatCurrency(attribution.impact_arr)}</span> pipeline influenced</>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {followerNames.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 12,
-            color: "#8A8078",
-          }}
-        >
-          <Users size={13} />
-          <span>{followerNames.join(", ")}</span>
-        </div>
+      {/* Promoted (non-graduated) specific */}
+      {!isGraduated && (
+        <>
+          {idea.vertical && (
+            <div style={{ fontSize: 12, color: "#2D8A4E", fontWeight: 500 }}>
+              Now part of the standard {formatVertical(idea.vertical)} playbook
+            </div>
+          )}
+          {followerNames.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#8A8078" }}>
+              <Users size={13} />
+              <span>{followerNames.join(", ")}</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1204,6 +1265,34 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
       .filter((e) => e.member !== undefined)
       .sort((a, b) => b.totalArr - a.totalArr);
   }, [scores, members]);
+
+  // Per-member experiment stats derived from ideas
+  const memberExperimentStats = useMemo(() => {
+    const map = new Map<
+      string,
+      { proposed: number; testing: number; graduated: number; arrInfluenced: number; velocityImpact: number }
+    >();
+    for (const idea of ideas) {
+      const oid = idea.originatorId;
+      if (!oid) continue;
+      if (!map.has(oid)) {
+        map.set(oid, { proposed: 0, testing: 0, graduated: 0, arrInfluenced: 0, velocityImpact: 0 });
+      }
+      const entry = map.get(oid)!;
+      if (idea.status === "proposed" || idea.status === "rejected") {
+        entry.proposed++;
+      } else if (idea.status === "testing") {
+        entry.testing++;
+      } else if (idea.status === "graduated" || idea.status === "promoted") {
+        entry.graduated++;
+        entry.arrInfluenced += idea.results?.arr_influenced ?? 0;
+        entry.velocityImpact += idea.results?.stage_velocity_change ?? 0;
+      } else if (idea.status === "retired" || idea.status === "archived") {
+        entry.proposed++;
+      }
+    }
+    return map;
+  }, [ideas]);
 
   // All attributions sorted by date desc
   const allAttributions = useMemo(() => {
@@ -1461,6 +1550,10 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
                 const sortedScores = [...memberScores].sort(
                   (a, b) => (b.score ?? 0) - (a.score ?? 0)
                 );
+                const expStats = memberExperimentStats.get(member.id);
+                const totalExpProposed = expStats
+                  ? expStats.proposed + expStats.testing + expStats.graduated
+                  : 0;
                 return (
                   <div
                     key={member.id}
@@ -1491,7 +1584,7 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
                           {member.name}
                         </div>
                         <div style={{ fontSize: 12, color: "#8A8078" }}>
-                          {member.role}
+                          {formatVertical(member.verticalSpecialization)} · {member.role}
                         </div>
                       </div>
                       {totalArr > 0 && (
@@ -1516,6 +1609,42 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
                         </div>
                       )}
                     </div>
+
+                    {/* Experiment stats */}
+                    {expStats && totalExpProposed > 0 && (
+                      <div
+                        style={{
+                          background: "#F5F3EF",
+                          borderRadius: 8,
+                          padding: "8px 12px",
+                          marginBottom: 8,
+                          display: "flex",
+                          gap: 12,
+                          flexWrap: "wrap",
+                          fontSize: 11,
+                          color: "#6B6B6B",
+                        }}
+                      >
+                        <span>
+                          <span style={{ fontWeight: 700, color: "#3D3833" }}>{totalExpProposed}</span> proposed
+                        </span>
+                        {expStats.graduated > 0 && (
+                          <span style={{ color: "#2D8A4E" }}>
+                            <span style={{ fontWeight: 700 }}>{expStats.graduated}</span> graduated
+                          </span>
+                        )}
+                        {expStats.testing > 0 && (
+                          <span style={{ color: "#B45309" }}>
+                            <span style={{ fontWeight: 700 }}>{expStats.testing}</span> testing
+                          </span>
+                        )}
+                        {expStats.velocityImpact > 0 && (
+                          <span style={{ color: "#2D8A4E", marginLeft: "auto" }}>
+                            +{expStats.velocityImpact}% velocity
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     <div
                       style={{ display: "flex", flexDirection: "column", gap: 6 }}

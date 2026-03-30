@@ -19,6 +19,7 @@ import {
   crossAgentFeedback,
   systemIntelligence,
   managerDirectives,
+  playbookIdeas,
 } from "@nexus/db";
 import { eq, desc, and, sql, or, ne, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -501,7 +502,6 @@ export async function POST(request: Request) {
   let playbookInsights: PlaybookInsight[] = [];
   let testingIdeas: PlaybookInsight[] = [];
   try {
-    const { playbookIdeas } = await import("@nexus/db");
     playbookInsights = await db
       .select({ title: playbookIdeas.title, hypothesis: playbookIdeas.hypothesis, results: playbookIdeas.results })
       .from(playbookIdeas)
@@ -528,6 +528,27 @@ export async function POST(request: Request) {
       .limit(2) as PlaybookInsight[];
   } catch (err) {
     console.error("Playbook intelligence query error (non-fatal):", err);
+  }
+
+  // ── Active experiments this AE is in the test group for ──
+  type ActiveExperiment = { title: string; hypothesis: string; category: string | null };
+  let activeExperimentsForAE: ActiveExperiment[] = [];
+  try {
+    activeExperimentsForAE = await db
+      .select({
+        title: playbookIdeas.title,
+        hypothesis: playbookIdeas.hypothesis,
+        category: playbookIdeas.category,
+      })
+      .from(playbookIdeas)
+      .where(
+        and(
+          eq(playbookIdeas.status, "testing"),
+          sql`${playbookIdeas.testGroup} @> ARRAY[${memberId}]::text[]`
+        )
+      ) as ActiveExperiment[];
+  } catch (err) {
+    console.error("Active experiments query error (non-fatal):", err);
   }
 
   // ── Stakeholder engagement alerts ──
@@ -752,6 +773,19 @@ This deal is part of an active experiment. Apply the following approach:
 ${testingIdeas.map(p => `- ${p.title}: ${p.hypothesis}`).join("\n")}
 Note: This is being tested. Include the approach in your recommendations.
 ` : ""}
+${activeExperimentsForAE.length > 0 ? `## ACTIVE EXPERIMENTS FOR THIS REP
+${rep?.name || "This AE"} is currently testing the following playbook experiments. Incorporate these methodologies into the call prep where relevant:
+
+${activeExperimentsForAE.map(exp => `EXPERIMENT: ${exp.title}
+HYPOTHESIS: ${exp.hypothesis}
+CATEGORY: ${exp.category || "general"}`).join("\n\n")}
+
+When suggesting call strategy, note where the experiment methodology applies and frame it as: "Per your active experiment: [experiment name], consider..."
+
+The experiment injection should feel natural — contextual to THIS deal and THIS meeting type. For example: "Given this is a discovery call with a Healthcare CTO, your active experiment suggests extending to 60 minutes and building a prototype during the session."
+
+Include a dedicated "active_experiments" array in the JSON output with each experiment and a one-sentence contextual application to THIS specific call.
+` : ""}
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
 
@@ -817,6 +851,12 @@ Return ONLY valid JSON with this exact structure:
   ],
   "suggested_next_steps": [
     "What to propose at end of call"
+  ],
+  "active_experiments": [
+    {
+      "name": "Experiment title — only include if this rep is in an active experiment test group",
+      "application": "One sentence: how to apply this methodology to THIS specific call"
+    }
   ]
 }`;
 
@@ -856,6 +896,7 @@ Return ONLY valid JSON with this exact structure:
         roleInDeal: c.roleInDeal,
         isPrimary: false, // not available in this select
       })),
+      activeExperimentNames: activeExperimentsForAE.map((e) => e.title),
     });
   } catch (err) {
     console.error("Call prep error:", err);

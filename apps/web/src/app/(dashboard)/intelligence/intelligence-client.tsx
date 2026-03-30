@@ -285,6 +285,7 @@ export function IntelligenceClient({
               { key: "content_gap", label: "Content Gaps" },
               { key: "process_friction", label: "Process" },
               { key: "win_pattern", label: "Win Patterns" },
+              { key: "process_innovation", label: "Playbook" },
             ].map((f) => (
               <button
                 key={f.key}
