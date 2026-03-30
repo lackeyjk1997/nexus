@@ -3,10 +3,11 @@
 ## Project Overview
 Nexus is a full-cycle AI sales orchestration platform where human AEs direct AI agents to automate key elements of the buyer's journey. Built as a functional demo for Anthropic's mid-market sales leadership. Every person in the sales cycle gets their own configurable AI agent connected through an organizational learning loop — feedback from downstream roles reshapes upstream agent behavior.
 
-The platform has three layers:
+The platform has four layers:
 1. **Context Engine** — observations, intelligence clustering, cross-agent feedback, entity extraction, agent config. The agent knows things.
 2. **Action Layer** — call prep, email drafting, intent-routed agent bar. The agent does things.
 3. **Intelligence Layer** — system intelligence (data-driven patterns), manager directives, win/loss patterns, stakeholder alerts. The system learns from everything happening inside it.
+4. **Playbook Layer** — process intelligence, influence scoring, market signals, experiment tracking. The system measures what works and who's moving the needle.
 
 ## Tech Stack
 - **Monorepo:** Turborepo + pnpm workspaces
@@ -63,6 +64,11 @@ The platform has three layers:
 - Hover: bg-[#E8DDD3]
 - Driven by React state, not CSS pseudo-classes
 
+### Tab UI Pattern (used on Intelligence and Playbook pages)
+- Active tab: text-[#3D3833], font-weight 600, border-bottom 2px solid #E07A5F
+- Inactive: text-[#8A8078], font-weight 400, border-bottom 2px solid transparent
+- Tab bar: border-bottom 1px solid rgba(0,0,0,0.06), margin-bottom 24px
+
 Font: DM Sans. Border radius: 12px cards, 8px buttons, 6px badges.
 
 ## Vertical Colors
@@ -80,20 +86,20 @@ New Lead → Qualified → Discovery → Technical Validation → Proposal → N
 ## Organization Structure
 
 ### Team Members (14 people in `teamMembers` table)
-- **Sarah Chen** — AE, Healthcare
+- **Sarah Chen** — AE, Healthcare (ID: ec26c991-f580-452c-ae60-14b94800e920)
 - **Priya Sharma** — AE, Technology
-- **Marcus Thompson** — MANAGER, General
-- **Ryan Foster** — AE, Healthcare
+- **Marcus Thompson** — MANAGER, General (ID: fcbfac19-88eb-4a34-8582-b1cdfa03055b)
+- **Ryan Foster** — AE, Healthcare (ID: f7c15224-0883-46b7-affa-990eeedaac07)
 - **James Wilson** — AE, General
 - **Elena Rodriguez** — AE, General
-- **Alex Kim** — SA, Healthcare
+- **Alex Kim** — SA, Healthcare (ID: eae38d09-1cfb-4044-8a16-b839bcb7d5d7)
 - **Maya Johnson** — SA, Technology
-- **Tom Bradley** — SA, General
+- **Tom Bradley** — SA, General (ID: 27cb3617-b187-40a5-9761-f878ce89f73d)
 - **Jordan Lee** — BDR, Healthcare
 - **Casey Martinez** — BDR, Financial Services
 - **Nina Patel** — CSM, Healthcare
 - **Chris Okafor** — CSM, Technology
-- **David Park** — AE, Financial Services (original seed member)
+- **David Park** — AE, Financial Services (ID: 4443c9bb-5a4a-405a-9b99-f0e97e86b0d2)
 
 ### Support Function Members (3 people in `supportFunctionMembers` table)
 - **Lisa Park** — Sales Enablement
@@ -106,7 +112,7 @@ Support function members are stored separately because they don't fit the `teamM
 
 ## Database Schema
 
-### 27 Tables in `packages/db/src/schema.ts`
+### 29 Tables in `packages/db/src/schema.ts`
 
 **Core CRM:**
 | Table | Purpose | Key Columns |
@@ -159,8 +165,14 @@ Support function members are stored separately because they don't fit the `teamM
 **System Intelligence:**
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `systemIntelligence` | Pre-computed data patterns | vertical (nullable = org-wide), insightType (transcript_pattern/stakeholder_pattern/competitive_pattern/velocity_pattern/win_pattern/loss_pattern/meddpicc_pattern/process_insight), title, insight, supportingData (jsonb: sample_size, time_range, metric), confidence, relevanceScore, status |
+| `systemIntelligence` | Pre-computed data patterns | vertical (nullable = org-wide), insightType (transcript_pattern/stakeholder_pattern/competitive_pattern/velocity_pattern/win_pattern/loss_pattern/meddpicc_pattern/process_insight/market_signal), title, insight, supportingData (jsonb), confidence (decimal 3,2), relevanceScore (decimal 3,2), status |
 | `managerDirectives` | Leadership directives | authorId, scope (org_wide/vertical/role/person), directive, priority (mandatory/strong/guidance), category (pricing/positioning/process/competitive/messaging), isActive, expiresAt |
+
+**Playbook Intelligence:**
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `playbookIdeas` | Process experiments | originatorId, originatedFrom (observation/close_analysis/manual/system_detected/cross_agent), sourceObservationId, title, hypothesis, category (process/messaging/positioning/discovery/closing/engagement), vertical, status (proposed/testing/promoted/retired), testStartDate, testEndDate, testGroupDeals[], controlGroupDeals[], results (jsonb), followers[], followerCount |
+| `influenceScores` | Per-member influence | memberId, dimension (process_innovation/competitive_intel/technical_expertise/deal_coaching/customer_insight), vertical, score (0-100), tier (high_impact/growing/contributing/new), attributions (jsonb array), lastContributionAt |
 
 **Resources:**
 | Table | Purpose |
@@ -180,7 +192,7 @@ Support function members are stored separately because they don't fit the `teamM
 | Route | Methods | Purpose |
 |-------|---------|---------|
 | `/api/deals` | GET | All deals with company/member/contact joins |
-| `/api/deals/stage` | POST | Update deal stage with close/lost and close/won outcome capture (lossReason, closeCompetitor, closeNotes, closeImprovement, winTurningPoint, winReplicable) |
+| `/api/deals/stage` | POST | Update deal stage with close/lost and close/won outcome capture |
 | `/api/deals/resolve` | POST | Resolve deal from name fragment or ID; returns contacts for agent context |
 | `/api/companies` | GET | All companies (id, name, industry) |
 | `/api/team-members` | GET | All team members |
@@ -190,7 +202,7 @@ Support function members are stored separately because they don't fit the `teamM
 ### Observation System
 | Route | Methods | Purpose |
 |-------|---------|---------|
-| `/api/observations` | GET, POST | GET: list observations. POST: full pipeline — classify with Claude, extract entities, resolve to CRM, calculate ARR, semantic cluster matching, routing to support functions, cross-agent feedback |
+| `/api/observations` | GET, POST | GET: list observations. POST: full pipeline — classify with Claude (9 signal types incl. process_innovation), extract entities, resolve to CRM, calculate ARR, semantic cluster matching, routing to support functions, cross-agent feedback, auto-create playbook ideas for process_innovation signals |
 | `/api/observations/[id]/follow-up` | POST | Process follow-up response, recalculate cluster ARR, fire notification chains |
 | `/api/observations/clusters` | GET | All clusters ordered by recency |
 | `/api/observation-routing` | GET, PATCH | GET: routing records by function/member. PATCH: update status with timestamps |
@@ -200,6 +212,7 @@ Support function members are stored separately because they don't fit the `teamM
 |-------|---------|---------|
 | `/api/field-queries` | GET, POST | GET: pending questions for AEs or queries for managers. POST: two modes — (1) org-wide: analyze question, generate deal-specific AE questions (3/AE limit, 24h expiry); (2) deal-scoped (when `dealId` provided): AI answers from deal context first, falls back to one targeted question to deal owner |
 | `/api/field-queries/respond` | POST | Process response, generate give-back insight, create observation, update aggregated answer |
+| `/api/field-queries/suggestions` | GET | Generates suggested questions from active observation clusters by severity |
 
 ### Call Analysis
 | Route | Methods | Purpose |
@@ -212,47 +225,64 @@ Support function members are stored separately because they don't fit the `teamM
 |-------|---------|---------|
 | `/api/agent/configure` | POST, PUT | POST: interpret natural language config via Claude. PUT: save confirmed config + create version |
 | `/api/agent/feedback` | POST | Create feedback request from rating |
-| `/api/agent/call-prep` | POST | Generate structured call brief from deal + MEDDPICC + observations + clusters + agent config + team intelligence + system intelligence + manager directives + win/loss patterns + stakeholder alerts |
+| `/api/agent/call-prep` | POST | Generate structured call brief from 8 intelligence layers (see Call Prep section below) |
 | `/api/agent/draft-email` | POST | Generate personalized email draft using deal context, transcript analysis, agent config voice/guardrails + team intelligence + system intelligence + directives |
 | `/api/agent/save-to-deal` | POST | Save any agent action as a deal activity (dedupes same type+deal within 1 hour) |
-| `/api/deals/close-analysis` | POST | AI-powered close/loss analysis — gathers full deal context (MEDDPICC, transcripts, observations, stakeholder engagement, system intelligence) and generates structured analysis with dynamic factor chips and questions |
-| `/api/field-queries/suggestions` | GET | Generates suggested questions from active observation clusters by severity — used by DealQuestionInput and Intelligence dashboard |
+| `/api/deals/close-analysis` | POST | AI-powered close/loss analysis — gathers full deal context and generates structured analysis with dynamic factor chips |
+
+### Demo System
+| Route | Methods | Purpose |
+|-------|---------|---------|
+| `/api/demo/reset` | POST | Resets MedVista to negotiation, clears test data from last 4 hours, marks notifications unread, recalculates cluster metrics |
+| `/api/demo/ask` | POST | AI demo assistant with comprehensive product knowledge base. Accepts { question, currentPage, currentPersona }. Responds in 2-4 sentences with specific feature references. |
 
 ---
 
-## Pages & Components
+## Pages & Navigation
+
+### Sidebar (6 items, all roles)
+1. Command Center (`/command-center`)
+2. Pipeline (`/pipeline`)
+3. Intelligence (`/intelligence`)
+4. Playbook (`/playbook`)
+5. Outreach (`/outreach`)
+6. Agent Config (`/agent-config`)
+
+### Landing Page (`/` — outside dashboard layout)
+- Standalone page with thesis text, "Enter Demo" button, contact info, "Reset Demo Data" button
+- `?reset=true` query param calls POST /api/demo/reset and clears localStorage
+- "Enter Demo" sets `nexus_demo_step=1` and navigates to /pipeline
+- Shareable link: `https://nexus-web-plum-iota.vercel.app?reset=true`
 
 ### Dashboard Pages (`apps/web/src/app/(dashboard)/`)
-| Route | Server/Client | Purpose |
-|-------|--------------|---------|
-| `/command-center` | Both | Executive dashboard: pipeline overview, activities, notifications |
-| `/pipeline` | Both | Pipeline board (Kanban/table/chart views), drag-to-move, filters |
-| `/pipeline/[id]` | Both | Deal workspace: details, contacts, activities, calls, MEDDPICC, "Prep Call" button, "Draft Follow-Up" button, MANAGER-only "Ask about this deal" input, Close Analysis card on closed deals |
-| `/prospects` | Both | Contact database with company/deal associations |
-| `/calls` | Server | Call transcript library with analysis status |
-| `/analyze` | Client | Real-time streaming call analyzer + "Draft Follow-Up Email" button |
-| `/observations` | Both | Observation feed with classification and clustering |
-| `/intelligence` | Both | Cross-functional intelligence dashboard: clusters, routing, field queries, "Ask Team" input |
-| `/outreach` | Both | Email sequence builder and campaign tracking |
-| `/agent-config` | Both | Agent configuration with natural language instructions and feedback loop |
-| `/agent-admin` | Both | Agent administration view |
-| `/analytics` | Both | Pipeline metrics, velocity, win rates, team performance |
-| `/team` | Server | Team roster and org chart |
+| Route | Purpose |
+|-------|---------|
+| `/command-center` | Executive dashboard: pipeline overview, activities, notifications |
+| `/pipeline` | Pipeline board (Kanban/table/chart views), drag-to-move, filters |
+| `/pipeline/[id]` | Deal workspace: details, contacts, activities, calls, MEDDPICC, "Prep Call", "Draft Follow-Up", MANAGER-only "Ask about this deal", Close Analysis card, **Sentiment Trajectory** (Prospect Engagement section showing call quality scores across transcripts with trend direction) |
+| `/intelligence` | **3 tabs**: Patterns (clusters, metrics, field queries, directives, AE impact), Field Feed (raw observation stream), Close Intelligence (win/loss factor cards) |
+| `/playbook` | **3 tabs**: Active Experiments (testing + proposed ideas with metrics), What's Working (promoted + retired ideas with results), Influence (team influence cards, market signals, attribution trail) |
+| `/outreach` | Email sequences with **Intelligence Brief card** at top (competitive patterns, win patterns, messaging directives from clusters + managerDirectives) |
+| `/agent-config` | Agent configuration with natural language instructions and feedback loop |
+| `/observations` | **Redirects to `/intelligence?tab=feed`** |
+| `/prospects` | Contact database (not in sidebar — accessible via direct URL) |
+| `/calls` | Call transcript library (not in sidebar) |
+| `/analyze` | Real-time streaming call analyzer (not in sidebar) |
+| `/analytics` | Pipeline metrics, velocity, win rates (not in sidebar) |
+| `/team` | Team roster and org chart (not in sidebar) |
+| `/agent-admin` | Agent administration view (not in sidebar) |
 
 ### Key Components (`apps/web/src/components/`)
 | Component | Purpose |
 |-----------|---------|
-| `observation-input.tsx` | **Universal Agent Bar** (~1800 lines) — multi-mode interaction surface. Handles 4 intents: observe, quick check, call prep, email draft. Intent detection routes user input. 6-phase state machine for observations: collapsed → expanded → submitting → follow_up → follow_up_submitting → giveback. Also handles call_prep_context, call_prep_loading, draft_loading, draft_result phases. |
-| `stage-change-modal.tsx` | Modal for pipeline stage transitions. When target is closed_won/closed_lost, shows outcome capture card with chip UI for loss reasons, improvements, win turning points, and replicable notes. Stage change blocked until outcome is captured. |
-| `deal-question-input.tsx` | **Deal-Scoped Question Input** — Marcus's "Ask about this deal" component. Visible only to MANAGER role on deal detail pages. 4-phase state machine: collapsed → expanded → submitting → answered. Generates up to 3 context-aware suggestions from MEDDPICC gaps, competitor data, and stage velocity. AI answers from deal context first, falls back to one targeted question to deal owner. |
-| `walkthrough.tsx` | **Guided Tour** — `WalkthroughOverlay` (4-step tour with persona switching + navigation) + `TourButton` (restart tour icon in top bar). Welcome screen (step -1) + 4 steps: Call Prep → Share Intel → VP Pattern → Deals Close. localStorage `nexus_walkthrough_seen` flag controls first-visit auto-display. |
+| `observation-input.tsx` | **Universal Agent Bar** (~1800 lines) — multi-mode interaction surface. Handles 4 intents: observe, quick check, call prep, email draft. Appears on Pipeline, Outreach, Intelligence, and deal detail pages. |
+| `stage-change-modal.tsx` | Modal for pipeline stage transitions with close/lost/won outcome capture. |
+| `deal-question-input.tsx` | **Deal-Scoped Question Input** — MANAGER-only "Ask about this deal" on deal pages. |
+| `demo-guide.tsx` | **Demo Guide** — 3 modes: Tour (6-step guided walkthrough with element highlighting, persona switching, auto-navigation), Assistant (contextual hints + Claude-powered chat via /api/demo/ask), Hidden (dismissed, re-openable via top bar). Exports `useTourState()` hook for top bar consumption. |
 | `activity-feed.tsx` | Timeline activity list with type icons and observation entries |
-| `quick-questions.tsx` | Legacy standalone quick questions (functionality merged into agent bar) |
-| `providers.tsx` | PersonaContext provider for user/role switching. Persists selected persona to `localStorage.nexus_persona_id` and restores on page reload. Defaults to Sarah Chen. |
-| `layout/sidebar.tsx` | Role-based navigation sidebar |
-| `layout/top-bar.tsx` | Top header bar with `TourButton`, user switcher (4 sections: Sales Team, Leadership, Solutions & Support, Support Functions — Support Functions collapsed by default), notification bell |
-| `analyzer/*` | 10 sub-components for call analysis display (stream, summary, coaching, deal score, key moments, risk signals, sentiment arc, talk ratio, transcript input, link to deal) |
-| `feedback/agent-feedback.tsx` | Thumbs up/down rating with tags |
+| `providers.tsx` | PersonaContext provider for user/role switching. Persists to `localStorage.nexus_persona_id`. Defaults to Sarah Chen. |
+| `layout/sidebar.tsx` | 6-item navigation sidebar with FlaskConical icon for Playbook |
+| `layout/top-bar.tsx` | Top header with GuideLink (3 states: Resume Tour, Assistant, Guide), user switcher (4 sections), notification bell |
 
 ---
 
@@ -260,121 +290,82 @@ Support function members are stored separately because they don't fit the `teamM
 
 ### 1. Observation System
 AEs submit observations via the agent bar. The POST pipeline:
-1. **Classify** with Claude — extracts signal type, urgency, scope, vertical, entities
+1. **Classify** with Claude — extracts signal type, urgency, scope, vertical, entities. 9 signal types: competitive_intel, content_gap, deal_blocker, win_pattern, process_friction, agent_tuning, cross_agent, field_intelligence, **process_innovation**
 2. **Resolve entities** — fuzzy matches extracted accounts/deals/competitors to CRM records
 3. **Calculate ARR** — sums deal values from linked deals
 4. **Semantic cluster matching** — Claude compares against existing cluster titles/descriptions (confidence >= 0.6)
 5. **Save observation** with entity links
 6. **Create/match cluster** — if no match, Claude groups unclustered observations semantically
 7. **Append quotes** to cluster with deduplication
-8. **Route to support functions** — creates `observation_routing` records for enablement/product marketing/deal desk
-9. **Process agent signals** — `agent_tuning` and `cross_agent` signals trigger config changes
-10. **Follow-up** — Claude decides if clarification needed; if deal context missing, generates deal selection chips
+8. **Route to support functions** — creates `observation_routing` records
+9. **Auto-create playbook idea** — if signal is `process_innovation`, creates a `playbookIdeas` record
+10. **Process agent signals** — `agent_tuning` and `cross_agent` signals trigger config changes
+11. **Follow-up** — Claude decides if clarification needed; if deal context missing, generates deal selection chips
 
-### 2. Intelligence Dashboard
-Server component fetches clusters, observations, and routing records. Client component shows:
-- Observation clusters with severity, ARR impact, and resolution status
-- Support function routing with acknowledgment tracking
-- "Ask Team" input for managers/support to create field queries
-- "Your Queries" section with auto-refresh every 30 seconds
-- Real average response time from routing acknowledgment timestamps
+### 2. Intelligence Dashboard (3 tabs)
+**Patterns tab (default):** Metrics cards (active patterns, ARR at risk, observations, avg response, resolution rate). Observation cluster cards with severity, field voices, recommended actions. Manager-only: "Ask about what you're seeing" input, "Your Queries" with progress bars, **"Your Directives"** grouped by priority (mandatory/strong/guidance). AE-only: "Your Impact" card.
 
-### 3. Field Query Engine
+**Field Feed tab:** Raw observation stream (merged from former /observations page). Each observation shows observer name/role, raw text, classification badges, cluster assignment (clickable → switches to Patterns tab), status indicator.
+
+**Close Intelligence tab:** Deals Lost/Won summary cards with factor categories, counts, ARR totals.
+
+### 3. Playbook System
+Process intelligence — ideas about how to sell better, tracked and measured by deal outcomes.
+
+**Active Experiments tab:** Shows testing ideas with early results (velocity change, sentiment shift, adoption count, confidence level) and proposed ideas waiting for adoption.
+
+**What's Working tab:** Promoted ideas (proven winners with close rates, ARR impact, followers) with green left border. Retired ideas (data showed they didn't work) with coral left border, referencing the replacement play.
+
+**Influence tab:** Team influence cards sorted by total ARR influenced, with per-dimension tier icons (★ High Impact, ● Growing, ○ Contributing). Market signals from `systemIntelligence` records with `insightType = 'market_signal'`. Attribution trail showing chronological chain of how inputs changed outcomes.
+
+### 4. Field Query Engine
 Managers ask questions → AI generates deal-specific questions for AEs → AEs respond with one tap → responses update dashboard with aggregated answers.
 - 3 questions per AE limit, 24h expiration
 - Give-back insight generated for each response
 - Responses auto-create observations
 
-### 4. Agent Bar (Universal Interaction Surface)
-The bar at the bottom of every page detects intent from natural language input:
-- **"prep my MedCore call"** → call prep (resolves entity, generates structured brief)
-- **"draft follow-up to Oliver"** → email draft (resolves contact, generates email in AE's voice)
-- **"CompetitorX dropping prices"** → observation (existing classification flow)
+### 5. Agent Bar (Universal Interaction Surface)
+The bar at the bottom of Pipeline, Outreach, Intelligence, and deal detail pages detects intent:
+- **"prep my MedCore call"** → call prep
+- **"draft follow-up to Oliver"** → email draft
+- **"CompetitorX dropping prices"** → observation (classification flow)
 - **"what's the status on Atlas?"** → quick answer from deal data
-- **"✦ 1 quick check waiting"** → field query response (priority collapsed state)
+- **"✦ 1 quick check waiting"** → field query response
 
-Meeting type selector starts BLANK (no auto-selection) — user must explicitly pick a type before generating.
+### 6. Call Prep — Full Intelligence Stack (8 Layers)
+**Layer 1 — Rep's Own Config:** Persona, communication style, guardrails, deal stage rules
+**Layer 2 — Team Intelligence:** Teammates' configs matched by vertical + cross-agent feedback
+**Layer 3 — System Intelligence:** Data-driven patterns from `systemIntelligence` table
+**Layer 4 — Win/Loss Patterns:** Closed deals in same vertical with outcome data
+**Layer 5 — Stakeholder Alerts:** Under-engaged champions and economic buyers
+**Layer 6 — Manager Directives:** Mandatory/strong/guidance constraints from leadership
+**Layer 7 — CRM Context:** Deal data, MEDDPICC, contacts, activities, observations, clusters, transcripts, resources
+**Layer 8 — Playbook Intelligence:** Promoted playbook ideas matching deal vertical + testing ideas where this deal is in the test group
 
-### 5. Call Prep — Full Intelligence Stack
-The call prep API gathers context from every subsystem and injects it into the Claude prompt. The brief includes:
+### 7. Sentiment Trajectory
+Deal detail pages show "Prospect Engagement" section in the Overview tab when transcripts exist. Shows call quality scores as colored progress bars (green ≥80, amber 60-79, coral <60), sentiment labels (Committed/Engaged/Interested/Cautious/Uncertain), and trend direction (improving/stable/declining with point delta).
 
-**Layer 1 — Rep's Own Config (Session A)**
-- Persona, communication style, guardrails, deal stage rules from `agentConfigs`
-- Output matches the rep's voice, not generic AI
+### 8. Demo Guide (3 modes)
+**Tour mode:** 6-step guided walkthrough: (1) Click MedVista → (2) Prep Call + see brief → (3) Share observation → (4) VP Intelligence view → (5) Sarah's quick check → (6) System compounds summary. Element highlighting with CSS outline animation, persona switching, auto-navigation.
 
-**Layer 2 — Team Intelligence (Session A)**
-- Queries team members whose `verticalSpecialization` matches the deal's vertical
-- Also checks `outputPreferences.industryFocus` for broader matching
-- Filters guardrails to vertical-relevant ones
-- Queries `crossAgentFeedback` for direct teammate recommendations
-- Tagged with `📋 Team Intel from [Name] ([Role])` in the output
+**Assistant mode:** Contextual hints based on current page + persona. Claude-powered chat via POST /api/demo/ask. Dark card in bottom-left corner.
 
-**Layer 3 — System Intelligence (Session B)**
-- Queries `systemIntelligence` for data-driven patterns (transcript, stakeholder, competitive, velocity, win/loss, MEDDPICC patterns)
-- Matches on deal vertical + org-wide insights
-- Tagged with `📊` in the output
-
-**Layer 4 — Win/Loss Patterns (Session B)**
-- Queries closed deals in the same vertical with outcome data
-- Surfaces loss patterns (what went wrong) and win patterns (what worked)
-- Tagged with `📉` and `🏆` in the output
-
-**Layer 5 — Stakeholder Alerts (Session B)**
-- Counts activities per key contact (champion, economic_buyer) on this deal
-- Flags under-engaged stakeholders (fewer than 2 logged interactions)
-- Tagged with `⚠️` in the output
-
-**Layer 6 — Manager Directives (Session B)**
-- Queries `managerDirectives` matching deal vertical + org-wide
-- Mandatory directives are hard constraints the AI cannot violate
-- Tagged with `🔴 MANDATORY`, `🟡 STRONG`, `🟢 GUIDANCE`
-
-**Layer 7 — CRM Context (original)**
-- Deal data, MEDDPICC scores, contacts, recent activities, observations, clusters, transcript analyses, resources
-
-### 6. Email Drafting
-Same intelligence stack as call prep (lighter version — focuses on competitive patterns, win/loss, messaging directives). Email is written in the rep's voice using persona + communication style from agent config.
-
-### 7. Agent Config
-Per-member AI configuration: persona, communication style, guardrails, deal stage rules, industry focus. Config feeds into all AI actions (call prep, email draft, transcript coaching, observation give-back). Natural language instruction interpretation via Claude. Version history tracks changes by user, AI, or feedback loop.
-
-### 8. Cross-Agent Feedback Loop
-Observations with `cross_agent` signals trigger config changes on related agents. Claude suggests minimal config modifications. Version records created. Affected reps notified. Downstream role feedback reshapes upstream agent behavior.
+**Hidden mode:** Dismissed by user. Re-openable via "Assistant" button in top bar.
 
 ### 9. Close/Lost Capture
 When a deal moves to Closed-Won or Closed-Lost via the stage change modal:
-- **Closed-Lost**: Captures loss reason (chip), competitor name (if competitor-won), notes, improvement suggestion (chip)
-- **Closed-Won**: Captures turning point (chip), replicable notes
-- Stage change is blocked until outcome is captured
-- Data feeds into win/loss pattern analysis for future call preps
+- AI pre-populates loss/win analysis from deal history
+- Rep confirms/corrects/adds with chip UI
+- Confirmed factors become observations feeding clusters
+- Close analysis visible on deal detail Overview tab
 
-### 10. Deal-Scoped Field Queries
-MANAGER role sees "Ask about this deal" input on deal detail pages. Flow:
-1. AI generates up to 3 context-aware suggestions from MEDDPICC gaps (economicBuyer < 50, champion < 50, decisionProcess < 50), competitor presence, days in stage > 30
-2. Manager types or picks a suggestion → POST to `/api/field-queries` with `dealId`
-3. `handleDealScopedQuery()` gathers deal + MEDDPICC + contacts + activities + observations + cross-agent feedback
-4. Claude answers from available data with `NEEDS_AE_INPUT: true/false` directive
-5. If AI can answer: returns `immediate_answer` directly
-6. If AI needs rep input: sends ONE targeted question to the deal owner (not broadcast to multiple AEs)
-7. UI shows: right-aligned question bubble → sparkle card with answer, optional "question sent to [name]" footer
-
-### 11. Close Analysis View
-Closed deals show a `CloseAnalysisCard` on their detail page (reads from `closeAiAnalysis`, `closeFactors`, `winFactors` columns):
-- AI-generated summary of what happened
-- Key factors with evidence (✓ for wins, ✕ for losses)
-- Loss reason badge + competitor name
-- Improvement suggestion or win turning point + replicable notes
-- MEDDPICC scores at close
-- Stakeholder engagement flags by role
-
-### 12. Guided Walkthrough
-4-step guided tour for first-time visitors:
-1. **AI Call Prep** → navigates to MedVista deal page
-2. **Share Intel** → navigates to /pipeline
-3. **VP Sees the Pattern** → navigates to /intelligence, switches persona to Marcus Thompson
-4. **Deals Close, the System Learns** → navigates to NordicCare Patient deal, switches to Ryan Foster
-
-Welcome screen (step -1) shows before the tour with "Take the Tour — 2 min" and "Explore on my own" options. Tour state stored in `localStorage.nexus_walkthrough_seen`. `TourButton` (? icon) in top bar lets users restart the tour after dismissing it.
+### 10. Demo Reset
+POST /api/demo/reset:
+- Resets MedVista to Negotiation / 65% win probability, clears close analysis fields
+- Resets other deals' win probabilities to seed values
+- Deletes observations, field queries, activities from last 4 hours
+- Marks all notifications unread
+- Recalculates cluster counts and ARR totals
 
 ---
 
@@ -391,13 +382,68 @@ Welcome screen (step -1) shows before the tour with "Take the Tour — 2 min" an
 | `seed-agent-actions.ts` | Demo call prep and email draft activities on MedCore deal |
 | `seed-hero-activities.ts` | Recent hero activities for command center timeline |
 | `seed-transcripts-resources.ts` | Demo call transcripts and resource hub documents |
-| `seed-cross-feedback.ts` | 8 cross-agent feedback records + enriched SC/CSM configs with vertical insights |
-| `seed-system-intelligence.ts` | 10 system intelligence insights + 6 manager directives + 5 closed deals with outcome data |
-| `seed-close-analysis.ts` | Seeded AI close analysis data on closed deals (closeAiAnalysis, closeFactors, winFactors) |
-| `seed-final-polish.ts` | Final demo polish: reduces to 10 curated deals, creates NordicMed Group + Atlas Capital, fills MEDDPICC/contacts/activities on closed deals, deduplicates observations, recalculates cluster metrics |
+| `seed-cross-feedback.ts` | 8 cross-agent feedback records + enriched SC/CSM configs |
+| `seed-system-intelligence.ts` | 10 system intelligence insights + 6 manager directives + 5 closed deals |
+| `seed-close-analysis.ts` | Seeded AI close analysis data on closed deals |
+| `seed-final-polish.ts` | Final demo polish: 10 curated deals, dedup observations, recalculate metrics |
+| `seed-intelligence-fixes.ts` | Dedup observations, seed acknowledged_at, recalculate cluster ARR |
+| `seed-playbook.ts` | 8 playbook ideas (3 promoted, 3 testing, 1 proposed, 1 retired), 12 influence scores for 5 members, 5 market signals |
 | `backfill-routing.ts` | Creates 34 routing records from existing observations |
-| `seed-intelligence-fixes.ts` | Session C fixes: dedup observations, seed acknowledged_at, recalculate cluster ARR, expand field query targeting |
 | `backfill-entities.ts` | Links 4 observations to accounts/deals via fuzzy matching |
+
+---
+
+## Demo Data State
+
+### 10 Curated Deals
+| Deal | Company | AE | Stage | Value | Vertical |
+|------|---------|----|----|-------|----------|
+| MedVista Enterprise Platform | MedVista Health Systems | Sarah Chen | Negotiation | €2.4M | Healthcare |
+| HealthFirst Analytics Suite | HealthFirst Medical | Sarah Chen | Closed Lost | €3.2M | Healthcare |
+| TrustBank Digital Transformation | TrustBank Financial | Sarah Chen | Technical Validation | €950K | Financial Services |
+| NordicMed Group Platform | NordicMed Group | Ryan Foster | Proposal | €1.6M | Healthcare |
+| Atlas Capital Analytics | Atlas Capital | David Park | Negotiation | €580K | Financial Services |
+| HealthBridge Analytics Platform | HealthBridge Analytics | Sarah Chen | Closed Lost | €1.2M | Healthcare |
+| MedTech Solutions Platform | MedTech Solutions | Ryan Foster | Closed Won | €2.1M | Healthcare |
+| NordicCare — Patient Records | NordicCare Health | Ryan Foster | Closed Lost | €1.8M | Healthcare |
+| PharmaBridge Analytics | PharmaBridge | Sarah Chen | Discovery | €340K | Healthcare |
+| NordicCare API Integration | NordicCare Group | Sarah Chen | Technical Validation | €780K | Healthcare |
+
+### 8 Curated Users (in switcher)
+Sales Team: Sarah Chen (AE), David Park (AE), Ryan Foster (AE)
+Leadership: Marcus Thompson (MANAGER)
+Solutions & Support: Alex Kim (SA)
+Support Functions: Lisa Park (Enablement), Michael Torres (Product Marketing), Rachel Kim (Deal Desk)
+
+Default persona: Sarah Chen. Persisted via `localStorage.nexus_persona_id`.
+
+### 8 Playbook Ideas
+3 promoted (compliance-led discovery, CISO engagement, security doc pre-delivery), 3 testing (post-disco prototype, two-disco minimum, multi-threaded engagement), 1 proposed (competitive battlecard review), 1 retired (ROI-first messaging)
+
+### 5 Market Signals
+Seeded as `systemIntelligence` records with `insightType = 'market_signal'`. Prospect behavioral patterns that predict deal outcomes.
+
+---
+
+## Known Issues / Gotchas
+- **MedVista stage**: Reset to Negotiation via demo reset. May need manual reset after testing close/lost capture.
+- **PgArray error**: If schema changes, Next.js may throw `PgArray` errors from stale cache. Fix: `rm -rf apps/web/.next && pnpm dev`.
+- **No auth**: Persona switching via PersonaProvider context. No real authentication.
+- **`verticalSpecialization` is a single enum**: Team members have ONE vertical. `outputPreferences.industryFocus` provides broader coverage.
+- **`initiatedBy` on `fieldQueries` has no FK**: Can reference either `teamMembers` or `supportFunctionMembers`.
+- **Dev server port**: Default is 3001 but auto-increments if occupied.
+- **systemIntelligence confidence/relevanceScore**: Both are `decimal(3,2)` — values must be 0.00-9.99, not percentages.
+- **Influence scores are seeded data**: No live computation — future work.
+- **Playbook ideas are seeded data**: The "Start Test" and "Follow" buttons are UI-only in the current demo.
+
+---
+
+## Design Principles
+- **One input → multiple outputs** is the core product thesis.
+- **All conversational UIs use inline responses** (no toasts), numbered card chips + text input, React state for chip selection, "Nexus Intelligence" framing.
+- **Seed data and live generation must produce identical data shapes.**
+- **Model string**: Always use `claude-sonnet-4-20250514` (full identifier, not shorthand).
+- **Influence is measured by outcomes, not activity.** The Playbook system tracks whose ideas actually moved revenue — not who talked the most.
 
 ---
 
@@ -481,63 +527,22 @@ Intelligence dashboard with clusters, support function personas (Lisa Park, Mich
 - **Close Analysis view**: `CloseAnalysisCard` on closed deal pages showing AI analysis, factors, MEDDPICC at close, stakeholder flags
 - **Guided walkthrough**: 4-step tour overlay with welcome screen, persona switching, and deal navigation. `TourButton` for restart
 
-### Bug Fixes (across sessions)
-- Follow-up fix: Removed keyword gating for follow-up decisions. Claude API now controls whether to ask follow-ups.
-- Clustering bug: Fixed keyword threshold excluding short terms (>5 → >=4), added deduplication.
-- FK constraint: Removed FK on `fieldQueries.initiatedBy` (can reference either table).
-- PgArray error: Stale `.next` cache after schema changes — fix with `rm -rf .next`.
-- Call prep 500 errors: fixed missing resource table reference, added error feedback to buttons.
-- Activity deduplication: `save-to-deal` now dedupes same activity type + deal within 1 hour.
-- FK constraint on observation delete: must delete observation_routing records before deleting observations.
-- FK constraint on contact delete: must delete email_steps → emailSequences (by contactId) before deleting contacts.
-- Hydration mismatch: SVG path prop differences in Sidebar icons between server/client renders — pre-existing, not blocking.
-
----
-
-## Demo Data State (after Session D)
-
-### 10 Curated Deals
-| Deal | Company | AE | Stage | Value | Vertical |
-|------|---------|----|----|-------|----------|
-| MedVista Enterprise Platform | MedVista Health Systems | Sarah Chen | Negotiation | €2.4M | Healthcare |
-| HealthFirst Analytics Suite | HealthFirst Medical | Sarah Chen | Proposal | €890K | Healthcare |
-| TrustBank Digital Transformation | TrustBank Financial | David Park | Technical Validation | €1.8M | Financial Services |
-| NordicMed Group Platform | NordicMed Group | Ryan Foster | Discovery | €1.6M | Healthcare |
-| Atlas Capital Analytics | Atlas Capital | David Park | Technical Validation | €580K | Financial Services |
-| HealthBridge Analytics Platform | HealthBridge Analytics | Sarah Chen | Closed Lost | €1.2M | Healthcare |
-| MedTech Solutions Platform | MedTech Solutions | Ryan Foster | Closed Lost | €950K | Healthcare |
-| NordicCare — Claude Enterprise for Patient Records | NordicCare Health | Ryan Foster | Closed Lost | €2.1M | Healthcare |
-| Meridian Health Network | Meridian Health | Sarah Chen | Closed Won | €1.8M | Healthcare |
-| Pacific Insurance Analytics | Pacific Financial Group | David Park | Closed Won | €1.1M | Financial Services |
-
-### 8 Curated Users (in switcher)
-Sales Team: Sarah Chen (AE), David Park (AE), Ryan Foster (AE)
-Leadership: Marcus Thompson (MANAGER)
-Solutions & Support: Alex Kim (SA)
-Support Functions: Lisa Park (Enablement), Michael Torres (Product Marketing), Rachel Kim (Deal Desk)
-
-Default persona: Sarah Chen. Persisted via `localStorage.nexus_persona_id`.
-
----
-
-## Known Issues / Gotchas
-- **Field query targeting**: Fixed — multi-path targeting (cluster traversal → observation text search → keyword match → vertical fallback) now correctly routes to 3+ reps.
-- **MedVista stage**: Reset to Negotiation in Session D. May need manual reset again after testing close/lost capture.
-- **Conversational follow-up engine**: Inline UI may still have edge cases in follow-up flow.
-- **PgArray error**: If schema changes (adding columns/tables), the Next.js dev server may throw `PgArray` errors from stale cache. Fix: `rm -rf apps/web/.next && pnpm dev`.
-- **No auth**: The app uses persona switching via PersonaProvider context. There is no real authentication — any user can switch to any persona via the dropdown.
-- **`verticalSpecialization` is a single enum**: Team members have ONE vertical, not an array. The `outputPreferences.industryFocus` array in agent configs provides broader coverage.
-- **`initiatedBy` on `fieldQueries` has no FK**: Can reference either `teamMembers` or `supportFunctionMembers` (different tables).
-- **Dev server port**: Default is 3001 but auto-increments if occupied.
-- **ReadableStream error**: Next.js 14 occasionally throws `ReadableStream is already closed` on page navigation — this is a known Next.js internal issue, not app code.
-
----
-
-## Design Principles
-- **One input → multiple outputs** is the core product thesis. A single observation, question, or action triggers classification, routing, clustering, feedback, and intelligence updates across the system.
-- **All conversational UIs use inline responses** (no toasts), numbered card chips + text input, React state for chip selection, "Nexus Intelligence" framing.
-- **Seed data and live generation must produce identical data shapes.** Any structure written by seed scripts must match what the API routes produce at runtime.
-- **Model string**: Always use `claude-sonnet-4-20250514` (full identifier, not shorthand).
+### Session E: Playbook Layer + Demo Infrastructure
+- **Playbook page**: New `/playbook` route with 3 tabs (Active Experiments, What's Working, Influence). Added to sidebar as 4th item with FlaskConical icon.
+- **`playbookIdeas` table**: Process experiment tracking with status lifecycle (proposed → testing → promoted/retired), test groups, results jsonb, followers
+- **`influenceScores` table**: Per-member influence across 5 dimensions with tier classification and attribution trail
+- **`market_signal` insightType**: New value added to `systemIntelligence` insightType enum for prospect behavioral patterns
+- **`process_innovation` signal type**: New observation classification that auto-creates a `playbookIdeas` record
+- **Call prep Layer 8**: Playbook intelligence injected into call briefs (promoted ideas + testing ideas for this deal)
+- **Intelligence dashboard restructure**: Observations merged into "Field Feed" tab. Manager directives visible on Patterns tab (MANAGER only). 3-tab layout with tab UI pattern.
+- **`/observations` redirect**: Route now redirects to `/intelligence?tab=feed`
+- **Outreach Intelligence Brief**: Competitive patterns, win patterns, messaging directives surfaced at top of Outreach page
+- **Sentiment Trajectory**: "Prospect Engagement" section on deal detail pages showing call quality score trend across transcripts
+- **Demo Guide** (`demo-guide.tsx`): Replaces `walkthrough.tsx`. 3 modes — Tour (6 steps with element highlighting + persona switching), Assistant (Claude chat via /api/demo/ask), Hidden
+- **Landing page** (`/`): Standalone page outside dashboard layout with product thesis, Enter Demo button, demo reset link
+- **`/api/demo/reset`**: Resets MedVista to Negotiation, clears last-4-hour test data, marks notifications unread, recalculates cluster metrics
+- **`/api/demo/ask`**: Claude-powered demo assistant with full product knowledge base. Context-aware responses based on current page + persona.
+- **`seed-playbook.ts`**: 8 playbook ideas, 12 influence scores for 5 members, 5 market signals
 
 ---
 
@@ -547,28 +552,40 @@ Default persona: Sarah Chen. Persisted via `localStorage.nexus_persona_id`.
 nexus/
 ├── apps/web/src/
 │   ├── app/
-│   │   ├── api/                          # 22 API route files
-│   │   │   ├── agent/                    # call-prep, draft-email, configure, feedback, save-to-deal
-│   │   │   ├── analyze/                  # analyze, analyze/link
-│   │   │   ├── deals/                    # deals, stage, resolve
-│   │   │   ├── field-queries/            # field-queries, respond
-│   │   │   ├── observations/             # observations, [id]/follow-up, clusters
-│   │   │   └── ...                       # activities, companies, notifications, team-members, observation-routing
-│   │   └── (dashboard)/                  # 13 pages, 9 client components
-│   │       ├── pipeline/[id]/            # Deal detail page + stage change
-│   │       └── ...
-│   ├── components/                       # 20 components
-│   │   ├── observation-input.tsx          # Universal Agent Bar (~1800 lines)
-│   │   ├── stage-change-modal.tsx         # Stage change + close/lost capture
-│   │   ├── analyzer/                      # 10 call analysis sub-components
-│   │   └── ...
+│   │   ├── page.tsx                          # Landing page (standalone, outside dashboard)
+│   │   ├── globals.css                       # Global styles incl. .demo-highlight animation
+│   │   ├── api/                              # 24+ API route files
+│   │   │   ├── agent/                        # call-prep, draft-email, configure, feedback, save-to-deal
+│   │   │   ├── analyze/                      # analyze, analyze/link
+│   │   │   ├── deals/                        # deals, stage, resolve, close-analysis
+│   │   │   ├── demo/                         # reset, ask (demo assistant)
+│   │   │   ├── field-queries/                # field-queries, respond, suggestions
+│   │   │   ├── observations/                 # observations, [id]/follow-up, clusters
+│   │   │   └── ...                           # activities, companies, notifications, team-members, observation-routing
+│   │   └── (dashboard)/                      # 14 pages
+│   │       ├── pipeline/[id]/                # Deal detail + stage change + sentiment trajectory
+│   │       ├── intelligence/                 # 3-tab intelligence dashboard
+│   │       ├── playbook/                     # 3-tab playbook page
+│   │       ├── outreach/                     # Email sequences + intelligence brief
+│   │       └── ...                           # command-center, agent-config, observations (redirect), prospects, calls, analyze, analytics, team, agent-admin
+│   ├── components/
+│   │   ├── observation-input.tsx              # Universal Agent Bar (~1800 lines)
+│   │   ├── stage-change-modal.tsx             # Stage change + close/lost capture
+│   │   ├── demo-guide.tsx                     # 3-mode demo guide (tour + assistant + hidden)
+│   │   ├── deal-question-input.tsx            # MANAGER deal-scoped questions
+│   │   ├── activity-feed.tsx                  # Timeline activity list
+│   │   ├── providers.tsx                      # PersonaContext provider
+│   │   ├── layout/sidebar.tsx                 # 6-item navigation
+│   │   ├── layout/top-bar.tsx                 # Header with GuideLink + user switcher + notifications
+│   │   ├── analyzer/                          # 10 call analysis sub-components
+│   │   └── feedback/                          # Agent feedback components
 │   └── lib/
-│       ├── db.ts                          # Drizzle DB connection
-│       └── analysis/                      # Transcript analysis utils
+│       ├── db.ts                              # Drizzle DB connection
+│       └── analysis/                          # Transcript analysis utils
 ├── packages/db/src/
-│   ├── schema.ts                          # 27 tables, all enums and relations
-│   ├── index.ts                           # Re-exports
-│   └── seed-*.ts                          # 14 seed scripts + 2 backfill scripts
+│   ├── schema.ts                              # 29 tables, all enums and relations
+│   ├── index.ts                               # Re-exports
+│   └── seed-*.ts                              # 16 seed scripts + 2 backfill scripts
 └── packages/shared/src/
-    └── types.ts                           # Shared types, stage labels, nav config
+    └── types.ts                               # Shared types, stage labels, nav config
 ```
