@@ -960,22 +960,26 @@ Return JSON only, no markdown fences.`,
     const newVersion = (config.version || 1) + 1;
 
     // Build updates
-    const updates: Record<string, unknown> = { version: newVersion, updatedAt: new Date() };
-    if (parsed.instruction_addition) {
-      updates.instructions = `${config.instructions}\n\n[Auto-added from field intelligence] ${parsed.instruction_addition}`;
-    }
-    if (parsed.output_preference_change) {
-      updates.outputPreferences = { ...(config.outputPreferences as Record<string, unknown> || {}), ...parsed.output_preference_change };
-    }
+    const newInstructions = parsed.instruction_addition
+      ? `${config.instructions}\n\n[Auto-added from field intelligence] ${parsed.instruction_addition}`
+      : undefined;
+    const newPrefs = parsed.output_preference_change
+      ? { ...(config.outputPreferences as Record<string, unknown> || {}), ...parsed.output_preference_change }
+      : undefined;
 
-    await db.update(agentConfigs).set(updates).where(eq(agentConfigs.id, config.id));
+    await db.update(agentConfigs).set({
+      version: newVersion,
+      updatedAt: new Date(),
+      ...(newInstructions ? { instructions: newInstructions } : {}),
+      ...(newPrefs ? { outputPreferences: newPrefs } : {}),
+    }).where(eq(agentConfigs.id, config.id));
 
     // Create version record
     await db.insert(agentConfigVersions).values({
       agentConfigId: config.id,
       version: newVersion,
-      instructions: (updates.instructions as string) || config.instructions,
-      outputPreferences: (updates.outputPreferences as Record<string, unknown>) || config.outputPreferences,
+      instructions: newInstructions || config.instructions,
+      outputPreferences: newPrefs || (config.outputPreferences as Record<string, unknown>),
       changedBy: "feedback_loop",
       changeReason: `[Field Intelligence] ${parsed.summary}`,
     });
