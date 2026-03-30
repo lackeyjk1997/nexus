@@ -99,28 +99,28 @@ export default function LandingPage() {
         {/* Thesis */}
         <div style={{ fontSize: 15, lineHeight: 1.75, color: "#3D3833" }}>
           <p style={{ marginBottom: 16 }}>
-            Your AEs spend 60% of their week assembling information instead of selling.
+            <strong>Your AEs don&apos;t have an information problem. They have a time problem.</strong>
           </p>
           <p style={{ marginBottom: 16 }}>
-            Prepping a call means digging through Slack, chasing the SA for competitive intel, re-reading old transcripts, and hoping someone updated the CRM. Writing a follow-up means reconstructing what was said from memory. Reporting a loss means picking a dropdown value that tells leadership nothing useful.
+            They spend 60% of their week pulling together context instead of actually selling. Prepping for a call means digging through Slack, chasing down the SA for intel, rereading transcripts, and hoping the CRM is up to date. Follow-ups get written from memory. Loss reasons get reduced to dropdowns that don&apos;t actually explain what happened.
           </p>
           <p style={{ marginBottom: 16 }}>
-            Meanwhile, the knowledge that would actually help — what the SA learned about compliance, what three other reps noticed about a competitor&apos;s pricing, what worked on the deal you won last quarter — lives in people&apos;s heads and dies in Slack threads.
+            The insights that matter — competitor behavior, pricing pressure, what worked last quarter — live in people&apos;s heads and get buried in Slack threads.
           </p>
           <p style={{ marginBottom: 16 }}>
             <strong>Nexus makes that knowledge usable.</strong>
           </p>
           <p style={{ marginBottom: 16 }}>
-            When Sarah preps a call, the brief already knows her SA recommends leading with compliance, that the CFO hasn&apos;t been engaged in 45 days, that a competitor undercut pricing on three similar deals, and that her manager prohibits discounts over 10%. She didn&apos;t assemble any of it — seven intelligence layers converged in 30 seconds.
+            When Sarah preps for a call, the brief is already there. It surfaces that her SA has been pushing a compliance angle. That the CFO hasn&apos;t been engaged in 45 days. That a competitor has undercut pricing in similar deals. That her manager won&apos;t approve discounts past 10%. She didn&apos;t go find any of it.
           </p>
           <p style={{ marginBottom: 16 }}>
-            When she notices something on a call — &ldquo;CompetitorX is offering free pilots&rdquo; — she types one sentence. The system classifies it, links it to affected deals, clusters it with reports from two other reps, calculates &euro;850K in pipeline at risk, and routes it to Product Marketing. A Slack message that would have died becomes structured intelligence.
+            When she hears something on a call — &ldquo;CompetitorX is offering free pilots&rdquo; — she types one sentence. That gets tagged, tied to active deals, grouped with similar notes from other reps, sized against pipeline risk, and routed to the right team. What used to disappear now sticks.
           </p>
           <p style={{ marginBottom: 16 }}>
-            When a deal closes, the AI reads every transcript, observation, and MEDDPICC gap to pre-populate the loss analysis before anyone fills out a form. When Marcus has a question about his pipeline, the system answers from data or sends targeted one-tap questions to the right AEs — not a Monday morning Slack broadcast.
+            When a deal closes, the write-up is mostly done. When leadership has a question, the system either answers it directly or reaches out to the specific reps who have context.
           </p>
           <p style={{ marginBottom: 24 }}>
-            Every action makes every other action smarter. The SA&apos;s expertise feeds the AE&apos;s call prep. The AE&apos;s observation feeds the VP&apos;s dashboard. The VP&apos;s question feeds back to the AE with a give-back insight. Nobody does extra work. The intelligence just compounds.
+            Everything feeds something else: the SA sharpens the AE. The AE gives leadership real signal. Leadership sends back clearer direction. <strong>The system improves because your team is doing their job — not because you asked them to do more.</strong>
           </p>
         </div>
 
