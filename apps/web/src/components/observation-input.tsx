@@ -373,7 +373,7 @@ export function ObservationInput({
           setPhase("call_prep_context");
           return;
         }
-      } catch { /* fall through to direct generation */ }
+      } catch { /* fall through to resolve from query */ }
     }
 
     // Resolve from query
@@ -396,10 +396,14 @@ export function ObservationInput({
         setAgentSelectedAttendees(primaryIds.length > 0 ? primaryIds : data.contacts?.length > 0 ? [data.contacts[0].id] : []);
         setPhase("call_prep_context");
       } else {
-        setPhase("expanded");
+        setGiveback({ acknowledgment: "Couldn't find a matching deal — try mentioning the account name." });
+        setPhase("giveback");
+        setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
       }
     } catch {
-      setPhase("expanded");
+      setGiveback({ acknowledgment: "Couldn't reach AI. Please try again." });
+      setPhase("giveback");
+      setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
     }
   }
 
@@ -464,10 +468,14 @@ export function ObservationInput({
         setEmailContactName(data.contactName ?? null);
         setPhase("draft_result");
       } else {
-        setPhase("expanded");
+        setGiveback({ acknowledgment: "Couldn't generate the email draft — try again or mention a specific deal." });
+        setPhase("giveback");
+        setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
       }
     } catch {
-      setPhase("expanded");
+      setGiveback({ acknowledgment: "Couldn't reach AI. Please try again." });
+      setPhase("giveback");
+      setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
     }
   }
 
@@ -559,10 +567,14 @@ export function ObservationInput({
           setPhase((p) => (p === "giveback" ? "collapsed" : p));
         }, 15000);
       } else {
-        setPhase("process_innovation_qa");
+        setGiveback({ acknowledgment: "Something went wrong saving your idea — please try again." });
+        setPhase("giveback");
+        setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
       }
     } catch {
-      setPhase("process_innovation_qa");
+      setGiveback({ acknowledgment: "Couldn't reach AI. Your idea was captured but feedback wasn't saved." });
+      setPhase("giveback");
+      setTimeout(() => { setPhase((p) => (p === "giveback" ? "collapsed" : p)); }, 10000);
     }
   }
 

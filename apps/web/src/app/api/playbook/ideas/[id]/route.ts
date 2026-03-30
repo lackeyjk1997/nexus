@@ -29,7 +29,7 @@ export async function PATCH(
       ...existingResults,
       structured_feedback: body.structured_feedback,
     },
-    updatedAt: new Date(),
+    updatedAt: new Date().toISOString(),
   };
 
   if (body.status) {
