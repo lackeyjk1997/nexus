@@ -261,11 +261,12 @@ export async function POST(request: Request) {
   await createRoutingRecords(inserted!.id, classification);
 
   // Auto-create playbook idea for process_innovation signals
+  let playbookIdeaId: string | null = null;
   try {
     const processSignal = classification.signals.find((s: { type: string; summary?: string }) => s.type === "process_innovation");
     if (processSignal) {
       const { playbookIdeas } = await import("@nexus/db");
-      await db.insert(playbookIdeas).values({
+      const [newIdea] = await db.insert(playbookIdeas).values({
         originatorId: observerId,
         originatedFrom: "observation",
         sourceObservationId: inserted!.id,
@@ -274,7 +275,8 @@ export async function POST(request: Request) {
         category: "process",
         vertical: observer?.verticalSpecialization || null,
         status: "proposed",
-      });
+      }).returning({ id: playbookIdeas.id });
+      playbookIdeaId = newIdea?.id ?? null;
     }
   } catch (err) {
     console.error("Playbook idea creation failed (non-fatal):", err);
@@ -290,11 +292,17 @@ export async function POST(request: Request) {
     ? { ...giveback, arr_impact: { total_value: arrImpact.total_value, deal_count: arrImpact.deal_count } }
     : giveback;
 
+  const isProcessInnovation = !!classification.signals.find(
+    (s: { type: string }) => s.type === "process_innovation"
+  );
+
   return NextResponse.json({
     id: inserted!.id,
     follow_up: followUp,
     giveback: givebackWithArr,
     classification,
+    isProcessInnovation,
+    playbookIdeaId,
   });
 }
 

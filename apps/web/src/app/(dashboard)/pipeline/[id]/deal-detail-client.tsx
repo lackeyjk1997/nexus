@@ -40,7 +40,7 @@ import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@
 import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared";
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
-import { ObservationInput } from "@/components/observation-input";
+
 import { DealQuestionInput } from "@/components/deal-question-input";
 import { usePersona } from "@/components/providers";
 
@@ -1271,15 +1271,6 @@ export function DealDetailClient({
         currentStage={deal.stage as PipelineStage}
       />
 
-      {/* Observation Input */}
-      <ObservationInput
-        context={{
-          page: "deal_detail",
-          dealId: deal.id,
-          accountId: deal.companyId,
-          trigger: "manual",
-        }}
-      />
     </div>
   );
 }

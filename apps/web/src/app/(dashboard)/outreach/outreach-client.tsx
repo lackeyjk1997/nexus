@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Mail, MessageSquare, Phone, Clock, ChevronDown, CheckCircle2, Circle, Pause, Play, AlertTriangle } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ObservationInput } from "@/components/observation-input";
+
 import { Sparkles } from "lucide-react";
 
 type IntelligenceBrief = {
@@ -234,7 +234,6 @@ export function OutreachClient({ sequences, steps, intelligenceBrief }: { sequen
         </div>
       )}
 
-      <ObservationInput context={{ page: "outreach", trigger: "manual" }} />
     </div>
   );
 }

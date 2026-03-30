@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, getVerticalColor } from "@/lib/utils";
 import { STAGE_LABELS, type PipelineStage } from "@nexus/shared";
-import { ObservationInput } from "@/components/observation-input";
+
 import Link from "next/link";
 
 type Contact = {
@@ -391,7 +391,6 @@ export function ProspectsClient({
         )}
       </div>
 
-      <ObservationInput context={{ page: "prospects", trigger: "manual" }} />
     </div>
   );
 }

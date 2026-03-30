@@ -2,6 +2,7 @@ import { PersonaProvider, type TeamMemberInfo } from "@/components/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { DemoGuide } from "@/components/demo-guide";
+import { LayoutAgentBar } from "@/components/layout-agent-bar";
 import { db } from "@/lib/db";
 import { teamMembers, supportFunctionMembers } from "@nexus/db";
 import type { Role } from "@nexus/shared";
@@ -57,7 +58,10 @@ export default async function DashboardLayout({
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <TopBar />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto p-6 pb-0 flex flex-col">
+            <div className="flex-1">{children}</div>
+            <LayoutAgentBar />
+          </main>
         </div>
       </div>
       <DemoGuide />

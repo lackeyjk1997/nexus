@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sparkles, Send, Check, X, ChevronUp, ArrowRight, Users, CornerDownLeft,
   Lightbulb, Copy, RotateCcw, AlertTriangle, ChevronDown, Phone, Mail,
+  Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -99,7 +100,9 @@ type Phase =
   | "call_prep_loading"
   | "call_prep_result"
   | "draft_loading"
-  | "draft_result";
+  | "draft_result"
+  | "process_innovation_qa"
+  | "process_innovation_submitting";
 
 // ── Intent Detection ───────────────────────────────────────────────────────────
 
@@ -213,6 +216,14 @@ export function ObservationInput({
   const [copyFeedback, setCopyFeedback] = useState<"email" | "brief" | null>(null);
   const [saveFeedback, setSaveFeedback] = useState<"email" | "brief" | null>(null);
 
+  // Process innovation Q&A state
+  const [playbookIdeaId, setPlaybookIdeaId] = useState<string | null>(null);
+  const [piFrequency, setPiFrequency] = useState<string | null>(null);
+  const [piImpacts, setPiImpacts] = useState<string[]>([]);
+  const [piContextNotes, setPiContextNotes] = useState("");
+  const [piAttachment, setPiAttachment] = useState<File | null>(null);
+  const piFileRef = useRef<HTMLInputElement>(null);
+
   const followUpRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const { currentUser } = usePersona();
@@ -257,6 +268,11 @@ export function ObservationInput({
     setCallBrief(null);
     setEmailDraft(null);
     setSaveFeedback(null);
+    setPlaybookIdeaId(null);
+    setPiFrequency(null);
+    setPiImpacts([]);
+    setPiContextNotes("");
+    setPiAttachment(null);
   }
 
   // ── Observation submit ──
@@ -280,19 +296,26 @@ export function ObservationInput({
         const data = await res.json();
         setObservationId(data.id);
 
-        if (data.follow_up?.should_ask && data.follow_up.question) {
+        // Process innovation → structured Q&A flow
+        if (data.isProcessInnovation && data.playbookIdeaId) {
+          setPlaybookIdeaId(data.playbookIdeaId);
+          setGiveback(data.giveback);
+          setPhase("process_innovation_qa");
+          setInput("");
+        } else if (data.follow_up?.should_ask && data.follow_up.question) {
           setFollowUp(data.follow_up);
           setGiveback(data.giveback);
           setPhase("follow_up");
           setTimeout(() => followUpRef.current?.focus(), 100);
+          setInput("");
         } else {
           setGiveback(data.giveback);
           setPhase("giveback");
           setTimeout(() => {
             setPhase((p) => (p === "giveback" ? "collapsed" : p));
           }, 15000);
+          setInput("");
         }
-        setInput("");
       } else {
         setPhase("expanded");
       }
@@ -491,6 +514,54 @@ export function ObservationInput({
     }
   }
 
+  // ── Process Innovation Q&A submit ──
+  async function handleProcessInnovationSubmit() {
+    if (!piFrequency || !playbookIdeaId) return;
+    setPhase("process_innovation_submitting");
+
+    const structuredData = {
+      frequency: piFrequency,
+      observed_impact: piImpacts,
+      context_notes: piContextNotes,
+      has_attachment: !!piAttachment,
+      attachment_name: piAttachment?.name ?? null,
+    };
+
+    const positiveImpacts = ["faster_response", "stakeholders_looped_in", "they_loved_it"];
+    const shouldTest =
+      piFrequency === "regularly" &&
+      piImpacts.some((i) => positiveImpacts.includes(i));
+
+    try {
+      const res = await fetch(`/api/playbook/ideas/${playbookIdeaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          structured_feedback: structuredData,
+          status: shouldTest ? "testing" : "proposed",
+        }),
+      });
+
+      if (res.ok) {
+        const statusLabel = shouldTest
+          ? "Testing — we'll track this across your deals"
+          : "Proposed — try it a few more times and share what happens";
+        setGiveback({
+          acknowledgment: "Idea captured and added to the Playbook",
+          related_observations_hint: `Status: ${statusLabel}`,
+        });
+        setPhase("giveback");
+        setTimeout(() => {
+          setPhase((p) => (p === "giveback" ? "collapsed" : p));
+        }, 15000);
+      } else {
+        setPhase("process_innovation_qa");
+      }
+    } catch {
+      setPhase("process_innovation_qa");
+    }
+  }
+
   // ── Quick check handlers ──
   async function handleQuickCheckRespond(
     text: string,
@@ -657,7 +728,9 @@ export function ObservationInput({
     phase === "submitting" ||
     phase === "follow_up" ||
     phase === "follow_up_submitting" ||
-    phase === "giveback";
+    phase === "giveback" ||
+    phase === "process_innovation_qa" ||
+    phase === "process_innovation_submitting";
 
   const isQuickCheckActive =
     phase === "quick_check" ||
@@ -885,9 +958,214 @@ export function ObservationInput({
                 </div>
               </>
             )}
+
+            {/* ── Process Innovation Q&A Card ── */}
+            {phase === "process_innovation_qa" && (
+              <div
+                className="animate-[fadeSlideUp_0.35s_ease]"
+                style={{
+                  background: "#FFFFFF",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                  borderRadius: "12px",
+                  boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
+                  maxWidth: "90%",
+                }}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-2 px-5 pt-4 pb-3">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: "#E07A5F" }} />
+                  <span className="text-[13px] font-semibold tracking-[0.01em]" style={{ color: "#3D3833" }}>Nexus Intelligence</span>
+                </div>
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                <div className="px-5 pt-3 pb-2">
+                  <p className="text-[13.5px] leading-[1.5]" style={{ color: "#3D3833" }}>
+                    That sounds like a process idea worth testing. A few quick questions to help evaluate it:
+                  </p>
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                {/* Q1: Frequency (single select) */}
+                <div className="px-5 pt-3 pb-1">
+                  <p className="text-[13.5px] font-semibold" style={{ color: "#3D3833" }}>How many times have you tried this?</p>
+                </div>
+                <div className="px-2 pb-2">
+                  {[
+                    { value: "once", label: "Just once" },
+                    { value: "2-3_times", label: "2\u20133 times" },
+                    { value: "regularly", label: "Regularly" },
+                  ].map((opt, i) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setPiFrequency(piFrequency === opt.value ? null : opt.value)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                      style={{
+                        background: piFrequency === opt.value ? "#3D3833" : "transparent",
+                      }}
+                    >
+                      <span
+                        className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "6px",
+                          border: `1.5px solid ${piFrequency === opt.value ? "white" : "#D4C9BD"}`,
+                          color: piFrequency === opt.value ? "white" : "#8A8078",
+                        }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span
+                        className="text-[14px] flex-1 text-left"
+                        style={{ color: piFrequency === opt.value ? "white" : "#3D3833" }}
+                      >
+                        {opt.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                {/* Q2: Impact (multi-select) */}
+                <div className="px-5 pt-3 pb-1">
+                  <p className="text-[13.5px] font-semibold" style={{ color: "#3D3833" }}>What happened when you did?</p>
+                </div>
+                <div className="px-2 pb-2">
+                  {[
+                    { value: "faster_response", label: "Faster prospect response" },
+                    { value: "stakeholders_looped_in", label: "More stakeholders looped in" },
+                    { value: "no_clear_impact", label: "No clear impact yet" },
+                    { value: "they_loved_it", label: "They loved it" },
+                  ].map((opt, i) => {
+                    const selected = piImpacts.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() =>
+                          setPiImpacts((prev) =>
+                            selected ? prev.filter((v) => v !== opt.value) : [...prev, opt.value]
+                          )
+                        }
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                        style={{
+                          background: selected ? "#3D3833" : "transparent",
+                        }}
+                      >
+                        <span
+                          className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                          style={{
+                            width: "24px",
+                            height: "24px",
+                            borderRadius: "6px",
+                            border: `1.5px solid ${selected ? "white" : "#D4C9BD"}`,
+                            color: selected ? "white" : "#8A8078",
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span
+                          className="text-[14px] flex-1 text-left"
+                          style={{ color: selected ? "white" : "#3D3833" }}
+                        >
+                          {opt.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                {/* Q3: Free text context */}
+                <div className="px-5 pt-3 pb-1">
+                  <p className="text-[13.5px] font-semibold" style={{ color: "#3D3833" }}>Anything specific about when this works best?</p>
+                </div>
+                <div className="flex items-center gap-2 px-3 mx-2 mb-2 rounded-lg" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>
+                  <input
+                    type="text"
+                    value={piContextNotes}
+                    onChange={(e) => setPiContextNotes(e.target.value)}
+                    placeholder="e.g., works best after technical deep-dives"
+                    className="flex-1 bg-transparent border-none outline-none text-[13px] py-2.5 placeholder:text-[#8A8078]/60"
+                    style={{ color: "#3D3833" }}
+                  />
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                {/* Attachment (visual only) */}
+                <div className="px-5 py-3">
+                  <input
+                    ref={piFileRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.md,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setPiAttachment(file);
+                    }}
+                  />
+                  {piAttachment ? (
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="h-3 w-3" style={{ color: "#8A8078" }} />
+                      <span className="text-[12px]" style={{ color: "#3D3833" }}>{piAttachment.name}</span>
+                      <button
+                        onClick={() => { setPiAttachment(null); if (piFileRef.current) piFileRef.current.value = ""; }}
+                        className="p-0.5 hover:opacity-70"
+                        style={{ color: "#8A8078" }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => piFileRef.current?.click()}
+                      className="flex items-center gap-2 hover:opacity-70 transition-opacity"
+                    >
+                      <Paperclip className="h-3 w-3" style={{ color: "#8A8078" }} />
+                      <span className="text-[12px]" style={{ color: "#8A8078" }}>Attach a document with more detail (optional)</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+
+                {/* Submit button */}
+                <div className="px-5 py-3 flex justify-end">
+                  <button
+                    onClick={handleProcessInnovationSubmit}
+                    disabled={!piFrequency}
+                    className="text-[13px] font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: "#E07A5F",
+                      color: "white",
+                      padding: "10px 24px",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    Submit Idea
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Process Innovation submitting */}
+            {phase === "process_innovation_submitting" && (
+              <div className="flex items-center gap-2.5 animate-[fadeSlideUp_0.25s_ease]">
+                <span
+                  className="h-4 w-4 rounded-full border-2 animate-spin shrink-0"
+                  style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }}
+                />
+                <span className="text-[13px] animate-pulse" style={{ color: "#8A8078" }}>
+                  Capturing your idea…
+                </span>
+              </div>
+            )}
           </div>
 
-          {phase === "giveback" && (
+          {(phase === "giveback" || phase === "process_innovation_qa" || phase === "process_innovation_submitting") && (
             <div className="max-w-4xl mx-auto px-4 pb-2.5 pt-0 opacity-40 pointer-events-none">
               <div className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border" style={{ borderColor: "#E8E5E0" }}>
                 <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#9B9B9B" }} />
