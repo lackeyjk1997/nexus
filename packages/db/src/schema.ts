@@ -809,7 +809,7 @@ export const playbookIdeas = pgTable("playbook_ideas", {
   hypothesis: text("hypothesis").notNull(),
   category: text("category").notNull(), // process, messaging, positioning, discovery, closing, engagement
   vertical: text("vertical"),
-  status: text("status").notNull().default("proposed"), // proposed, testing, promoted, retired
+  status: text("status").notNull().default("proposed"), // proposed, testing, graduated, rejected, archived
   testStartDate: timestamp("test_start_date"),
   testEndDate: timestamp("test_end_date"),
   testGroupDeals: text("test_group_deals").array(),
@@ -817,6 +817,18 @@ export const playbookIdeas = pgTable("playbook_ideas", {
   results: jsonb("results"),
   followers: text("followers").array(),
   followerCount: integer("follower_count").default(0),
+  // Experiment lifecycle fields
+  testGroup: text("test_group").array(), // AE user IDs assigned to test
+  controlGroup: text("control_group").array(), // AE user IDs as control
+  successThresholds: jsonb("success_thresholds"), // { velocity_pct, sentiment_pts, close_rate_pct }
+  currentMetrics: jsonb("current_metrics"), // { velocity_pct, sentiment_pts, close_rate_pct, deals_tested }
+  approvedBy: text("approved_by"), // manager user ID
+  approvedAt: timestamp("approved_at"),
+  graduatedAt: timestamp("graduated_at"),
+  experimentDurationDays: integer("experiment_duration_days").default(30),
+  experimentStart: timestamp("experiment_start"),
+  experimentEnd: timestamp("experiment_end"),
+  attribution: jsonb("attribution"), // { proposed_by, proposed_at, approved_by, impact_arr }
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -54,6 +54,17 @@ export default async function PlaybookPage() {
         results: playbookIdeas.results,
         followers: playbookIdeas.followers,
         followerCount: playbookIdeas.followerCount,
+        testGroup: playbookIdeas.testGroup,
+        controlGroup: playbookIdeas.controlGroup,
+        successThresholds: playbookIdeas.successThresholds,
+        currentMetrics: playbookIdeas.currentMetrics,
+        approvedBy: playbookIdeas.approvedBy,
+        approvedAt: playbookIdeas.approvedAt,
+        graduatedAt: playbookIdeas.graduatedAt,
+        experimentDurationDays: playbookIdeas.experimentDurationDays,
+        experimentStart: playbookIdeas.experimentStart,
+        experimentEnd: playbookIdeas.experimentEnd,
+        attribution: playbookIdeas.attribution,
         createdAt: playbookIdeas.createdAt,
       })
       .from(playbookIdeas)
@@ -99,6 +110,9 @@ export default async function PlaybookPage() {
   const ideas = rawIdeas.map((row) => ({
     ...row,
     results: (row.results ?? null) as PlaybookResults | null,
+    successThresholds: (row.successThresholds ?? null) as Record<string, number> | null,
+    currentMetrics: (row.currentMetrics ?? null) as Record<string, number> | null,
+    attribution: (row.attribution ?? null) as Record<string, unknown> | null,
   }));
 
   const scores = rawScores.map((row) => ({
