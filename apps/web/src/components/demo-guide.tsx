@@ -14,19 +14,12 @@ interface StepConfig {
   highlightSelector: string | null;
   buttonText: string;
   personaSwitch?: string;
-  autoAdvanceOnClick?: boolean;
-  subStep?: {
-    waitForSelector: string;
-    title: string;
-    body: string;
-    highlightSelector: string | null;
-    buttonText: string;
-    nextRoute: string | null;
-  };
+  scrollToSelector?: string;
+  clickSelector?: string;
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 10;
 
 function setTourStepStorage(value: string) {
   try {
@@ -36,67 +29,89 @@ function setTourStepStorage(value: string) {
 }
 
 const STEPS: StepConfig[] = [
-  // Step 1: Start with an idea from the field
+  // Step 1: Field ideas start here
   {
     route: "/playbook",
-    title: "Start with an idea from the field",
-    body: "AEs share process improvements right from where they work. Type an idea like \u201cextend discovery calls to 60 minutes and build live prototypes\u201d \u2014 the system captures, classifies, and proposes it automatically.",
+    title: "Field ideas start here",
+    body: "AEs share process improvements right where they work. The agent bar captures ideas, classifies them with AI, and proposes them as experiments \u2014 all from a single sentence.",
     highlightSelector: "[data-tour='agent-bar']",
     buttonText: "Next",
+    personaSwitch: "Sarah Chen",
   },
-  // Step 2: Leadership reviews and approves experiments
+  // Step 2: Leadership reviews from the field
   {
     route: "/playbook",
-    title: "Leadership reviews and approves experiments",
-    body: "Sales leadership sees proposed ideas from the field. A manager can approve an experiment, select which AEs will test it, and set success thresholds \u2014 all without leaving the Playbook. Switch to Marcus Thompson to see the approval controls.",
-    highlightSelector: null,
+    title: "Leadership reviews from the field",
+    body: "Marcus sees proposed ideas from his team. He can approve experiments, select which AEs will test it, and set measurable success thresholds. Click \u2018Approve & Start Testing\u2019 to see the controls, or click Next.",
+    highlightSelector: "[data-tour='approve-button']",
+    buttonText: "Next",
+    personaSwitch: "Marcus Thompson",
+    scrollToSelector: "[data-section='proposed']",
+  },
+  // Step 3: Experiments run with real evidence
+  {
+    route: "/playbook",
+    title: "Experiments run with real evidence",
+    body: "Active experiments track velocity, sentiment, and close rate against a control group. Click any metric to see deal-level evidence \u2014 transcript excerpts and email quotes that show WHY it\u2019s working. Try clicking \u2018Velocity\u2019 now.",
+    highlightSelector: "[data-tour='velocity-metric']",
+    buttonText: "Next",
+    scrollToSelector: "[data-section='testing']",
+  },
+  // Step 4: Scale what works
+  {
+    route: "/playbook",
+    title: "Scale what works",
+    body: "When experiments meet their thresholds with enough data, Marcus can graduate them and scale the methodology across the team \u2014 by vertical or company-wide. Click \u2018Graduate & Scale\u2019 to promote this experiment.",
+    highlightSelector: "[data-tour='graduate-button']",
     buttonText: "Next",
   },
-  // Step 3: Experiments run with real measurement
+  // Step 5: Proven plays with attribution
   {
     route: "/playbook",
-    title: "Experiments run with real measurement",
-    body: "Active experiments track velocity, sentiment, and close rate against a control group. Click any metric to see deal-level evidence \u2014 actual transcript excerpts and email quotes that show WHY the experiment is working.",
-    highlightSelector: null,
-    buttonText: "Next",
-  },
-  // Step 4: Proven plays scale across the org
-  {
-    route: "/playbook",
-    title: "Proven plays scale across the org",
-    body: "When experiments meet their thresholds, leadership graduates them to \u201cWhat\u2019s Working\u201d and scales the methodology \u2014 by vertical or company-wide. Every play has an attribution trail back to the rep who proposed it.",
-    highlightSelector: null,
+    title: "Proven plays with attribution",
+    body: "Every proven play shows its full results \u2014 velocity improvement, sentiment lift, close rate, and the attribution trail from who proposed it to who approved it. These methodologies now influence call prep for the entire team.",
+    highlightSelector: "[data-tour='proven-card']",
     buttonText: "Next: See a deal",
+    clickSelector: "[data-tab='whats-working']",
   },
-  // Step 5: AI-powered call prep
+  // Step 6: The deal workspace
+  {
+    route: "/pipeline",
+    title: "The deal workspace",
+    body: "Sarah\u2019s biggest opportunity \u2014 MedVista Health Systems, \u20ac2.4M in Discovery. The deal workspace shows everything the AI knows. Click into MedVista to see the full context.",
+    highlightSelector: "[data-tour='deal-medvista']",
+    buttonText: "Next",
+    personaSwitch: "Sarah Chen",
+  },
+  // Step 7: Call prep that knows everything
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "AI-powered call prep for every meeting",
-    body: "Sarah\u2019s biggest deal in negotiation \u2014 \u20ac2.4M. The AI knows the full deal context: MEDDPICC gaps, stakeholder engagement, competitive landscape, and any active experiments she\u2019s testing. Type \u201cprep call\u201d in the bar below to generate a brief.",
-    highlightSelector: "[data-tour='agent-bar']",
+    title: "Call prep that knows everything",
+    body: "Generate a call brief and watch the AI incorporate deal context, stakeholder insights, MEDDPICC gaps, competitive intel \u2014 and the proven play methodology that was just graduated. Click the prep button to generate.",
+    highlightSelector: "[data-tour='prep-call']",
     buttonText: "Next",
   },
-  // Step 6: Every deal tells a complete story
+  // Step 8: Full deal intelligence
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "Every deal tells a complete story",
-    body: "The deal workspace surfaces everything the AI knows \u2014 stakeholder maps with engagement gaps, MEDDPICC scoring with specific warnings, sentiment trajectory over time, and the full activity history. No tab-switching between five different tools.",
-    highlightSelector: null,
+    title: "Full deal intelligence",
+    body: "MEDDPICC scoring with specific gap warnings, stakeholder maps with engagement levels, sentiment trajectory over time, and the complete activity history. No tab-switching between five different tools \u2014 it\u2019s all here.",
+    highlightSelector: "[data-tour='deal-tabs']",
     buttonText: "Next: Intelligence",
   },
-  // Step 7: Field intelligence connects everything
+  // Step 9: Field intelligence dashboard
   {
     route: "/intelligence",
-    title: "Field intelligence connects everything",
-    body: "Every observation, experiment result, and competitive signal flows here. Filter by signal type \u2014 Competitive, Process, Content Gaps, or Playbook experiments. This is where leadership sees patterns that no single rep could see alone.",
-    highlightSelector: null,
+    title: "Field intelligence dashboard",
+    body: "Every observation, experiment result, and competitive signal flows here. Click \u2018Playbook\u2019 to see experiment-originated signals. This is where leadership sees patterns no single rep could see alone.",
+    highlightSelector: "[data-tour='playbook-filter']",
     buttonText: "Next",
   },
-  // Step 8: Explore on your own
+  // Step 10: Keep exploring
   {
     route: null,
-    title: "Explore on your own",
-    body: "That\u2019s the core loop: field ideas \u2192 experiments \u2192 measurement \u2192 scaling. But there\u2019s much more \u2014 agent configuration, outreach intelligence, prospect analytics. Ask the Nexus Assistant any question, or explore on your own.",
+    title: "Keep exploring",
+    body: "That\u2019s the core loop: field ideas \u2192 experiments \u2192 evidence \u2192 scaling \u2192 deal prep. There\u2019s much more to explore \u2014 agent configuration, outreach analytics, close analysis, and the field query system where Marcus can send quick checks to specific AEs. Ask the Nexus Assistant any question.",
     highlightSelector: null,
     buttonText: "Got it",
   },
@@ -133,9 +148,7 @@ export function DemoGuide() {
   // Tour state
   const [step, setStep] = useState(0);
   const [dismissed, setDismissed] = useState(false);
-  const [inSubStep, setInSubStep] = useState(false);
   const [visible, setVisible] = useState(false);
-  const subStepObserverRef = useRef<MutationObserver | null>(null);
 
   // Assistant state
   const [assistantMode, setAssistantMode] = useState(false);
@@ -204,7 +217,7 @@ export function DemoGuide() {
           }
           el.scrollIntoView({ behavior: "smooth", block: "nearest" });
         } catch {}
-      } else if (attempts < 10) {
+      } else if (attempts < 15) {
         attempts++;
         setTimeout(tryHighlight, 500);
       }
@@ -226,48 +239,22 @@ export function DemoGuide() {
     }
     const config = STEPS[step - 1]!;
     if (config.route && pathname !== config.route) return;
-    const selector = inSubStep && config.subStep ? config.subStep.highlightSelector : config.highlightSelector;
-    const t = setTimeout(() => applyHighlight(selector), 600);
+    const t = setTimeout(() => applyHighlight(config.highlightSelector), 600);
     return () => clearTimeout(t);
-  }, [step, pathname, dismissed, inSubStep, applyHighlight, removeHighlight]);
+  }, [step, pathname, dismissed, applyHighlight, removeHighlight]);
 
-  // ── Watch for sub-step trigger ──
-  useEffect(() => {
-    if (step < 1 || step > TOTAL_STEPS || dismissed || inSubStep) return;
-    const config = STEPS[step - 1]!;
-    if (!config.subStep) return;
-    const waitSelector = config.subStep.waitForSelector;
-    if (document.querySelector(waitSelector)) { setInSubStep(true); return; }
-    const observer = new MutationObserver(() => {
-      if (document.querySelector(waitSelector)) { setInSubStep(true); observer.disconnect(); }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    subStepObserverRef.current = observer;
-    return () => observer.disconnect();
-  }, [step, dismissed, inSubStep]);
-
-  // ── Auto-advance on click ──
-  useEffect(() => {
-    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
-    const config = STEPS[step - 1]!;
-    if (!config.autoAdvanceOnClick || !config.highlightSelector) return;
-    const handleClick = (e: Event) => {
-      const target = e.target as HTMLElement;
-      const highlighted = document.querySelector(config.highlightSelector!);
-      if (highlighted && (highlighted === target || highlighted.contains(target))) {
-        setTimeout(() => advanceStep(), 500);
-      }
-    };
-    document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, dismissed]);
+  // ── Helper: get persona for a given step (walks back to find the last personaSwitch) ──
+  const getPersonaForStep = useCallback((targetStep: number): string | undefined => {
+    for (let s = targetStep; s >= 1; s--) {
+      const cfg = STEPS[s - 1];
+      if (cfg?.personaSwitch) return cfg.personaSwitch;
+    }
+    return undefined;
+  }, []);
 
   // ── Step navigation ──
   const advanceStep = useCallback(() => {
     removeHighlight();
-    setInSubStep(false);
-    if (subStepObserverRef.current) { subStepObserverRef.current.disconnect(); subStepObserverRef.current = null; }
     const nextStep = step + 1;
     if (nextStep > TOTAL_STEPS) {
       setStep(0);
@@ -277,31 +264,37 @@ export function DemoGuide() {
       return;
     }
     const config = STEPS[nextStep - 1]!;
+
+    // Persona switch
     if (config.personaSwitch) {
       const user = allUsers.find((u) => u.name === config.personaSwitch);
       if (user) setCurrentUser(user);
     }
+
+    // Click a tab/element before rendering this step
+    if (config.clickSelector) {
+      setTimeout(() => {
+        const el = document.querySelector(config.clickSelector!) as HTMLElement;
+        if (el) el.click();
+      }, 200);
+    }
+
+    // Route change
     if (config.route && pathname !== config.route) router.push(config.route);
+
+    // Scroll to section
+    if (config.scrollToSelector) {
+      setTimeout(() => {
+        const el = document.querySelector(config.scrollToSelector!);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 800);
+    }
+
     setStep(nextStep);
     setTourStepStorage(String(nextStep));
   }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight]);
 
   const handleNext = useCallback(() => {
-    const config = STEPS[step - 1]!;
-    if (inSubStep && config.subStep?.nextRoute) {
-      removeHighlight();
-      setInSubStep(false);
-      router.push(config.subStep.nextRoute);
-      const nextStep = step + 1;
-      const nextConfig = STEPS[nextStep - 1];
-      if (nextConfig?.personaSwitch) {
-        const user = allUsers.find((u) => u.name === nextConfig.personaSwitch);
-        if (user) setCurrentUser(user);
-      }
-      setStep(nextStep);
-      setTourStepStorage(String(nextStep));
-      return;
-    }
     if (step === TOTAL_STEPS) {
       removeHighlight();
       setStep(0);
@@ -310,22 +303,42 @@ export function DemoGuide() {
       return;
     }
     advanceStep();
-  }, [step, inSubStep, advanceStep, removeHighlight, router, allUsers, setCurrentUser]);
+  }, [step, advanceStep, removeHighlight]);
 
   const handleBack = useCallback(() => {
     if (step <= 1) return;
     removeHighlight();
-    setInSubStep(false);
     const prevStep = step - 1;
     const config = STEPS[prevStep - 1]!;
-    if (config.personaSwitch) {
-      const user = allUsers.find((u) => u.name === config.personaSwitch);
+
+    // Restore the correct persona for the target step
+    const targetPersona = getPersonaForStep(prevStep);
+    if (targetPersona) {
+      const user = allUsers.find((u) => u.name === targetPersona);
       if (user) setCurrentUser(user);
     }
+
+    // Click a tab if the target step needs one
+    if (config.clickSelector) {
+      setTimeout(() => {
+        const el = document.querySelector(config.clickSelector!) as HTMLElement;
+        if (el) el.click();
+      }, 200);
+    }
+
     if (config.route && pathname !== config.route) router.push(config.route);
+
+    // Scroll to section
+    if (config.scrollToSelector) {
+      setTimeout(() => {
+        const el = document.querySelector(config.scrollToSelector!);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 800);
+    }
+
     setStep(prevStep);
     setTourStepStorage(String(prevStep));
-  }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight]);
+  }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight, getPersonaForStep]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
@@ -364,6 +377,7 @@ export function DemoGuide() {
 
     return (
       <div
+        data-tour="assistant-widget"
         className="fixed z-[9999]"
         style={{ bottom: 24, left: 24 }}
       >
@@ -510,9 +524,6 @@ export function DemoGuide() {
   if (step < 1 || step > TOTAL_STEPS || dismissed) return null;
 
   const config = STEPS[step - 1]!;
-  const displayTitle = inSubStep && config.subStep ? config.subStep.title : config.title;
-  const displayBody = inSubStep && config.subStep ? config.subStep.body : config.body;
-  const displayButton = inSubStep && config.subStep ? config.subStep.buttonText : config.buttonText;
 
   return (
     <div
@@ -551,10 +562,10 @@ export function DemoGuide() {
           </button>
         </div>
 
-        <h3 className="text-[16px] font-semibold mb-2 leading-snug">{displayTitle}</h3>
+        <h3 className="text-[16px] font-semibold mb-2 leading-snug">{config.title}</h3>
 
         <p className="text-[13.5px] leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.8)" }}>
-          {displayBody}
+          {config.body}
         </p>
 
         <div className="flex items-center justify-between">
@@ -593,7 +604,7 @@ export function DemoGuide() {
                 cursor: "pointer",
               }}
             >
-              {displayButton} {step < TOTAL_STEPS ? "\u2192" : ""}
+              {config.buttonText} {step < TOTAL_STEPS ? "\u2192" : ""}
             </button>
           </div>
         </div>

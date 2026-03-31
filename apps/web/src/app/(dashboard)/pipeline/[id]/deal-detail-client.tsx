@@ -1210,7 +1210,7 @@ export function DealDetailClient({
       )}
 
       {/* Tabs */}
-      <div className="border-b border-border">
+      <div data-tour="deal-tabs" className="border-b border-border">
         <div className="flex items-center gap-6">
           {TABS.map((tab) => (
             <button

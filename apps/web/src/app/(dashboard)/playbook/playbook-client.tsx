@@ -750,6 +750,7 @@ function TestingCard({
             return (
               <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                 <span
+                  data-tour={row.key === "velocity" ? "velocity-metric" : undefined}
                   onClick={() => setDrillDownMetric(row.key)}
                   style={{ color: "#6B6B6B", minWidth: 80, cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 3 }}
                 >
@@ -808,6 +809,7 @@ function TestingCard({
       {/* Manager: Graduate & Scale button */}
       {isManager && graduationReady && !showGraduation && (
         <button
+          data-tour="graduate-button"
           onClick={() => setShowGraduation(true)}
           style={{
             background: "#4A7C59",
@@ -1087,6 +1089,7 @@ function ProposedCard({
       {isManager && !showApproval && !showDecline && (
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button
+            data-tour="approve-button"
             onClick={() => setShowApproval(true)}
             style={{
               background: "#3D3833",
@@ -1319,9 +1322,11 @@ function ProposedCard({
 function PromotedCard({
   idea,
   members,
+  isFirst,
 }: {
   idea: PlaybookIdea;
   members: Member[];
+  isFirst?: boolean;
 }) {
   const originator = members.find((m) => m.id === idea.originatorId);
   const isGraduated = idea.status === "graduated";
@@ -1348,6 +1353,7 @@ function PromotedCard({
   return (
     <>
     <div
+      data-tour={isFirst ? "proven-card" : undefined}
       style={{
         background: "#FFFFFF",
         borderRadius: 12,
@@ -1886,6 +1892,7 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
         {tabs.map((tab) => (
           <button
             key={tab.key}
+            data-tab={tab.key === "experiments" ? "active-experiments" : tab.key === "whats_working" ? "whats-working" : "influence"}
             onClick={() => setActiveTab(tab.key)}
             style={{
               background: "none",
@@ -1928,6 +1935,7 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
           {testingIdeas.length > 0 && (
             <>
               <div
+                data-section="testing"
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
@@ -1955,6 +1963,7 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
           {proposedIdeas.length > 0 && (
             <>
               <div
+                data-section="proposed"
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
@@ -2012,8 +2021,8 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
               >
                 Promoted Plays — {promotedIdeas.length}
               </div>
-              {promotedIdeas.map((idea) => (
-                <PromotedCard key={idea.id} idea={idea} members={members} />
+              {promotedIdeas.map((idea, idx) => (
+                <PromotedCard key={idea.id} idea={idea} members={members} isFirst={idx === 0} />
               ))}
             </>
           )}

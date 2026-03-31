@@ -289,6 +289,7 @@ export function IntelligenceClient({
             ].map((f) => (
               <button
                 key={f.key}
+                data-tour={f.key === "process_innovation" ? "playbook-filter" : undefined}
                 onClick={() => setSignalFilter(f.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",

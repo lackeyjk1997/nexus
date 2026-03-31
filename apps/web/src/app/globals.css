@@ -44,12 +44,13 @@
   outline: 3px solid #E07A5F !important;
   outline-offset: 4px !important;
   border-radius: 8px !important;
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.2) !important;
   animation: demo-pulse 2s infinite !important;
   position: relative !important;
   z-index: 10 !important;
 }
 
 @keyframes demo-pulse {
-  0%, 100% { outline-color: #E07A5F; }
-  50% { outline-color: rgba(224, 122, 95, 0.4); }
+  0%, 100% { outline-color: #E07A5F; box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.2); }
+  50% { outline-color: rgba(224, 122, 95, 0.4); box-shadow: 0 0 0 6px rgba(224, 122, 95, 0.1); }
 }
