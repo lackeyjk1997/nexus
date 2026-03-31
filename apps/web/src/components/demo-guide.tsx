@@ -111,7 +111,7 @@ const STEPS: StepConfig[] = [
     route: "/intelligence",
     title: "Field intelligence dashboard",
     body: "Every observation, experiment result, and competitive signal flows here. Clusters group related field signals by theme with ARR impact. This is where leadership sees patterns no single rep could see alone.",
-    highlightSelector: null,
+    highlightSelector: "[data-tour='all-signals']",
     buttonText: "Next",
   },
   // Step 10: Keep exploring
