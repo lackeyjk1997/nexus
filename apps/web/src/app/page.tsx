@@ -27,7 +27,7 @@ export default function LandingPage() {
       localStorage.removeItem("nexus_walkthrough_seen");
       localStorage.setItem("nexus_demo_step", "1");
     } catch {}
-    window.location.href = "/pipeline";
+    window.location.href = "/playbook";
   }
 
   return (

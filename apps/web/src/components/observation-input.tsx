@@ -547,7 +547,7 @@ export function ObservationInput({
     };
 
     const positiveImpacts = ["faster_response", "stakeholders_looped_in", "they_loved_it"];
-    const shouldTest =
+    const hasStrongSignal =
       piFrequency === "regularly" &&
       piImpacts.some((i) => positiveImpacts.includes(i));
 
@@ -557,13 +557,12 @@ export function ObservationInput({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           structured_feedback: structuredData,
-          status: shouldTest ? "testing" : "proposed",
         }),
       });
 
       if (res.ok) {
-        const statusLabel = shouldTest
-          ? "Testing — we'll track this across your deals"
+        const statusLabel = hasStrongSignal
+          ? "Strong signal — flagged for manager review"
           : "Proposed — try it a few more times and share what happens";
         setGiveback({
           acknowledgment: "Idea captured and added to the Playbook",

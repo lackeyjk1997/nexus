@@ -16,6 +16,10 @@ interface StepConfig {
   personaSwitch?: string;
   scrollToSelector?: string;
   clickSelector?: string;
+  autoAdvance?: {
+    type: "route" | "element";
+    match: string; // route prefix or element selector
+  };
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
@@ -33,7 +37,7 @@ const STEPS: StepConfig[] = [
   {
     route: "/playbook",
     title: "Field ideas start here",
-    body: "AEs share process improvements right where they work. The agent bar captures ideas, classifies them with AI, and proposes them as experiments \u2014 all from a single sentence.",
+    body: "AEs share process improvements right where they work. The agent bar captures ideas, classifies them with AI, and proposes them as experiments \u2014 all from a single sentence.\n\nTry typing: \u201cWe should build a quick prototype during every discovery call to show immediate value\u201d",
     highlightSelector: "[data-tour='agent-bar']",
     buttonText: "Next",
     personaSwitch: "Sarah Chen",
@@ -64,6 +68,7 @@ const STEPS: StepConfig[] = [
     body: "When experiments meet their thresholds with enough data, Marcus can graduate them and scale the methodology across the team \u2014 by vertical or company-wide. Click \u2018Graduate & Scale\u2019 to promote this experiment.",
     highlightSelector: "[data-tour='graduate-button']",
     buttonText: "Next",
+    autoAdvance: { type: "element", match: "[data-tab='whats-working'].border-b-2, [data-tab='whats-working'][aria-selected='true']" },
   },
   // Step 5: Proven plays with attribution
   {
@@ -82,14 +87,16 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='deal-medvista']",
     buttonText: "Next",
     personaSwitch: "Sarah Chen",
+    autoAdvance: { type: "route", match: `/pipeline/${MEDVISTA_DEAL_ID}` },
   },
   // Step 7: Call prep that knows everything
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
     title: "Call prep that knows everything",
-    body: "Generate a call brief and watch the AI incorporate deal context, stakeholder insights, MEDDPICC gaps, competitive intel \u2014 and the proven play methodology that was just graduated. Click the prep button to generate.",
+    body: "Generate a call brief and watch the AI incorporate deal context, stakeholder insights, MEDDPICC gaps, competitive intel \u2014 and the proven play methodology that was just graduated. Click \u2018Prep Call\u2019 to generate.",
     highlightSelector: "[data-tour='prep-call']",
     buttonText: "Next",
+    autoAdvance: { type: "element", match: "[data-tour='call-brief']" },
   },
   // Step 8: Full deal intelligence
   {
@@ -103,15 +110,15 @@ const STEPS: StepConfig[] = [
   {
     route: "/intelligence",
     title: "Field intelligence dashboard",
-    body: "Every observation, experiment result, and competitive signal flows here. Click \u2018Playbook\u2019 to see experiment-originated signals. This is where leadership sees patterns no single rep could see alone.",
-    highlightSelector: "[data-tour='playbook-filter']",
+    body: "Every observation, experiment result, and competitive signal flows here. Clusters group related field signals by theme with ARR impact. This is where leadership sees patterns no single rep could see alone.",
+    highlightSelector: null,
     buttonText: "Next",
   },
   // Step 10: Keep exploring
   {
     route: null,
     title: "Keep exploring",
-    body: "That\u2019s the core loop: field ideas \u2192 experiments \u2192 evidence \u2192 scaling \u2192 deal prep. There\u2019s much more to explore \u2014 agent configuration, outreach analytics, close analysis, and the field query system where Marcus can send quick checks to specific AEs. Ask the Nexus Assistant any question.",
+    body: "That\u2019s the core loop: field ideas \u2192 experiments \u2192 evidence \u2192 scaling \u2192 deal prep. There\u2019s much more to explore \u2014 agent configuration, outreach analytics, close analysis, and the field query system.\n\nAsk the Nexus Assistant:\n\u2022 \u201cHow does the playbook system work?\u201d\n\u2022 \u201cWhat experiments are currently running?\u201d\n\u2022 \u201cShow me Sarah\u2019s pipeline\u201d",
     highlightSelector: null,
     buttonText: "Got it",
   },
@@ -149,6 +156,7 @@ export function DemoGuide() {
   const [step, setStep] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [visible, setVisible] = useState(false);
+  const autoAdvancedRef = useRef<number>(0); // tracks which step we last auto-advanced FROM
 
   // Assistant state
   const [assistantMode, setAssistantMode] = useState(false);
@@ -202,22 +210,9 @@ export function DemoGuide() {
       if (el) {
         el.classList.add("demo-highlight");
         try {
-          let parent = el.parentElement;
-          while (parent) {
-            const style = getComputedStyle(parent);
-            if (style.overflowX === "auto" || style.overflowX === "scroll") {
-              const elRect = el.getBoundingClientRect();
-              const parentRect = parent.getBoundingClientRect();
-              if (elRect.left < parentRect.left || elRect.right > parentRect.right) {
-                parent.scrollLeft += elRect.left - parentRect.left - (parentRect.width / 2 - elRect.width / 2);
-              }
-              break;
-            }
-            parent = parent.parentElement;
-          }
           el.scrollIntoView({ behavior: "smooth", block: "nearest" });
         } catch {}
-      } else if (attempts < 15) {
+      } else if (attempts < 20) {
         attempts++;
         setTimeout(tryHighlight, 500);
       }
@@ -238,10 +233,93 @@ export function DemoGuide() {
       return;
     }
     const config = STEPS[step - 1]!;
+    // For steps with routes, only apply highlight if we're on the right page
     if (config.route && pathname !== config.route) return;
     const t = setTimeout(() => applyHighlight(config.highlightSelector), 600);
     return () => clearTimeout(t);
   }, [step, pathname, dismissed, applyHighlight, removeHighlight]);
+
+  // ── Auto-advance: route-based ──
+  useEffect(() => {
+    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
+    const config = STEPS[step - 1]!;
+    if (!config.autoAdvance || config.autoAdvance.type !== "route") return;
+    if (autoAdvancedRef.current === step) return; // already auto-advanced from this step
+
+    if (pathname.startsWith(config.autoAdvance.match)) {
+      autoAdvancedRef.current = step;
+      const timer = setTimeout(() => {
+        removeHighlight();
+        const nextStep = step + 1;
+        if (nextStep > TOTAL_STEPS) return;
+        const nextConfig = STEPS[nextStep - 1]!;
+        if (nextConfig.personaSwitch) {
+          const user = allUsers.find((u) => u.name === nextConfig.personaSwitch);
+          if (user) setCurrentUser(user);
+        }
+        if (nextConfig.clickSelector) {
+          setTimeout(() => {
+            const el = document.querySelector(nextConfig.clickSelector!) as HTMLElement;
+            if (el) el.click();
+          }, 200);
+        }
+        setStep(nextStep);
+        setTourStepStorage(String(nextStep));
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, pathname, dismissed, allUsers, setCurrentUser, removeHighlight]);
+
+  // ── Auto-advance: element-based (poll for element appearance) ──
+  useEffect(() => {
+    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
+    const config = STEPS[step - 1]!;
+    if (!config.autoAdvance || config.autoAdvance.type !== "element") return;
+    if (autoAdvancedRef.current === step) return;
+
+    let cancelled = false;
+    const checkInterval = setInterval(() => {
+      if (cancelled) return;
+      // Try each selector in the comma-separated list
+      const selectors = config.autoAdvance!.match.split(",").map(s => s.trim());
+      const found = selectors.some(sel => document.querySelector(sel));
+      if (found) {
+        clearInterval(checkInterval);
+        if (autoAdvancedRef.current === step) return;
+        autoAdvancedRef.current = step;
+        setTimeout(() => {
+          removeHighlight();
+          const nextStep = step + 1;
+          if (nextStep > TOTAL_STEPS) return;
+          const nextConfig = STEPS[nextStep - 1]!;
+          if (nextConfig.personaSwitch) {
+            const user = allUsers.find((u) => u.name === nextConfig.personaSwitch);
+            if (user) setCurrentUser(user);
+          }
+          if (nextConfig.clickSelector) {
+            setTimeout(() => {
+              const el = document.querySelector(nextConfig.clickSelector!) as HTMLElement;
+              if (el) el.click();
+            }, 200);
+          }
+          if (nextConfig.route && pathname !== nextConfig.route) router.push(nextConfig.route);
+          if (nextConfig.scrollToSelector) {
+            setTimeout(() => {
+              const el = document.querySelector(nextConfig.scrollToSelector!);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 800);
+          }
+          setStep(nextStep);
+          setTourStepStorage(String(nextStep));
+        }, 1000);
+      }
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(checkInterval);
+    };
+  }, [step, pathname, dismissed, allUsers, setCurrentUser, router, removeHighlight]);
 
   // ── Helper: get persona for a given step (walks back to find the last personaSwitch) ──
   const getPersonaForStep = useCallback((targetStep: number): string | undefined => {
@@ -564,7 +642,7 @@ export function DemoGuide() {
 
         <h3 className="text-[16px] font-semibold mb-2 leading-snug">{config.title}</h3>
 
-        <p className="text-[13.5px] leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.8)" }}>
+        <p className="text-[13.5px] leading-relaxed mb-5 whitespace-pre-line" style={{ color: "rgba(255,255,255,0.8)" }}>
           {config.body}
         </p>
 
