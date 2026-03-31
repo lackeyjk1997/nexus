@@ -23,7 +23,7 @@ interface StepConfig {
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
-const TOTAL_STEPS = 12;
+const TOTAL_STEPS = 10;
 
 function setTourStepStorage(value: string) {
   try {
@@ -99,31 +99,15 @@ const STEPS: StepConfig[] = [
     buttonText: "Next",
     autoAdvance: { type: "element", match: "[data-tour='call-prep-result']" },
   },
-  // Step 8: Proven plays influence every brief
+  // Step 8: Intelligence from every system, in one brief
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "Proven plays influence every brief",
-    body: "See the green \ud83d\udccb badge? That\u2019s a proven methodology from a graduated experiment \u2014 tested across 9 deals with +40% velocity improvement. The AI doesn\u2019t just mention it \u2014 it weaves it into talking points and suggested next steps specific to this deal.",
-    highlightSelector: "[data-tour='proven-plays']",
-    buttonText: "Next",
-  },
-  // Step 9: Team intelligence feeds every prep
-  {
-    route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "Your team\u2019s knowledge, built in",
-    body: "Team Intelligence pulls insights from SCs and CSMs who\u2019ve worked similar deals. Alex Kim\u2019s competitive positioning advice and Nina Patel\u2019s implementation timeline warnings are automatically surfaced \u2014 no Slack searching required.",
-    highlightSelector: "[data-tour='team-intelligence']",
-    buttonText: "Next",
-  },
-  // Step 10: Resources at your fingertips
-  {
-    route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "The right resources, automatically",
-    body: "Suggested next steps are pulled based on deal context \u2014 competitive battlecards when a competitor is active, compliance guides for regulated verticals, prototype offers when the proven play applies. The AE doesn\u2019t search \u2014 the system surfaces.",
-    highlightSelector: "[data-tour='suggested-close']",
+    title: "Intelligence from every system, in one brief",
+    body: "This call brief pulls from the team\u2019s proven playbook, competitive intelligence, stakeholder engagement data, MEDDPICC gaps, and insights from SCs and CSMs \u2014 all synthesized into talking points, questions to ask, and next steps specific to this deal. Look for the \ud83d\udccb Proven Play badge showing methodologies tested across 9 deals.",
+    highlightSelector: "[data-tour='call-prep-result']",
     buttonText: "Next: Intelligence",
   },
-  // Step 11: Field intelligence dashboard
+  // Step 9: Field intelligence dashboard
   {
     route: "/intelligence",
     title: "Field intelligence dashboard",
@@ -131,7 +115,7 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='all-signals']",
     buttonText: "Next",
   },
-  // Step 12: Keep exploring
+  // Step 10: Keep exploring
   {
     route: null,
     title: "Keep exploring",
@@ -343,22 +327,36 @@ export function DemoGuide() {
     };
   }, [step, pathname, dismissed, allUsers, setCurrentUser, router, removeHighlight]);
 
-  // ── Auto-advance: mutation-based (detect DOM removal of key elements) ──
+  // ── Auto-advance: mutation-based (detect card removal after action completes) ──
   useEffect(() => {
     if (step < 1 || step > TOTAL_STEPS || dismissed) return;
     const config = STEPS[step - 1]!;
     if (!config.autoAdvance || config.autoAdvance.type !== "mutation") return;
     if (autoAdvancedRef.current === step) return;
 
-    // Step 2: detect approval completion (approve button disappears after page reload)
+    // Step 2: detect PROPOSED card disappearing after "Start Experiment" succeeds
+    // The card only disappears when the page reloads after a successful PATCH.
+    // Clicking "Approve & Start Testing" opens an inline expansion (card stays).
+    // We count PROPOSED cards — when the count drops, the experiment was started.
     if (config.autoAdvance.match === "approve-button-gone") {
-      let approveWasVisible = false;
+      // Wait a moment for the page to render the PROPOSED section
+      let initialCount = -1;
       const interval = setInterval(() => {
-        const approveBtn = document.querySelector("[data-tour='approve-button']");
-        if (approveBtn) {
-          approveWasVisible = true;
-        } else if (approveWasVisible) {
-          // Approve button was visible, now it's gone — approval completed + page reloaded
+        const proposedSection = document.querySelector("[data-section='proposed']");
+        // Count cards by looking for PROPOSED badges within the section's parent
+        const cards = proposedSection
+          ? proposedSection.closest("div")?.querySelectorAll("[data-tour='approve-button']")
+          : document.querySelectorAll("[data-tour='approve-button']");
+        const currentCount = cards?.length ?? 0;
+
+        if (initialCount === -1) {
+          // First check — record starting count
+          if (currentCount > 0) initialCount = currentCount;
+          return;
+        }
+
+        // Card count dropped — "Start Experiment" succeeded and page reloaded
+        if (currentCount < initialCount) {
           clearInterval(interval);
           if (autoAdvancedRef.current === step) return;
           autoAdvancedRef.current = step;
@@ -381,14 +379,23 @@ export function DemoGuide() {
       return () => clearInterval(interval);
     }
 
-    // Step 4: detect graduation completion (graduate button disappears)
+    // Step 4: detect graduation-ready card disappearing from TESTING section
+    // The "Graduate & Scale" button opens an inline expansion (button stays in DOM).
+    // The card only disappears from TESTING when "Confirm Graduation" PATCH succeeds
+    // and the page reloads. We count cards with graduate buttons.
     if (config.autoAdvance.match === "graduate-button-gone") {
-      let graduateWasVisible = false;
+      let initialCount = -1;
       const interval = setInterval(() => {
-        const graduateBtn = document.querySelector("[data-tour='graduate-button']");
-        if (graduateBtn) {
-          graduateWasVisible = true;
-        } else if (graduateWasVisible) {
+        const graduateBtns = document.querySelectorAll("[data-tour='graduate-button']");
+        const currentCount = graduateBtns.length;
+
+        if (initialCount === -1) {
+          if (currentCount > 0) initialCount = currentCount;
+          return;
+        }
+
+        // Graduate button count dropped — graduation succeeded and page reloaded
+        if (currentCount < initialCount) {
           clearInterval(interval);
           if (autoAdvancedRef.current === step) return;
           autoAdvancedRef.current = step;
