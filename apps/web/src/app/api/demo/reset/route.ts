@@ -273,6 +273,7 @@ async function resetPlaybookData() {
 
   await db.execute(sql`
     UPDATE playbook_ideas SET
+      status = 'testing',
       test_group = ARRAY[${SARAH}, ${RYAN}]::text[],
       control_group = ARRAY[${DAVID}, ${PRIYA}, ${JAMES}, ${ELENA}]::text[],
       success_thresholds = '{"velocity_pct": 30, "sentiment_pts": 15, "close_rate_pct": 10}'::jsonb,
@@ -284,7 +285,7 @@ async function resetPlaybookData() {
       experiment_end = '2026-04-15T09:00:00'::timestamp,
       attribution = ${'{"proposed_by": "' + SARAH + '", "proposed_at": "2026-03-15", "approved_by": "' + MARCUS + '", "impact_arr": 0}'}::jsonb,
       experiment_evidence = ${postDiscoEvidence}::jsonb
-    WHERE title LIKE 'Post-discovery prototype%' AND status = 'testing'
+    WHERE title LIKE 'Post-discovery prototype%'
   `);
 
   // Multi-threaded stakeholder — 6 deals, mixed results, below threshold
@@ -305,6 +306,7 @@ async function resetPlaybookData() {
 
   await db.execute(sql`
     UPDATE playbook_ideas SET
+      status = 'testing',
       test_group = ARRAY[${DAVID}, ${ELENA}]::text[],
       control_group = ARRAY[${SARAH}, ${RYAN}, ${PRIYA}, ${JAMES}]::text[],
       success_thresholds = '{"velocity_pct": 25, "sentiment_pts": 10, "close_rate_pct": 15}'::jsonb,
@@ -316,7 +318,7 @@ async function resetPlaybookData() {
       experiment_end = '2026-03-30T09:00:00'::timestamp,
       attribution = ${'{"proposed_by": "' + MARCUS + '", "proposed_at": "2026-02-25", "approved_by": "' + MARCUS + '", "impact_arr": 0}'}::jsonb,
       experiment_evidence = ${multiThreadEvidence}::jsonb
-    WHERE title LIKE 'Multi-threaded stakeholder%' AND status = 'testing'
+    WHERE title LIKE 'Multi-threaded stakeholder%'
   `);
 
   // Two-disco minimum — 5 deals, meeting thresholds but low confidence
@@ -334,6 +336,7 @@ async function resetPlaybookData() {
 
   await db.execute(sql`
     UPDATE playbook_ideas SET
+      status = 'testing',
       test_group = ARRAY[${PRIYA}, ${JAMES}]::text[],
       control_group = ARRAY[${SARAH}, ${RYAN}, ${DAVID}, ${ELENA}]::text[],
       success_thresholds = '{"velocity_pct": 20, "sentiment_pts": 12, "close_rate_pct": 8}'::jsonb,
@@ -345,7 +348,7 @@ async function resetPlaybookData() {
       experiment_end = '2026-04-08T09:00:00'::timestamp,
       attribution = ${'{"proposed_by": "' + ALEX + '", "proposed_at": "2026-03-07", "approved_by": "' + MARCUS + '", "impact_arr": 0}'}::jsonb,
       experiment_evidence = ${twoDiscoEvidence}::jsonb
-    WHERE title LIKE 'Two-disco minimum%' AND status = 'testing'
+    WHERE title LIKE 'Two-disco minimum%'
   `);
 
   // ── Apply evidence data to PROMOTED experiments ──

@@ -806,22 +806,25 @@ The experiment injection should feel natural — contextual to THIS deal and THI
 
 Include a dedicated "active_experiments" array in the JSON output with each experiment and a one-sentence contextual application to THIS specific call.
 ` : ""}
-${provenPlays.length > 0 ? `## PROVEN PLAYS (Organization-wide best practices)
-The following methodologies have been tested and proven effective across the sales team. Apply these approaches where relevant to this specific deal and meeting context:
+${provenPlays.length > 0 ? `## PROVEN PLAYS — YOU MUST INCORPORATE THESE INTO THE BRIEF
+The following methodologies have been tested across the sales team and PROVEN to improve deal outcomes. You MUST incorporate at least one into the talking_points AND into the suggested_next_steps arrays. Do NOT just acknowledge them — give SPECIFIC, ACTIONABLE guidance for THIS deal.
 
 ${provenPlays.map(play => {
-  const m = play.currentMetrics as { velocity_pct?: number; sentiment_pts?: number } | null;
-  const r = play.results as { stage_velocity_change?: number } | null;
+  const m = play.currentMetrics as { velocity_pct?: number; sentiment_pts?: number; deals_tested?: number } | null;
+  const r = play.results as { stage_velocity_change?: number; sentiment_shift?: number; deals_influenced?: number } | null;
   const velocity = m?.velocity_pct ?? r?.stage_velocity_change;
-  const sentiment = m?.sentiment_pts;
-  const resultStr = velocity ? `+${velocity}% deal velocity${sentiment ? `, +${sentiment} sentiment points` : ""}` : "Proven effective";
-  return `PROVEN PLAY: ${play.title}\nMETHODOLOGY: ${play.hypothesis}\nRESULTS: ${resultStr}`;
+  const sentiment = m?.sentiment_pts ?? r?.sentiment_shift;
+  const dealCount = m?.deals_tested ?? r?.deals_influenced;
+  const resultStr = velocity ? `+${velocity}% deal velocity${sentiment ? `, +${sentiment} sentiment points` : ""}${dealCount ? ` across ${dealCount} deals` : ""}` : "Proven effective across the team";
+  return `PROVEN PLAY: ${play.title}\nWHAT TO DO: ${play.hypothesis}\nWHY IT WORKS: ${resultStr}`;
 }).join("\n\n")}
 
-When incorporating proven plays, frame them naturally in the call strategy. For example, if a proven play is about building prototypes during discovery, suggest specific prototypes relevant to THIS prospect's pain points.
-Mark each proven play application with: "📋 Proven Play: [name]"
+MANDATORY INSTRUCTIONS FOR PROVEN PLAYS:
+1. In talking_points: Add at least one entry that applies a proven play to THIS prospect's specific situation. Prefix the topic with "📋 Proven Play:". For example, if the play is about building prototypes during discovery and the prospect is a healthcare company, suggest building a specific EHR integration or clinical workflow prototype during the call.
+2. In suggested_next_steps: Add at least one action that implements a proven play as a concrete next step. Prefix with "📋 Proven Play:". For example: "📋 Proven Play: Build a working [specific automation relevant to prospect] prototype in the remaining 30 minutes to demonstrate immediate value"
+3. In the proven_plays array: Include each proven play you applied, with the specific talking_point and close_action you generated for it.
 
-Include a dedicated "proven_plays" array in the JSON output with each proven play and how it applies to THIS specific call.
+These are not suggestions — they are requirements. The proven plays have been validated with real data and must be incorporated.
 ` : ""}
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
@@ -897,8 +900,9 @@ Return ONLY valid JSON with this exact structure:
   ],
   "proven_plays": [
     {
-      "name": "Proven play title — include for graduated/promoted methodologies relevant to this call",
-      "application": "One sentence: how this proven methodology applies to THIS specific deal and meeting"
+      "name": "Proven play title — MUST have at least one entry if proven plays exist",
+      "talking_point": "The specific talking point you added to talking_points for this play",
+      "close_action": "The specific next step you added to suggested_next_steps for this play"
     }
   ]
 }`;
