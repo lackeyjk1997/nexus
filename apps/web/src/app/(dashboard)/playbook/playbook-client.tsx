@@ -963,6 +963,7 @@ function ProposedCard({
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   // AE selection for test group
   const allAEs = members.filter((m) => m.role === "AE");
@@ -983,6 +984,7 @@ function ProposedCard({
   async function handleApprove() {
     if (!currentUserId || selectedAEs.length === 0) return;
     setSubmitting(true);
+    setApprovalError(null);
     try {
       const res = await fetch(`/api/playbook/ideas/${idea.id}`, {
         method: "PATCH",
@@ -1000,7 +1002,7 @@ function ProposedCard({
           experiment_duration_days: durationDays,
           attribution: {
             proposed_by: idea.originatorId,
-            proposed_at: idea.createdAt,
+            proposed_at: new Date(idea.createdAt).toISOString(),
             approved_by: currentUserId,
             impact_arr: 0,
           },
@@ -1008,14 +1010,20 @@ function ProposedCard({
       });
       if (res.ok) {
         onStatusChange();
+        return; // page will reload — don't setSubmitting(false)
       }
-    } catch { /* handled by giveback */ }
+      const errData = await res.json().catch(() => ({ error: "Unknown error" }));
+      setApprovalError(errData.error || `Failed (${res.status})`);
+    } catch (err) {
+      setApprovalError("Network error — could not reach server");
+    }
     setSubmitting(false);
   }
 
   async function handleDecline() {
     if (!currentUserId) return;
     setSubmitting(true);
+    setApprovalError(null);
     try {
       const res = await fetch(`/api/playbook/ideas/${idea.id}`, {
         method: "PATCH",
@@ -1027,8 +1035,13 @@ function ProposedCard({
       });
       if (res.ok) {
         onStatusChange();
+        return;
       }
-    } catch { /* handled by giveback */ }
+      const errData = await res.json().catch(() => ({ error: "Unknown error" }));
+      setApprovalError(errData.error || `Failed (${res.status})`);
+    } catch (err) {
+      setApprovalError("Network error — could not reach server");
+    }
     setSubmitting(false);
   }
 
@@ -1264,6 +1277,11 @@ function ProposedCard({
           </div>
 
           {/* Confirm */}
+          {approvalError && (
+            <div style={{ fontSize: 12, color: "#C74B3B", background: "rgba(199,75,59,0.08)", borderRadius: 6, padding: "8px 12px" }}>
+              {approvalError}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleApprove}
@@ -1284,7 +1302,7 @@ function ProposedCard({
               {submitting ? "Starting..." : "Start Experiment"}
             </button>
             <button
-              onClick={() => setShowApproval(false)}
+              onClick={() => { setShowApproval(false); setApprovalError(null); }}
               style={{ background: "none", border: "none", color: "#8A8078", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}
             >
               Cancel

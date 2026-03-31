@@ -26,7 +26,7 @@ interface StepConfig {
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 8;
 
 function setTourStepStorage(value: string) {
   try {
@@ -36,67 +36,79 @@ function setTourStepStorage(value: string) {
 }
 
 const STEPS: StepConfig[] = [
+  // Step 1: Start with an idea from the field
   {
-    route: "/pipeline",
-    title: "Click into MedVista Health Systems",
-    body: "This is Sarah\u2019s biggest deal in negotiation \u2014 \u20ac2.4M. The deal workspace shows everything the AI knows: MEDDPICC gaps, stakeholder engagement, transcript analyses, and AI actions \u2014 all in one place.",
-    highlightSelector: "[data-tour='deal-medvista']",
+    route: "/playbook",
+    title: "Start with an idea from the field",
+    body: "AEs share process improvements right from where they work. Type an idea like \u201cextend discovery calls to 60 minutes and build live prototypes\u201d \u2014 the system captures, classifies, and proposes it automatically.",
+    highlightSelector: "[data-tour='agent-bar']",
     buttonText: "Next",
-    autoAdvanceOnClick: true,
   },
+  // Step 2: Leadership reviews and approves experiments
+  {
+    route: "/playbook",
+    title: "Leadership reviews and approves experiments",
+    body: "Sales leadership sees proposed ideas from the field. A manager can approve an experiment, select which AEs will test it, and set success thresholds \u2014 all without leaving the Playbook. Switch to Marcus Thompson to see the approval controls.",
+    highlightSelector: null,
+    buttonText: "Next",
+  },
+  // Step 3: Experiments run with real measurement
+  {
+    route: "/playbook",
+    title: "Experiments run with real measurement",
+    body: "Active experiments track velocity, sentiment, and close rate against a control group. Click any metric to see deal-level evidence \u2014 actual transcript excerpts and email quotes that show WHY the experiment is working.",
+    highlightSelector: null,
+    buttonText: "Next",
+  },
+  // Step 4: Proven plays scale across the org
+  {
+    route: "/playbook",
+    title: "Proven plays scale across the org",
+    body: "When experiments meet their thresholds, leadership graduates them to \u201cWhat\u2019s Working\u201d and scales the methodology \u2014 by vertical or company-wide. Every play has an attribution trail back to the rep who proposed it.",
+    highlightSelector: null,
+    buttonText: "Next: See a deal",
+  },
+  // Step 5: AI-powered call prep
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: 'Click "Prep Call" to generate a brief',
-    body: "The AI pulls from 7 intelligence layers \u2014 her SA\u2019s compliance expertise, manager pricing directives, competitive patterns from closed deals, MEDDPICC gap warnings, transcript analyses, field observations, and team resources. Watch what a 30-second prep looks like.",
-    highlightSelector: "[data-tour='prep-call']",
-    buttonText: "Next",
-    subStep: {
-      waitForSelector: "[data-tour='call-brief']",
-      title: "Look at what just happened",
-      body: "Notice the Team Intelligence section \u2014 Alex Kim\u2019s compliance expertise was injected automatically. The Manager Directives section enforces Marcus\u2019s pricing constraints. The MEDDPICC Questions map to scoring gaps on this deal. Every section pulls from a different intelligence layer.",
-      highlightSelector: "[data-tour='call-brief']",
-      buttonText: "Next: Share Field Intel",
-      nextRoute: "/pipeline",
-    },
-  },
-  {
-    route: "/pipeline",
-    title: "Share an observation",
-    body: "Type something in the bar below \u2014 try: \u201csecurity reviews are adding 3 weeks to every enterprise deal\u201d \u2014 and watch what happens. The AI classifies it, may ask a follow-up, clusters it with similar reports, and gives you something useful back.",
+    title: "AI-powered call prep for every meeting",
+    body: "Sarah\u2019s biggest deal in negotiation \u2014 \u20ac2.4M. The AI knows the full deal context: MEDDPICC gaps, stakeholder engagement, competitive landscape, and any active experiments she\u2019s testing. Type \u201cprep call\u201d in the bar below to generate a brief.",
     highlightSelector: "[data-tour='agent-bar']",
-    buttonText: "Next: VP View",
+    buttonText: "Next",
   },
+  // Step 6: Every deal tells a complete story
+  {
+    route: `/pipeline/${MEDVISTA_DEAL_ID}`,
+    title: "Every deal tells a complete story",
+    body: "The deal workspace surfaces everything the AI knows \u2014 stakeholder maps with engagement gaps, MEDDPICC scoring with specific warnings, sentiment trajectory over time, and the full activity history. No tab-switching between five different tools.",
+    highlightSelector: null,
+    buttonText: "Next: Intelligence",
+  },
+  // Step 7: Field intelligence connects everything
   {
     route: "/intelligence",
-    personaSwitch: "Marcus Thompson",
-    title: "Now you\u2019re Marcus Thompson, VP of Sales",
-    body: "Everything your team shared is structured here \u2014 patterns with ARR impact, severity levels, field voices, and suggested actions. Each cluster is intelligence that would normally be scattered across Slack and 1:1s. Click \u201cAsk about what you\u2019re seeing\u201d to query your team \u2014 the system answers from existing data or sends targeted questions to the right AEs.",
-    highlightSelector: "[data-tour='ask-input']",
+    title: "Field intelligence connects everything",
+    body: "Every observation, experiment result, and competitive signal flows here. Filter by signal type \u2014 Competitive, Process, Content Gaps, or Playbook experiments. This is where leadership sees patterns that no single rep could see alone.",
+    highlightSelector: null,
     buttonText: "Next",
   },
-  {
-    route: "/pipeline",
-    personaSwitch: "Sarah Chen",
-    title: "Sarah just got a quick check",
-    body: "The question Marcus asked was turned into a deal-specific quick check for Sarah. Look for the \u201c\u2726 Quick check waiting\u201d badge in the agent bar at the bottom. This is how intelligence flows bidirectionally \u2014 VP asks, system routes to the right AE, AE answers with one tap, VP gets the aggregated answer.",
-    highlightSelector: "[data-tour='agent-bar']",
-    buttonText: "Next",
-  },
+  // Step 8: Explore on your own
   {
     route: null,
-    title: "The system compounds",
-    body: "Every action makes every other action smarter. Sarah\u2019s observation from Step 3 is already part of a cluster. Her next call prep will include it. When a deal closes, the AI pre-populates the loss analysis from everything the system captured. The team\u2019s collective intelligence grows with every interaction, without anyone doing extra work.",
+    title: "Explore on your own",
+    body: "That\u2019s the core loop: field ideas \u2192 experiments \u2192 measurement \u2192 scaling. But there\u2019s much more \u2014 agent configuration, outreach intelligence, prospect analytics. Ask the Nexus Assistant any question, or explore on your own.",
     highlightSelector: null,
-    buttonText: "Explore on your own",
+    buttonText: "Got it",
   },
 ];
 
 // ── Contextual hints ────────────────────────────────────────────────────────────
 
 function getContextualHint(pathname: string, persona: string): string | null {
+  if (pathname === "/playbook") return 'Try: Click "Velocity" on any experiment to see the evidence trail';
   if (pathname === "/pipeline") return "Try: Click into MedVista to explore the deal workspace";
-  if (pathname.startsWith("/pipeline/")) return 'Try: Click "Prep Call" to see 7 intelligence layers converge';
-  if (pathname === "/intelligence" && persona === "Marcus Thompson") return 'Try: Check the Patterns tab, then explore Field Feed and Close Intelligence';
+  if (pathname.startsWith("/pipeline/")) return 'Try: Type "prep call" in the bar below to generate a brief';
+  if (pathname === "/intelligence" && persona === "Marcus Thompson") return 'Try: Click the "Playbook" filter to see experiment-originated signals';
   if (pathname === "/intelligence") return "Try: Switch to Marcus Thompson to see directives and field queries";
   if (pathname === "/agent-config") return 'Try: Type "Never mention competitor pricing" to configure the agent';
   if (pathname === "/outreach") return "Try: Check the Intelligence Brief at the top for messaging guidance";
@@ -299,6 +311,21 @@ export function DemoGuide() {
     }
     advanceStep();
   }, [step, inSubStep, advanceStep, removeHighlight, router, allUsers, setCurrentUser]);
+
+  const handleBack = useCallback(() => {
+    if (step <= 1) return;
+    removeHighlight();
+    setInSubStep(false);
+    const prevStep = step - 1;
+    const config = STEPS[prevStep - 1]!;
+    if (config.personaSwitch) {
+      const user = allUsers.find((u) => u.name === config.personaSwitch);
+      if (user) setCurrentUser(user);
+    }
+    if (config.route && pathname !== config.route) router.push(config.route);
+    setStep(prevStep);
+    setTourStepStorage(String(prevStep));
+  }, [step, pathname, allUsers, setCurrentUser, router, removeHighlight]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
@@ -537,26 +564,38 @@ export function DemoGuide() {
                 key={i}
                 className="rounded-full"
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 6,
+                  height: 6,
                   background: i <= step ? "#E07A5F" : "rgba(255,255,255,0.2)",
                   opacity: i < step ? 0.5 : 1,
                 }}
               />
             ))}
           </div>
-          <button
-            onClick={handleNext}
-            className="text-[13px] font-semibold text-white transition-colors hover:opacity-90"
-            style={{
-              background: "#E07A5F",
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "none",
-            }}
-          >
-            {displayButton} {step < TOTAL_STEPS ? "\u2192" : ""}
-          </button>
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <button
+                onClick={handleBack}
+                className="text-[12px] font-medium transition-colors hover:opacity-80"
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", padding: "8px 10px" }}
+              >
+                {"\u2190"} Back
+              </button>
+            )}
+            <button
+              onClick={handleNext}
+              className="text-[13px] font-semibold text-white transition-colors hover:opacity-90"
+              style={{
+                background: "#E07A5F",
+                padding: "8px 20px",
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {displayButton} {step < TOTAL_STEPS ? "\u2192" : ""}
+            </button>
+          </div>
         </div>
       </div>
     </div>
