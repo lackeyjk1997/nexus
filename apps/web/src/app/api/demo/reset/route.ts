@@ -35,7 +35,10 @@ export async function POST() {
     await db.execute(sql`UPDATE deals SET win_probability = 55 WHERE name ILIKE '%NordicMed%' AND stage::text NOT LIKE '%closed%'`);
     await db.execute(sql`UPDATE deals SET win_probability = 40 WHERE name ILIKE '%Atlas%' AND stage::text NOT LIKE '%closed%'`);
 
-    // 3. Delete very recent test observations (last 2 hours)
+    // 3. Reset playbook experiments BEFORE deleting observations (FK constraint)
+    await resetPlaybookData();
+
+    // 4. Delete very recent test observations (last 2 hours)
     await db.execute(sql`
       DELETE FROM observation_routing WHERE observation_id IN (
         SELECT id FROM observations WHERE created_at > NOW() - INTERVAL '4 hours'
@@ -84,9 +87,6 @@ export async function POST() {
       ) sub
       WHERE observation_clusters.id = sub.cluster_id
     `);
-
-    // 8. Reset playbook experiments to seed state
-    await resetPlaybookData();
 
     return NextResponse.json({ success: true, message: "Demo data reset to clean state" });
   } catch (error) {
