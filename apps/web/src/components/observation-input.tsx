@@ -200,6 +200,7 @@ export function ObservationInput({
   const [callBriefDealName, setCallBriefDealName] = useState<string | null>(null);
   const [callBriefAccountId, setCallBriefAccountId] = useState<string | null>(null);
   const [callBriefActiveExperiments, setCallBriefActiveExperiments] = useState<string[]>([]);
+  const [callBriefProvenPlays, setCallBriefProvenPlays] = useState<string[]>([]);
 
   // Prep context state (meeting type + attendee selection)
   const [agentPrepContext, setAgentPrepContext] = useState("");
@@ -269,6 +270,7 @@ export function ObservationInput({
     setHighlightedOption(-1);
     setCallBrief(null);
     setCallBriefActiveExperiments([]);
+    setCallBriefProvenPlays([]);
     setEmailDraft(null);
     setSaveFeedback(null);
     setPlaybookIdeaId(null);
@@ -434,6 +436,7 @@ export function ObservationInput({
         setCallBrief(data.brief);
         setCallBriefDealName(data.dealName ?? data.accountName ?? null);
         setCallBriefActiveExperiments(data.activeExperimentNames ?? []);
+        setCallBriefProvenPlays(data.provenPlayNames ?? []);
         setPhase("call_prep_result");
       } else {
         setPhase("expanded");
@@ -1572,6 +1575,32 @@ export function ObservationInput({
                     <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>
                       Applied to this prep
                     </p>
+                  </div>
+                )}
+
+                {/* Proven Play Badge */}
+                {callBriefProvenPlays.length > 0 && (
+                  <div
+                    className="mx-3 mt-2"
+                    style={{
+                      background: "rgba(74,124,89,0.08)",
+                      borderLeft: "3px solid #4A7C59",
+                      borderRadius: "0 8px 8px 0",
+                      padding: "10px 14px",
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span style={{ fontSize: 12 }}>📋</span>
+                      <span className="text-[11px] font-semibold tracking-[0.05em] uppercase" style={{ color: "#4A7C59" }}>
+                        Proven Play
+                      </span>
+                    </div>
+                    {callBriefProvenPlays.map((name, i) => (
+                      <p key={i} className="text-[13px]" style={{ color: "#3D3833" }}>
+                        <span className="font-semibold">&ldquo;{name}&rdquo;</span>
+                        <span style={{ color: "#8A8078" }}> — Applied to this prep</span>
+                      </p>
+                    ))}
                   </div>
                 )}
 

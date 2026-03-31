@@ -74,7 +74,7 @@ async function seed() {
   const companiesAndDeals = [
     // Healthcare (Sarah Chen)
     { company: { name: "MedVista Health Systems", domain: "medvista.com", industry: "healthcare" as const, employeeCount: 2800, annualRevenue: "€450M", hqLocation: "Munich, Germany", techStack: ["Epic EHR", "Azure", "Python", "React"], description: "Regional hospital network with 12 facilities across Bavaria" }, deals: [
-      { name: "MedVista — Claude Enterprise for Clinical Docs", stage: "proposal" as const, dealValue: "2400000", product: "claude_enterprise" as const, winProbability: 65, forecastCategory: "upside" as const, leadSource: "inbound" as const, closeDate: daysAgo(-30), stageEnteredAt: daysAgo(8), competitor: "Microsoft Copilot" },
+      { name: "MedVista — Claude Enterprise for Clinical Docs", stage: "discovery" as const, dealValue: "2400000", product: "claude_enterprise" as const, winProbability: 25, forecastCategory: "pipeline" as const, leadSource: "inbound" as const, closeDate: daysAgo(-60), stageEnteredAt: daysAgo(3), competitor: "Microsoft Copilot" },
     ]},
     { company: { name: "NordicCare Group", domain: "nordiccare.eu", industry: "healthcare" as const, employeeCount: 5200, annualRevenue: "€820M", hqLocation: "Stockholm, Sweden", techStack: ["Cerner", "AWS", "Java", "Angular"], description: "Scandinavian healthcare provider specializing in eldercare and rehabilitation" }, deals: [
       { name: "NordicCare — Claude API Integration", stage: "technical_validation" as const, dealValue: "780000", product: "claude_api" as const, winProbability: 50, forecastCategory: "upside" as const, leadSource: "event" as const, closeDate: daysAgo(-45), stageEnteredAt: daysAgo(12) },

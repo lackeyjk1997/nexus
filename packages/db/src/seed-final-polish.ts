@@ -59,14 +59,15 @@ async function run() {
   const dealsToDelete = allDeals.filter((d) => !keepDealIds.has(d.id));
   console.log(`Keeping ${keepDealIds.size} deals, deleting ${dealsToDelete.length}\n`);
 
-  // ── Step 1h: Reset MedVista if it's in closed state ──
-  console.log("── Resetting MedVista to Negotiation ──");
+  // ── Step 1h: Reset MedVista to Discovery stage for demo flow ──
+  console.log("── Resetting MedVista to Discovery ──");
   const medvista = allDeals.find((d) => d.name.includes("MedVista"));
-  if (medvista && (medvista.stage === "closed_won" || medvista.stage === "closed_lost")) {
+  if (medvista) {
     await db
       .update(schema.deals)
       .set({
-        stage: "negotiation",
+        stage: "discovery",
+        winProbability: 25,
         closeCompetitor: null,
         closeNotes: null,
         closeImprovement: null,
@@ -79,7 +80,7 @@ async function run() {
         closeAiRanAtTimestamp: null,
       })
       .where(eq(schema.deals.id, medvista.id));
-    console.log("  ✓ MedVista reset to negotiation");
+    console.log("  ✓ MedVista reset to discovery");
 
     // Delete close-related activities
     await db.execute(sql`
@@ -89,7 +90,7 @@ async function run() {
       AND created_at > '2026-03-28'
     `);
   } else {
-    console.log("  ✓ MedVista already in negotiation");
+    console.log("  ⚠ MedVista not found");
   }
 
   // ── Step 1e: Delete non-keeper deals and all related records ──

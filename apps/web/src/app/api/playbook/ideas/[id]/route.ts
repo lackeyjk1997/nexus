@@ -25,6 +25,10 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    if (!id) {
+      return NextResponse.json({ error: "Missing idea ID" }, { status: 400 });
+    }
+
     const [existing] = await db
       .select()
       .from(playbookIdeas)
@@ -32,7 +36,7 @@ export async function PATCH(
       .limit(1);
 
     if (!existing) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ error: `Not found: ${id}` }, { status: 404 });
     }
 
     // Validate status transition if status is being changed
@@ -40,7 +44,7 @@ export async function PATCH(
       const allowed = VALID_TRANSITIONS[existing.status] ?? [];
       if (!allowed.includes(body.status)) {
         return NextResponse.json(
-          { error: `Invalid transition: ${existing.status} → ${body.status}` },
+          { error: `Invalid transition: ${existing.status} → ${body.status}. Allowed: ${allowed.join(", ") || "none"}` },
           { status: 400 }
         );
       }
@@ -49,7 +53,7 @@ export async function PATCH(
       if (body.status === "testing") {
         if (!body.test_group?.length || !body.success_thresholds || !body.approved_by) {
           return NextResponse.json(
-            { error: "Testing requires test_group, success_thresholds, and approved_by" },
+            { error: `Testing requires test_group (got ${body.test_group?.length ?? 0}), success_thresholds (${!!body.success_thresholds}), and approved_by (${!!body.approved_by})` },
             { status: 400 }
           );
         }

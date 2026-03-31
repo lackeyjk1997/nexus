@@ -21,7 +21,7 @@ import {
   managerDirectives,
   playbookIdeas,
 } from "@nexus/db";
-import { eq, desc, and, sql, or, ne, isNull } from "drizzle-orm";
+import { eq, desc, and, sql, or, ne, isNull, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 // Map vertical enum values to display names for matching against industryFocus
@@ -551,6 +551,26 @@ export async function POST(request: Request) {
     console.error("Active experiments query error (non-fatal):", err);
   }
 
+  // ── Proven plays (graduated + promoted experiments — org-wide best practices) ──
+  type ProvenPlay = { title: string; hypothesis: string; currentMetrics: unknown; results: unknown };
+  let provenPlays: ProvenPlay[] = [];
+  try {
+    provenPlays = await db
+      .select({
+        title: playbookIdeas.title,
+        hypothesis: playbookIdeas.hypothesis,
+        currentMetrics: playbookIdeas.currentMetrics,
+        results: playbookIdeas.results,
+      })
+      .from(playbookIdeas)
+      .where(
+        inArray(playbookIdeas.status, ["graduated", "promoted"])
+      )
+      .limit(5) as ProvenPlay[];
+  } catch (err) {
+    console.error("Proven plays query error (non-fatal):", err);
+  }
+
   // ── Stakeholder engagement alerts ──
   type StakeholderAlert = { name: string; title: string | null; role: string | null; activityCount: number };
   let underEngagedStakeholders: StakeholderAlert[] = [];
@@ -786,6 +806,23 @@ The experiment injection should feel natural — contextual to THIS deal and THI
 
 Include a dedicated "active_experiments" array in the JSON output with each experiment and a one-sentence contextual application to THIS specific call.
 ` : ""}
+${provenPlays.length > 0 ? `## PROVEN PLAYS (Organization-wide best practices)
+The following methodologies have been tested and proven effective across the sales team. Apply these approaches where relevant to this specific deal and meeting context:
+
+${provenPlays.map(play => {
+  const m = play.currentMetrics as { velocity_pct?: number; sentiment_pts?: number } | null;
+  const r = play.results as { stage_velocity_change?: number } | null;
+  const velocity = m?.velocity_pct ?? r?.stage_velocity_change;
+  const sentiment = m?.sentiment_pts;
+  const resultStr = velocity ? `+${velocity}% deal velocity${sentiment ? `, +${sentiment} sentiment points` : ""}` : "Proven effective";
+  return `PROVEN PLAY: ${play.title}\nMETHODOLOGY: ${play.hypothesis}\nRESULTS: ${resultStr}`;
+}).join("\n\n")}
+
+When incorporating proven plays, frame them naturally in the call strategy. For example, if a proven play is about building prototypes during discovery, suggest specific prototypes relevant to THIS prospect's pain points.
+Mark each proven play application with: "📋 Proven Play: [name]"
+
+Include a dedicated "proven_plays" array in the JSON output with each proven play and how it applies to THIS specific call.
+` : ""}
 AVAILABLE RESOURCES FROM THE KNOWLEDGE BASE:
 ${relevantResources.map(r => `- "${r.title}" (${r.type}) — ${r.description}`).join("\n")}
 
@@ -857,6 +894,12 @@ Return ONLY valid JSON with this exact structure:
       "name": "Experiment title — only include if this rep is in an active experiment test group",
       "application": "One sentence: how to apply this methodology to THIS specific call"
     }
+  ],
+  "proven_plays": [
+    {
+      "name": "Proven play title — include for graduated/promoted methodologies relevant to this call",
+      "application": "One sentence: how this proven methodology applies to THIS specific deal and meeting"
+    }
   ]
 }`;
 
@@ -897,6 +940,7 @@ Return ONLY valid JSON with this exact structure:
         isPrimary: false, // not available in this select
       })),
       activeExperimentNames: activeExperimentsForAE.map((e) => e.title),
+      provenPlayNames: provenPlays.map((p) => p.title),
     });
   } catch (err) {
     console.error("Call prep error:", err);

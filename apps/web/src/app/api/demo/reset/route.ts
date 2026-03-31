@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    // 1. Reset MedVista to its original demo state
+    // 1. Reset MedVista to Discovery stage for demo flow
     await db.execute(sql`
       UPDATE deals SET
-        stage = 'negotiation',
-        win_probability = 65,
+        stage = 'discovery',
+        win_probability = 25,
         close_competitor = NULL,
         close_notes = NULL,
         close_improvement = NULL,
@@ -22,7 +22,8 @@ export async function POST() {
         close_factors = NULL,
         win_factors = NULL,
         close_ai_ran_at_timestamp = NULL,
-        loss_reason = NULL
+        loss_reason = NULL,
+        stage_entered_at = NOW() - INTERVAL '3 days'
       WHERE name ILIKE '%MedVista%'
     `);
 
@@ -250,7 +251,7 @@ async function resetPlaybookData() {
 
   // Post-discovery prototype — graduation-ready: 9 deals, meets 3/3 thresholds
   const postDiscoEvidence = JSON.stringify({ deals: [
-    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "negotiation", amount: 2400000, days_in_stage: 8, avg_days_baseline: 20, sentiment_score: 85, avg_sentiment_baseline: 60, evidence: [
+    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "discovery", amount: 2400000, days_in_stage: 8, avg_days_baseline: 20, sentiment_score: 85, avg_sentiment_baseline: 60, evidence: [
       { type: "transcript", date: "2026-03-18", source: "Discovery Call with Dr. Patel", excerpt: "After building the EHR integration prototype live on the call, Dr. Patel immediately asked to bring in their CTO for a follow-up. She said: 'This is the first vendor who actually showed us what it would look like instead of just talking about it.'" },
       { type: "email", date: "2026-03-20", source: "Follow-up from Dr. Patel", excerpt: "The prototype from our session is already being reviewed by our compliance team. Can we schedule the security review this week instead of next month? We want to move quickly on this." },
     ]},
@@ -369,7 +370,7 @@ async function resetPlaybookData() {
 
   // Compliance-led discovery in Healthcare (PROMOTED)
   const complianceEvidence = JSON.stringify({ deals: [
-    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "negotiation", amount: 2400000, days_in_stage: 6, avg_days_baseline: 14, sentiment_score: 88, avg_sentiment_baseline: 62, evidence: [
+    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "discovery", amount: 2400000, days_in_stage: 6, avg_days_baseline: 14, sentiment_score: 88, avg_sentiment_baseline: 62, evidence: [
       { type: "transcript", date: "2026-01-22", source: "Discovery Call", excerpt: "Opening with HIPAA compliance positioning immediately changed the tone. Dr. Patel said: 'Finally — a vendor that understands healthcare isn't just another enterprise sale. Compliance is table stakes.'" },
     ]},
     { deal_name: "NordicMed Group Platform", deal_id: NORDICMED, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "closed_won", amount: 1600000, days_in_stage: 8, avg_days_baseline: 14, sentiment_score: 82, avg_sentiment_baseline: 62, evidence: [
