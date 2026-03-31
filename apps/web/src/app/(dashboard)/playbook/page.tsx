@@ -7,7 +7,7 @@ import {
   teamMembers,
   systemIntelligence,
 } from "@nexus/db";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { PlaybookClient } from "./playbook-client";
 
 type PlaybookResults = {
@@ -65,7 +65,6 @@ export default async function PlaybookPage() {
         experimentStart: playbookIdeas.experimentStart,
         experimentEnd: playbookIdeas.experimentEnd,
         attribution: playbookIdeas.attribution,
-        experimentEvidence: playbookIdeas.experimentEvidence,
         createdAt: playbookIdeas.createdAt,
       })
       .from(playbookIdeas)
@@ -107,6 +106,19 @@ export default async function PlaybookPage() {
       .orderBy(desc(systemIntelligence.relevanceScore)),
   ]);
 
+  // Safely fetch experiment_evidence (column may not exist in older DBs)
+  let evidenceMap = new Map<string, unknown>();
+  try {
+    const evidenceRows = await db.execute(
+      sql`SELECT id, experiment_evidence FROM playbook_ideas WHERE experiment_evidence IS NOT NULL`
+    ) as unknown as Array<{ id: string; experiment_evidence: unknown }>;
+    for (const row of evidenceRows) {
+      evidenceMap.set(row.id, row.experiment_evidence);
+    }
+  } catch {
+    // Column doesn't exist yet — safe to ignore
+  }
+
   // Cast jsonb columns to typed shapes
   const ideas = rawIdeas.map((row) => ({
     ...row,
@@ -115,7 +127,7 @@ export default async function PlaybookPage() {
     currentMetrics: (row.currentMetrics ?? null) as Record<string, number> | null,
     attribution: (row.attribution ?? null) as Record<string, unknown> | null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    experimentEvidence: (row.experimentEvidence ?? null) as any,
+    experimentEvidence: (evidenceMap.get(row.id) ?? null) as any,
   }));
 
   const scores = rawScores.map((row) => ({
