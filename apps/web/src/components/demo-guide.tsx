@@ -17,13 +17,13 @@ interface StepConfig {
   scrollToSelector?: string;
   clickSelector?: string;
   autoAdvance?: {
-    type: "route" | "element";
-    match: string; // route prefix or element selector
+    type: "route" | "element" | "mutation";
+    match: string; // route prefix, element selector, or mutation target
   };
 }
 
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
-const TOTAL_STEPS = 10;
+const TOTAL_STEPS = 12;
 
 function setTourStepStorage(value: string) {
   try {
@@ -51,6 +51,7 @@ const STEPS: StepConfig[] = [
     buttonText: "Next",
     personaSwitch: "Marcus Thompson",
     scrollToSelector: "[data-section='proposed']",
+    autoAdvance: { type: "mutation", match: "approve-button-gone" },
   },
   // Step 3: Experiments run with real evidence
   {
@@ -68,7 +69,7 @@ const STEPS: StepConfig[] = [
     body: "When experiments meet their thresholds with enough data, Marcus can graduate them and scale the methodology across the team \u2014 by vertical or company-wide. Click \u2018Graduate & Scale\u2019 to promote this experiment.",
     highlightSelector: "[data-tour='graduate-button']",
     buttonText: "Next",
-    autoAdvance: { type: "element", match: "[data-tab='whats-working'].border-b-2, [data-tab='whats-working'][aria-selected='true']" },
+    autoAdvance: { type: "mutation", match: "graduate-button-gone" },
   },
   // Step 5: Proven plays with attribution
   {
@@ -96,17 +97,33 @@ const STEPS: StepConfig[] = [
     body: "Generate a call brief and watch the AI incorporate deal context, stakeholder insights, MEDDPICC gaps, competitive intel \u2014 and the proven play methodology that was just graduated. Click \u2018Prep Call\u2019 to generate.",
     highlightSelector: "[data-tour='prep-call']",
     buttonText: "Next",
-    autoAdvance: { type: "element", match: "[data-tour='call-brief']" },
+    autoAdvance: { type: "element", match: "[data-tour='call-prep-result']" },
   },
-  // Step 8: Full deal intelligence
+  // Step 8: Proven plays influence every brief
   {
     route: `/pipeline/${MEDVISTA_DEAL_ID}`,
-    title: "Full deal intelligence",
-    body: "MEDDPICC scoring with specific gap warnings, stakeholder maps with engagement levels, sentiment trajectory over time, and the complete activity history. No tab-switching between five different tools \u2014 it\u2019s all here.",
-    highlightSelector: "[data-tour='deal-tabs']",
+    title: "Proven plays influence every brief",
+    body: "See the green \ud83d\udccb badge? That\u2019s a proven methodology from a graduated experiment \u2014 tested across 9 deals with +40% velocity improvement. The AI doesn\u2019t just mention it \u2014 it weaves it into talking points and suggested next steps specific to this deal.",
+    highlightSelector: "[data-tour='proven-plays']",
+    buttonText: "Next",
+  },
+  // Step 9: Team intelligence feeds every prep
+  {
+    route: `/pipeline/${MEDVISTA_DEAL_ID}`,
+    title: "Your team\u2019s knowledge, built in",
+    body: "Team Intelligence pulls insights from SCs and CSMs who\u2019ve worked similar deals. Alex Kim\u2019s competitive positioning advice and Nina Patel\u2019s implementation timeline warnings are automatically surfaced \u2014 no Slack searching required.",
+    highlightSelector: "[data-tour='team-intelligence']",
+    buttonText: "Next",
+  },
+  // Step 10: Resources at your fingertips
+  {
+    route: `/pipeline/${MEDVISTA_DEAL_ID}`,
+    title: "The right resources, automatically",
+    body: "Suggested next steps are pulled based on deal context \u2014 competitive battlecards when a competitor is active, compliance guides for regulated verticals, prototype offers when the proven play applies. The AE doesn\u2019t search \u2014 the system surfaces.",
+    highlightSelector: "[data-tour='suggested-close']",
     buttonText: "Next: Intelligence",
   },
-  // Step 9: Field intelligence dashboard
+  // Step 11: Field intelligence dashboard
   {
     route: "/intelligence",
     title: "Field intelligence dashboard",
@@ -114,7 +131,7 @@ const STEPS: StepConfig[] = [
     highlightSelector: "[data-tour='all-signals']",
     buttonText: "Next",
   },
-  // Step 10: Keep exploring
+  // Step 12: Keep exploring
   {
     route: null,
     title: "Keep exploring",
@@ -210,7 +227,7 @@ export function DemoGuide() {
       if (el) {
         el.classList.add("demo-highlight");
         try {
-          el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
         } catch {}
       } else if (attempts < 20) {
         attempts++;
@@ -244,7 +261,7 @@ export function DemoGuide() {
     if (step < 1 || step > TOTAL_STEPS || dismissed) return;
     const config = STEPS[step - 1]!;
     if (!config.autoAdvance || config.autoAdvance.type !== "route") return;
-    if (autoAdvancedRef.current === step) return; // already auto-advanced from this step
+    if (autoAdvancedRef.current === step) return;
 
     if (pathname.startsWith(config.autoAdvance.match)) {
       autoAdvancedRef.current = step;
@@ -271,7 +288,7 @@ export function DemoGuide() {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [step, pathname, dismissed, allUsers, setCurrentUser, removeHighlight]);
+  }, [step, pathname, dismissed, allUsers, setCurrentUser, removeHighlight, router]);
 
   // ── Auto-advance: element-based (poll for element appearance) ──
   useEffect(() => {
@@ -283,7 +300,6 @@ export function DemoGuide() {
     let cancelled = false;
     const checkInterval = setInterval(() => {
       if (cancelled) return;
-      // Try each selector in the comma-separated list
       const selectors = config.autoAdvance!.match.split(",").map(s => s.trim());
       const found = selectors.some(sel => document.querySelector(sel));
       if (found) {
@@ -317,7 +333,7 @@ export function DemoGuide() {
           }
           setStep(nextStep);
           setTourStepStorage(String(nextStep));
-        }, 1000);
+        }, 2000);
       }
     }, 1000);
 
@@ -326,6 +342,73 @@ export function DemoGuide() {
       clearInterval(checkInterval);
     };
   }, [step, pathname, dismissed, allUsers, setCurrentUser, router, removeHighlight]);
+
+  // ── Auto-advance: mutation-based (detect DOM removal of key elements) ──
+  useEffect(() => {
+    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
+    const config = STEPS[step - 1]!;
+    if (!config.autoAdvance || config.autoAdvance.type !== "mutation") return;
+    if (autoAdvancedRef.current === step) return;
+
+    // Step 2: detect approval completion (approve button disappears after page reload)
+    if (config.autoAdvance.match === "approve-button-gone") {
+      let approveWasVisible = false;
+      const interval = setInterval(() => {
+        const approveBtn = document.querySelector("[data-tour='approve-button']");
+        if (approveBtn) {
+          approveWasVisible = true;
+        } else if (approveWasVisible) {
+          // Approve button was visible, now it's gone — approval completed + page reloaded
+          clearInterval(interval);
+          if (autoAdvancedRef.current === step) return;
+          autoAdvancedRef.current = step;
+          setTimeout(() => {
+            removeHighlight();
+            const nextStep = step + 1;
+            if (nextStep > TOTAL_STEPS) return;
+            const nextConfig = STEPS[nextStep - 1]!;
+            if (nextConfig.scrollToSelector) {
+              setTimeout(() => {
+                const el = document.querySelector(nextConfig.scrollToSelector!);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 800);
+            }
+            setStep(nextStep);
+            setTourStepStorage(String(nextStep));
+          }, 1500);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+
+    // Step 4: detect graduation completion (graduate button disappears)
+    if (config.autoAdvance.match === "graduate-button-gone") {
+      let graduateWasVisible = false;
+      const interval = setInterval(() => {
+        const graduateBtn = document.querySelector("[data-tour='graduate-button']");
+        if (graduateBtn) {
+          graduateWasVisible = true;
+        } else if (graduateWasVisible) {
+          clearInterval(interval);
+          if (autoAdvancedRef.current === step) return;
+          autoAdvancedRef.current = step;
+          setTimeout(() => {
+            removeHighlight();
+            // Click the What's Working tab
+            const whatsWorkingTab = document.querySelector("[data-tab='whats-working']") as HTMLElement;
+            if (whatsWorkingTab) whatsWorkingTab.click();
+            const nextStep = step + 1;
+            if (nextStep > TOTAL_STEPS) return;
+            setTimeout(() => {
+              setStep(nextStep);
+              setTourStepStorage(String(nextStep));
+            }, 500);
+          }, 1000);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [step, dismissed, removeHighlight]);
 
   // ── Helper: get persona for a given step (walks back to find the last personaSwitch) ──
   const getPersonaForStep = useCallback((targetStep: number): string | undefined => {
@@ -354,7 +437,6 @@ export function DemoGuide() {
       const user = allUsers.find((u) => u.name === config.personaSwitch);
       if (user) {
         setCurrentUser(user);
-        // Force server re-fetch so role-based UI (approve/graduate buttons) appears
         setTimeout(() => router.refresh(), 300);
       }
     }

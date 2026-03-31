@@ -388,6 +388,7 @@ POST /api/demo/reset:
 | `seed-final-polish.ts` | Final demo polish: 10 curated deals, dedup observations, recalculate metrics |
 | `seed-intelligence-fixes.ts` | Dedup observations, seed acknowledged_at, recalculate cluster ARR |
 | `seed-playbook.ts` | 8 playbook ideas (3 promoted, 3 testing, 1 proposed, 1 retired), 12 influence scores for 5 members, 5 market signals |
+| `seed-playbook-lifecycle.ts` | Lifecycle data: test groups, metrics, evidence for 3 TESTING experiments + experiment_evidence column migration |
 | `backfill-routing.ts` | Creates 34 routing records from existing observations |
 | `backfill-entities.ts` | Links 4 observations to accounts/deals via fuzzy matching |
 
@@ -543,6 +544,42 @@ Intelligence dashboard with clusters, support function personas (Lisa Park, Mich
 - **`/api/demo/reset`**: Resets MedVista to Negotiation, clears last-4-hour test data, marks notifications unread, recalculates cluster metrics
 - **`/api/demo/ask`**: Claude-powered demo assistant with full product knowledge base. Context-aware responses based on current page + persona.
 - **`seed-playbook.ts`**: 8 playbook ideas, 12 influence scores for 5 members, 5 market signals
+
+### Session S9 (continued) — Playbook Lifecycle + Demo Polish
+- **Agent bar** (ObservationInput) on all dashboard pages with contextual placeholders, hidden on /agent-config
+- **Fixed agent bar submission**: dealId guard removed for non-deal pages, Drizzle timestamp bug fixed (Date objects passed directly to .set())
+- **Playbook Lifecycle Part 1**: schema migration (test_group, control_group, success_thresholds, current_metrics, approved_by, approved_at, graduated_at, experiment_duration_days, experiment_start, experiment_end, experiment_evidence, attribution columns). Status transitions: proposed → testing → graduated/archived. Manager approval UI with inline AE chips + threshold inputs. PROPOSED → TESTING validation server-side.
+- **Playbook Lifecycle Part 2**: call prep injection for TESTING experiments (🧪 Active Experiment badge, coral). Proven Plays query for GRADUATED/PROMOTED experiments (📋 Proven Play badge, green #4A7C59) with DIRECTIVE prompt injection requiring incorporation into talking_points and suggested_close. Graduation creates process_innovation observation for Intelligence dashboard. Playbook filter pill on Intelligence. Influence tab with per-AE experiment stats. PromotedCard enhanced with NOW SCALING TO + attribution trail.
+- **Confidence bands**: Low (<5), Medium (5-8), High (9-12), Statistically Significant (13+). Minimum 8 deals for graduation.
+- **Metric drill-down modal**: click Velocity/Sentiment/Close Rate on any experiment to see test vs control deal comparisons with transcript/email excerpts. Deal rows are clickable links. Works on both TESTING and PROMOTED cards.
+- **Manager graduation UI**: "Graduate & Scale" button (green, visible when isManager && thresholdsMet >= 2 && dealsTested >= 8). Inline expansion with vertical/all/custom scaling scope.
+- **Demo reset**: full playbook reset as Step 3 (before observation deletion to avoid FK constraint). Deletes ALL playbook_ideas, re-inserts 7 experiments (3 TESTING + 1 PROPOSED + 3 PROMOTED), applies lifecycle data with evidence. Post-discovery prototype always resets to TESTING with 9 deals, 3/3 thresholds, High Confidence, graduation-ready. MedVista resets to Discovery stage.
+- **Guided tour**: 10-step narrative flow with data-tour attributes, applyHighlight() with orange glow CSS, persona auto-switching with router.refresh(), route auto-navigation.
+- **Knowledge base**: comprehensive system prompt covering all features + "What Does Not Exist" section.
+
+**Key architectural decisions:**
+- scaling_scope stored inside attribution jsonb, not its own column
+- provenPlays query fetches ALL graduated + promoted experiments (no vertical filtering for demo simplicity)
+- Call prep proven plays prompt uses DIRECTIVE language ("You MUST incorporate") not passive ("apply where relevant")
+- MedVista moved from Negotiation to Discovery for tour narrative
+- Competitive battlecard seeded as PROPOSED (not TESTING) so Marcus has a card to approve during tour
+- SQL: memberId = ANY(testGroup) instead of testGroup @> ARRAY[] for Drizzle compatibility
+
+**Known issues / next steps:**
+- Tour auto-progression not yet implemented (user must click Next for every step)
+- Tour steps 8-10 need restructuring to highlight call prep sections (Proven Plays, Team Intelligence, Suggested Resources) instead of deal tabs
+- Tour should be 12 steps total after restructuring
+- Agent bar Q&A follow-up chip submission flow not fully wired
+- MEDDPICC warnings still need explanations/actions wired into observation system
+
+**Files most frequently modified:**
+- `apps/web/src/components/demo-guide.tsx` (tour)
+- `apps/web/src/components/observation-input.tsx` (agent bar, call prep, badges)
+- `apps/web/src/app/api/agent/call-prep/route.ts` (call prep generation)
+- `apps/web/src/app/api/demo/reset/route.ts` (demo reset)
+- `apps/web/src/app/(dashboard)/playbook/playbook-client.tsx` (playbook UI)
+- `apps/web/src/app/api/playbook/ideas/[id]/route.ts` (PATCH handler)
+- `packages/db/src/schema.ts` (playbookIdeas table)
 
 ---
 

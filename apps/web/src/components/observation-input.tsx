@@ -142,15 +142,17 @@ function CollapsibleSection({
   children,
   defaultOpen = true,
   accent,
+  dataTour,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
   accent?: boolean;
+  dataTour?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div>
+    <div data-tour={dataTour}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between py-2"
@@ -1525,6 +1527,7 @@ export function ObservationInput({
             {/* Call Prep Brief */}
             {phase === "call_prep_result" && callBrief && (
               <div
+                data-tour="call-prep-result"
                 className="animate-[fadeSlideUp_0.4s_ease]"
                 style={{ background: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: "12px", boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}
               >
@@ -1580,6 +1583,7 @@ export function ObservationInput({
                 {/* Proven Play Badge */}
                 {callBriefProvenPlays.length > 0 && (
                   <div
+                    data-tour="proven-plays"
                     className="mx-3 mt-2"
                     style={{
                       background: "rgba(74,124,89,0.08)",
@@ -1709,7 +1713,7 @@ export function ObservationInput({
 
                   {/* Team Intelligence */}
                   {callBrief.team_intelligence.length > 0 && (
-                    <CollapsibleSection title="💡 Team Intelligence">
+                    <CollapsibleSection title="💡 Team Intelligence" dataTour="team-intelligence">
                       <div className="space-y-1.5 mt-1">
                         {callBrief.team_intelligence.map((intel, i) => (
                           <div key={i} className="flex gap-2">
@@ -1731,7 +1735,7 @@ export function ObservationInput({
 
                   {/* Next Steps */}
                   {callBrief.suggested_next_steps.length > 0 && (
-                    <CollapsibleSection title="Suggested Close">
+                    <CollapsibleSection title="Suggested Close" dataTour="suggested-close">
                       <div className="space-y-1 mt-1">
                         {callBrief.suggested_next_steps.map((step, i) => (
                           <div key={i} className="flex gap-2">
