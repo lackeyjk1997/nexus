@@ -679,7 +679,10 @@ function TestingCard({
           },
         }),
       });
-      if (res.ok) onStatusChange();
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent('nexus-experiment-graduated'));
+        onStatusChange();
+      }
     } catch { /* non-fatal */ }
     setGraduating(false);
   }
@@ -1011,6 +1014,7 @@ function ProposedCard({
         }),
       });
       if (res.ok) {
+        window.dispatchEvent(new CustomEvent('nexus-experiment-started'));
         onStatusChange();
         return; // page will reload — don't setSubmitting(false)
       }

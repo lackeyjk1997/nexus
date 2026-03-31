@@ -51,7 +51,6 @@ const STEPS: StepConfig[] = [
     buttonText: "Next",
     personaSwitch: "Marcus Thompson",
     scrollToSelector: "[data-section='proposed']",
-    autoAdvance: { type: "mutation", match: "approve-button-gone" },
   },
   // Step 3: Experiments run with real evidence
   {
@@ -69,7 +68,6 @@ const STEPS: StepConfig[] = [
     body: "When experiments meet their thresholds with enough data, Marcus can graduate them and scale the methodology across the team \u2014 by vertical or company-wide. Click \u2018Graduate & Scale\u2019 to promote this experiment.",
     highlightSelector: "[data-tour='graduate-button']",
     buttonText: "Next",
-    autoAdvance: { type: "mutation", match: "graduate-button-gone" },
   },
   // Step 5: Proven plays with attribution
   {
@@ -327,94 +325,56 @@ export function DemoGuide() {
     };
   }, [step, pathname, dismissed, allUsers, setCurrentUser, router, removeHighlight]);
 
-  // ── Auto-advance: mutation-based (detect card removal after action completes) ──
+  // ── Auto-advance: custom event for Step 2→3 (experiment started) ──
   useEffect(() => {
-    if (step < 1 || step > TOTAL_STEPS || dismissed) return;
-    const config = STEPS[step - 1]!;
-    if (!config.autoAdvance || config.autoAdvance.type !== "mutation") return;
-    if (autoAdvancedRef.current === step) return;
+    if (step !== 2 || dismissed) return;
+    if (autoAdvancedRef.current >= 2) return;
 
-    // Step 2: detect PROPOSED card disappearing after "Start Experiment" succeeds
-    // The card only disappears when the page reloads after a successful PATCH.
-    // Clicking "Approve & Start Testing" opens an inline expansion (card stays).
-    // We count PROPOSED cards — when the count drops, the experiment was started.
-    if (config.autoAdvance.match === "approve-button-gone") {
-      // Wait a moment for the page to render the PROPOSED section
-      let initialCount = -1;
-      const interval = setInterval(() => {
-        const proposedSection = document.querySelector("[data-section='proposed']");
-        // Count cards by looking for PROPOSED badges within the section's parent
-        const cards = proposedSection
-          ? proposedSection.closest("div")?.querySelectorAll("[data-tour='approve-button']")
-          : document.querySelectorAll("[data-tour='approve-button']");
-        const currentCount = cards?.length ?? 0;
-
-        if (initialCount === -1) {
-          // First check — record starting count
-          if (currentCount > 0) initialCount = currentCount;
-          return;
-        }
-
-        // Card count dropped — "Start Experiment" succeeded and page reloaded
-        if (currentCount < initialCount) {
-          clearInterval(interval);
-          if (autoAdvancedRef.current === step) return;
-          autoAdvancedRef.current = step;
+    const handler = () => {
+      if (autoAdvancedRef.current >= 2) return;
+      autoAdvancedRef.current = 2;
+      setTimeout(() => {
+        removeHighlight();
+        const nextStep = 3;
+        const nextConfig = STEPS[nextStep - 1]!;
+        if (nextConfig.scrollToSelector) {
           setTimeout(() => {
-            removeHighlight();
-            const nextStep = step + 1;
-            if (nextStep > TOTAL_STEPS) return;
-            const nextConfig = STEPS[nextStep - 1]!;
-            if (nextConfig.scrollToSelector) {
-              setTimeout(() => {
-                const el = document.querySelector(nextConfig.scrollToSelector!);
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-              }, 800);
-            }
-            setStep(nextStep);
-            setTourStepStorage(String(nextStep));
-          }, 1500);
+            const el = document.querySelector(nextConfig.scrollToSelector!);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 800);
         }
+        setStep(nextStep);
+        setTourStepStorage(String(nextStep));
+      }, 1500);
+    };
+
+    window.addEventListener("nexus-experiment-started", handler);
+    return () => window.removeEventListener("nexus-experiment-started", handler);
+  }, [step, dismissed, removeHighlight]);
+
+  // ── Auto-advance: custom event for Step 4→5 (experiment graduated) ──
+  useEffect(() => {
+    if (step !== 4 || dismissed) return;
+    if (autoAdvancedRef.current >= 4) return;
+
+    const handler = () => {
+      if (autoAdvancedRef.current >= 4) return;
+      autoAdvancedRef.current = 4;
+      setTimeout(() => {
+        removeHighlight();
+        // Click the What's Working tab
+        const whatsWorkingTab = document.querySelector("[data-tab='whats-working']") as HTMLElement;
+        if (whatsWorkingTab) whatsWorkingTab.click();
+        // Wait for tab to render, then advance to Step 5
+        setTimeout(() => {
+          setStep(5);
+          setTourStepStorage(String(5));
+        }, 800);
       }, 1000);
-      return () => clearInterval(interval);
-    }
+    };
 
-    // Step 4: detect graduation-ready card disappearing from TESTING section
-    // The "Graduate & Scale" button opens an inline expansion (button stays in DOM).
-    // The card only disappears from TESTING when "Confirm Graduation" PATCH succeeds
-    // and the page reloads. We count cards with graduate buttons.
-    if (config.autoAdvance.match === "graduate-button-gone") {
-      let initialCount = -1;
-      const interval = setInterval(() => {
-        const graduateBtns = document.querySelectorAll("[data-tour='graduate-button']");
-        const currentCount = graduateBtns.length;
-
-        if (initialCount === -1) {
-          if (currentCount > 0) initialCount = currentCount;
-          return;
-        }
-
-        // Graduate button count dropped — graduation succeeded and page reloaded
-        if (currentCount < initialCount) {
-          clearInterval(interval);
-          if (autoAdvancedRef.current === step) return;
-          autoAdvancedRef.current = step;
-          setTimeout(() => {
-            removeHighlight();
-            // Click the What's Working tab
-            const whatsWorkingTab = document.querySelector("[data-tab='whats-working']") as HTMLElement;
-            if (whatsWorkingTab) whatsWorkingTab.click();
-            const nextStep = step + 1;
-            if (nextStep > TOTAL_STEPS) return;
-            setTimeout(() => {
-              setStep(nextStep);
-              setTourStepStorage(String(nextStep));
-            }, 500);
-          }, 1000);
-        }
-      }, 1000);
-      return () => clearInterval(interval);
-    }
+    window.addEventListener("nexus-experiment-graduated", handler);
+    return () => window.removeEventListener("nexus-experiment-graduated", handler);
   }, [step, dismissed, removeHighlight]);
 
   // ── Helper: get persona for a given step (walks back to find the last personaSwitch) ──
