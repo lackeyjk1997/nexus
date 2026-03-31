@@ -255,7 +255,10 @@ export function DemoGuide() {
         const nextConfig = STEPS[nextStep - 1]!;
         if (nextConfig.personaSwitch) {
           const user = allUsers.find((u) => u.name === nextConfig.personaSwitch);
-          if (user) setCurrentUser(user);
+          if (user) {
+            setCurrentUser(user);
+            setTimeout(() => router.refresh(), 300);
+          }
         }
         if (nextConfig.clickSelector) {
           setTimeout(() => {
@@ -294,7 +297,10 @@ export function DemoGuide() {
           const nextConfig = STEPS[nextStep - 1]!;
           if (nextConfig.personaSwitch) {
             const user = allUsers.find((u) => u.name === nextConfig.personaSwitch);
-            if (user) setCurrentUser(user);
+            if (user) {
+              setCurrentUser(user);
+              setTimeout(() => router.refresh(), 300);
+            }
           }
           if (nextConfig.clickSelector) {
             setTimeout(() => {
@@ -346,7 +352,11 @@ export function DemoGuide() {
     // Persona switch
     if (config.personaSwitch) {
       const user = allUsers.find((u) => u.name === config.personaSwitch);
-      if (user) setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+        // Force server re-fetch so role-based UI (approve/graduate buttons) appears
+        setTimeout(() => router.refresh(), 300);
+      }
     }
 
     // Click a tab/element before rendering this step
@@ -393,7 +403,10 @@ export function DemoGuide() {
     const targetPersona = getPersonaForStep(prevStep);
     if (targetPersona) {
       const user = allUsers.find((u) => u.name === targetPersona);
-      if (user) setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+        setTimeout(() => router.refresh(), 300);
+      }
     }
 
     // Click a tab if the target step needs one
