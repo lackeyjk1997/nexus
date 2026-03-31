@@ -544,7 +544,7 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(playbookIdeas.status, "testing"),
-          sql`${playbookIdeas.testGroup} @> ARRAY[${memberId}]::text[]`
+          sql`${memberId} = ANY(${playbookIdeas.testGroup})`
         )
       ) as ActiveExperiment[];
   } catch (err) {

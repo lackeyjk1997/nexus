@@ -11,6 +11,8 @@ import {
   BarChart3,
   Star,
   Users,
+  X,
+  ExternalLink,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -67,6 +69,27 @@ type PlaybookIdea = {
   experimentStart: Date | null;
   experimentEnd: Date | null;
   attribution: Record<string, unknown> | null;
+  experimentEvidence: {
+    deals: Array<{
+      deal_name: string;
+      deal_id: string | null;
+      owner_name: string;
+      owner_id: string;
+      group: "test" | "control";
+      stage: string;
+      amount: number;
+      days_in_stage: number;
+      avg_days_baseline: number;
+      sentiment_score: number;
+      avg_sentiment_baseline: number;
+      evidence: Array<{
+        type: string;
+        date: string;
+        source: string;
+        excerpt: string;
+      }>;
+    }>;
+  } | null;
   createdAt: Date;
 };
 
@@ -237,6 +260,270 @@ function ConfidenceBar({ level }: { level: string | undefined }) {
   );
 }
 
+// ── Confidence Band ──────────────────────────────────────────────────────────
+
+const MIN_DEALS_FOR_GRADUATION = 8;
+
+function getConfidenceBand(dealsTested: number) {
+  if (dealsTested >= 13) return { label: "Statistically Significant", color: "#0C7489", pct: 100 };
+  if (dealsTested >= 9) return { label: "High Confidence", color: "#2D8A4E", pct: 85 };
+  if (dealsTested >= 5) return { label: "Medium Confidence", color: "#D4A843", pct: 55 };
+  return { label: "Low Confidence", color: "#B45309", pct: 30 };
+}
+
+function ConfidenceBand({ dealsTested }: { dealsTested: number }) {
+  const band = getConfidenceBand(dealsTested);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+      <div style={{ flex: 1, height: 4, background: "#E8DDD3", borderRadius: 2, overflow: "hidden", maxWidth: 120 }}>
+        <div style={{ width: `${band.pct}%`, height: "100%", background: band.color, borderRadius: 2, transition: "width 0.3s ease" }} />
+      </div>
+      <span style={{ fontSize: 11, fontWeight: 600, color: band.color }}>
+        {band.label} ({dealsTested} deals)
+      </span>
+    </div>
+  );
+}
+
+// ── Metric Drill-Down Modal ──────────────────────────────────────────────────
+
+type EvidenceDeal = {
+  deal_name: string;
+  deal_id: string | null;
+  owner_name: string;
+  group: "test" | "control";
+  stage: string;
+  amount: number;
+  days_in_stage: number;
+  avg_days_baseline: number;
+  sentiment_score: number;
+  avg_sentiment_baseline: number;
+  evidence: Array<{ type: string; date: string; source: string; excerpt: string }>;
+};
+
+function MetricDrillDownModal({
+  metricType,
+  idea,
+  onClose,
+}: {
+  metricType: "velocity" | "sentiment" | "close_rate";
+  idea: PlaybookIdea;
+  onClose: () => void;
+}) {
+  const metrics = idea.currentMetrics as CurrentMetrics | null;
+  const evidence = idea.experimentEvidence as { deals: EvidenceDeal[] } | null;
+  const deals = evidence?.deals ?? [];
+  const testDeals = deals.filter((d) => d.group === "test");
+  const controlDeals = deals.filter((d) => d.group === "control");
+
+  const titles: Record<string, string> = {
+    velocity: `Velocity: +${metrics?.velocity_pct ?? 0}%`,
+    sentiment: `Sentiment: +${metrics?.sentiment_pts ?? 0} pts`,
+    close_rate: `Close Rate: +${metrics?.close_rate_pct ?? 0}%`,
+  };
+  const descriptions: Record<string, string> = {
+    velocity: `Test group deals move through stages ${metrics?.velocity_pct ?? 0}% faster than control`,
+    sentiment: `Test group prospect sentiment is ${metrics?.sentiment_pts ?? 0} points higher`,
+    close_rate: `Test group close rate is ${metrics?.close_rate_pct ?? 0} percentage points higher`,
+  };
+
+  function getMetricValue(deal: EvidenceDeal): string {
+    if (metricType === "velocity") {
+      const delta = deal.avg_days_baseline > 0
+        ? Math.round(((deal.avg_days_baseline - deal.days_in_stage) / deal.avg_days_baseline) * 100)
+        : 0;
+      return delta > 0 ? `↑ ${delta}% faster` : delta < 0 ? `↓ ${Math.abs(delta)}% slower` : "baseline";
+    }
+    if (metricType === "sentiment") {
+      const delta = deal.sentiment_score - deal.avg_sentiment_baseline;
+      return delta > 0 ? `+${delta} pts` : delta < 0 ? `${delta} pts` : "baseline";
+    }
+    return "";
+  }
+
+  function getDaysStat(deal: EvidenceDeal): string {
+    if (metricType === "velocity") return `${deal.days_in_stage} days`;
+    if (metricType === "sentiment") return `Score: ${deal.sentiment_score}`;
+    return formatStage(deal.stage);
+  }
+
+  function formatStage(s: string): string {
+    return s.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  }
+
+  const dealsTested = metrics?.deals_tested ?? deals.length;
+  const band = getConfidenceBand(dealsTested);
+
+  const avgTestDays = testDeals.length > 0
+    ? Math.round(testDeals.reduce((s, d) => s + d.days_in_stage, 0) / testDeals.length)
+    : 0;
+  const avgControlDays = controlDeals.length > 0
+    ? Math.round(controlDeals.reduce((s, d) => s + d.days_in_stage, 0) / controlDeals.length)
+    : 0;
+
+  const allEvidence = testDeals.flatMap((d) =>
+    d.evidence.map((e) => ({ ...e, dealName: d.deal_name }))
+  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        padding: 24,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        style={{
+          background: "#FFFFFF",
+          borderRadius: 14,
+          boxShadow: "0 24px 64px rgba(0,0,0,0.18)",
+          maxWidth: 700,
+          width: "100%",
+          maxHeight: "85vh",
+          overflow: "auto",
+          fontFamily: "DM Sans, sans-serif",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>{titles[metricType]}</div>
+            <div style={{ fontSize: 12, color: "#8A8078", marginTop: 2 }}>{descriptions[metricType]}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#8A8078" }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Confidence */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.08em", marginBottom: 6 }}>CONFIDENCE</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 120, height: 6, background: "#E8DDD3", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${band.pct}%`, height: "100%", background: band.color, borderRadius: 3 }} />
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: band.color }}>{band.label} ({dealsTested} deals)</span>
+            </div>
+          </div>
+
+          {/* Deal Comparisons */}
+          {testDeals.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.08em", marginBottom: 8 }}>
+                TEST GROUP {metricType === "velocity" ? `(avg ${avgTestDays} days)` : ""}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {testDeals.map((deal, i) => (
+                  <div
+                    key={i}
+                    onClick={() => deal.deal_id && (window.location.href = `/pipeline/${deal.deal_id}`)}
+                    style={{
+                      background: "#F5F3EF",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      cursor: deal.deal_id ? "pointer" : "default",
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A1A1A", display: "flex", alignItems: "center", gap: 4 }}>
+                        {deal.deal_name}
+                        {deal.deal_id && <ExternalLink size={11} color="#8A8078" />}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#8A8078" }}>{deal.owner_name} · {formatStage(deal.stage)} · €{(deal.amount / 1000).toFixed(0)}K</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#3D3833" }}>{getDaysStat(deal)}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#2D8A4E" }}>{getMetricValue(deal)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {controlDeals.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.08em", marginBottom: 8 }}>
+                CONTROL GROUP {metricType === "velocity" ? `(avg ${avgControlDays} days)` : ""}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {controlDeals.map((deal, i) => (
+                  <div
+                    key={i}
+                    onClick={() => deal.deal_id && (window.location.href = `/pipeline/${deal.deal_id}`)}
+                    style={{
+                      background: "#FAF9F6",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      cursor: deal.deal_id ? "pointer" : "default",
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#6B6B6B", display: "flex", alignItems: "center", gap: 4 }}>
+                        {deal.deal_name}
+                        {deal.deal_id && <ExternalLink size={11} color="#9B9B9B" />}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9B9B9B" }}>{deal.owner_name} · {formatStage(deal.stage)} · €{(deal.amount / 1000).toFixed(0)}K</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "#6B6B6B" }}>{getDaysStat(deal)}</div>
+                      <div style={{ fontSize: 11, color: "#9B9B9B" }}>baseline</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Field Evidence */}
+          {allEvidence.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.08em", marginBottom: 8, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 16 }}>
+                FIELD EVIDENCE
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {allEvidence.slice(0, 4).map((ev, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 14, marginTop: 1 }}>{ev.type === "transcript" ? "📞" : "📧"}</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#3D3833" }}>
+                        {ev.dealName} — {ev.source} · {ev.date}
+                      </div>
+                      <p style={{ fontSize: 12, color: "#6B6B6B", margin: "4px 0 0", lineHeight: 1.5, fontStyle: "italic" }}>
+                        &ldquo;{ev.excerpt}&rdquo;
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {deals.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "#9B9B9B", fontSize: 13 }}>
+              No deal-level evidence data available yet
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, React.CSSProperties> = {
     testing: {
@@ -327,15 +614,27 @@ function ThresholdRow({ label, current, target }: { label: string; current?: num
 function TestingCard({
   idea,
   members,
+  isManager,
+  currentUserId,
+  onStatusChange,
 }: {
   idea: PlaybookIdea;
   members: Member[];
+  isManager: boolean;
+  currentUserId: string | undefined;
+  onStatusChange: () => void;
 }) {
   const originator = members.find((m) => m.id === idea.originatorId);
   const daysActive = daysAgo(idea.experimentStart ?? idea.testStartDate);
   const r = idea.results;
   const metrics = idea.currentMetrics as CurrentMetrics | null;
   const thresholds = idea.successThresholds as SuccessThresholds | null;
+
+  const [drillDownMetric, setDrillDownMetric] = useState<"velocity" | "sentiment" | "close_rate" | null>(null);
+  const [showGraduation, setShowGraduation] = useState(false);
+  const [scalingScope, setScalingScope] = useState<string>("vertical");
+  const [selectedVerticals, setSelectedVerticals] = useState<string[]>(idea.vertical ? [idea.vertical] : []);
+  const [graduating, setGraduating] = useState(false);
 
   // Test group member names
   const testGroupNames = (idea.testGroup ?? [])
@@ -353,6 +652,37 @@ function TestingCard({
     metrics.close_rate_pct !== undefined && thresholds.close_rate_pct !== undefined && metrics.close_rate_pct >= thresholds.close_rate_pct,
   ].filter(Boolean).length : 0;
   const totalThresholds = thresholds ? Object.keys(thresholds).length : 3;
+
+  const dealsTested = metrics?.deals_tested ?? 0;
+  const graduationReady = thresholdsMet >= 2 && dealsTested >= MIN_DEALS_FOR_GRADUATION;
+  const thresholdsMetButLowData = thresholdsMet >= 2 && dealsTested < MIN_DEALS_FOR_GRADUATION;
+
+  async function handleGraduate() {
+    if (!currentUserId) return;
+    setGraduating(true);
+    try {
+      const scopeValue = scalingScope === "vertical" && idea.vertical
+        ? idea.vertical
+        : scalingScope === "all"
+        ? "all"
+        : selectedVerticals;
+      const res = await fetch(`/api/playbook/ideas/${idea.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "graduated",
+          attribution: {
+            ...(idea.attribution as Record<string, unknown> ?? {}),
+            graduated_by: currentUserId,
+            scaling_scope: scopeValue,
+            impact_arr: idea.results?.arr_influenced ?? 0,
+          },
+        }),
+      });
+      if (res.ok) onStatusChange();
+    } catch { /* non-fatal */ }
+    setGraduating(false);
+  }
 
   return (
     <div
@@ -404,18 +734,48 @@ function TestingCard({
         </div>
       )}
 
-      {/* Threshold progress */}
+      {/* Threshold progress — clickable metric labels */}
       {metrics && thresholds && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#8A8078", letterSpacing: "0.08em", marginBottom: 2 }}>
             THRESHOLD PROGRESS
           </div>
-          <ThresholdRow label="Velocity" current={metrics.velocity_pct} target={thresholds.velocity_pct} />
-          <ThresholdRow label="Sentiment" current={metrics.sentiment_pts} target={thresholds.sentiment_pts} />
-          <ThresholdRow label="Close Rate" current={metrics.close_rate_pct} target={thresholds.close_rate_pct} />
+          {([
+            { key: "velocity" as const, label: "Velocity", current: metrics.velocity_pct, target: thresholds.velocity_pct, suffix: "%" },
+            { key: "sentiment" as const, label: "Sentiment", current: metrics.sentiment_pts, target: thresholds.sentiment_pts, suffix: " pts" },
+            { key: "close_rate" as const, label: "Close Rate", current: metrics.close_rate_pct, target: thresholds.close_rate_pct, suffix: "%" },
+          ]).map((row) => {
+            const met = row.current !== undefined && row.target !== undefined && row.current >= row.target;
+            const hasData = row.current !== undefined && row.target !== undefined;
+            return (
+              <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                <span
+                  onClick={() => setDrillDownMetric(row.key)}
+                  style={{ color: "#6B6B6B", minWidth: 80, cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 3 }}
+                >
+                  {row.label}
+                </span>
+                <span style={{ fontWeight: 600, color: met ? "#2D8A4E" : "#3D3833" }}>
+                  {row.current !== undefined ? `+${row.current}${row.suffix}` : "—"}
+                </span>
+                <span style={{ color: "#9B9B9B" }}>/</span>
+                <span style={{ color: "#9B9B9B" }}>+{row.target ?? "—"}{row.suffix} target</span>
+                {hasData && (
+                  <span style={{ color: met ? "#2D8A4E" : "#9B9B9B", fontWeight: 600 }}>{met ? "✓" : "—"}</span>
+                )}
+              </div>
+            );
+          })}
           <div style={{ fontSize: 12, fontWeight: 600, color: thresholdsMet >= 2 ? "#2D8A4E" : "#D4A843", marginTop: 4 }}>
             {thresholdsMet} of {totalThresholds} thresholds met
           </div>
+          {/* Confidence band */}
+          {dealsTested > 0 && <ConfidenceBand dealsTested={dealsTested} />}
+          {thresholdsMetButLowData && (
+            <div style={{ fontSize: 11, color: "#B45309", marginTop: 2 }}>
+              Thresholds met but more data needed ({dealsTested}/{MIN_DEALS_FOR_GRADUATION} minimum deals)
+            </div>
+          )}
         </div>
       )}
 
@@ -445,6 +805,118 @@ function TestingCard({
         </div>
       )}
 
+      {/* Manager: Graduate & Scale button */}
+      {isManager && graduationReady && !showGraduation && (
+        <button
+          onClick={() => setShowGraduation(true)}
+          style={{
+            background: "#4A7C59",
+            color: "white",
+            border: "none",
+            borderRadius: 8,
+            padding: "10px 20px",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "DM Sans, sans-serif",
+            alignSelf: "flex-start",
+          }}
+        >
+          Graduate &amp; Scale
+        </button>
+      )}
+
+      {/* Manager: Graduation inline expansion */}
+      {isManager && showGraduation && (
+        <div style={{ background: "#F5F3EF", borderRadius: 10, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#3D3833" }}>
+            This experiment met {thresholdsMet}/{totalThresholds} thresholds across {dealsTested} deals over {daysActive} days.
+          </div>
+
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#3D3833", marginBottom: 8 }}>Select Scaling Scope</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { key: "vertical", label: `${formatVertical(idea.vertical ?? "")} AEs only` },
+                { key: "all", label: "All verticals immediately" },
+                { key: "custom", label: "Custom — select verticals" },
+              ].map((opt, i) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setScalingScope(opt.key)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: scalingScope === opt.key ? "#3D3833" : "#FFFFFF",
+                    color: scalingScope === opt.key ? "white" : "#3D3833",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                >
+                  <span style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: `1.5px solid ${scalingScope === opt.key ? "white" : "#D4C9BD"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 10, fontWeight: 700,
+                  }}>
+                    {i + 1}
+                  </span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {scalingScope === "custom" && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {["healthcare", "financial_services", "technology", "manufacturing", "retail"].map((v) => {
+                  const selected = selectedVerticals.includes(v);
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => setSelectedVerticals((prev) => selected ? prev.filter((x) => x !== v) : [...prev, v])}
+                      style={{
+                        padding: "4px 10px", borderRadius: 6, border: "none",
+                        background: selected ? "#3D3833" : "#FFFFFF",
+                        color: selected ? "white" : "#3D3833",
+                        fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "DM Sans, sans-serif",
+                      }}
+                    >
+                      {formatVertical(v)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleGraduate}
+              disabled={graduating || (scalingScope === "custom" && selectedVerticals.length === 0)}
+              style={{
+                background: "#4A7C59", color: "white", border: "none", borderRadius: 8,
+                padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: graduating ? "not-allowed" : "pointer",
+                opacity: graduating ? 0.6 : 1, fontFamily: "DM Sans, sans-serif",
+              }}
+            >
+              {graduating ? "Graduating..." : "Confirm Graduation"}
+            </button>
+            <button
+              onClick={() => setShowGraduation(false)}
+              style={{ background: "none", border: "none", color: "#8A8078", fontSize: 12, cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Time remaining + footer */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "#8A8078" }}>
         {daysRemaining !== null && (
@@ -457,6 +929,15 @@ function TestingCard({
           {idea.followerCount ?? 0} {(idea.followerCount ?? 0) === 1 ? "follower" : "followers"}
         </span>
       </div>
+
+      {/* Drill-down modal */}
+      {drillDownMetric && (
+        <MetricDrillDownModal
+          metricType={drillDownMetric}
+          idea={idea}
+          onClose={() => setDrillDownMetric(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1421,7 +1902,14 @@ export function PlaybookClient({ ideas: initialIdeas, scores, members, marketSig
                 In Progress — {testingIdeas.length}
               </div>
               {testingIdeas.map((idea) => (
-                <TestingCard key={idea.id} idea={idea} members={members} />
+                <TestingCard
+                  key={idea.id}
+                  idea={idea}
+                  members={members}
+                  isManager={isManager}
+                  currentUserId={currentUser?.id}
+                  onStatusChange={handleStatusChange}
+                />
               ))}
             </>
           )}

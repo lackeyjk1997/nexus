@@ -65,6 +65,7 @@ export default async function PlaybookPage() {
         experimentStart: playbookIdeas.experimentStart,
         experimentEnd: playbookIdeas.experimentEnd,
         attribution: playbookIdeas.attribution,
+        experimentEvidence: playbookIdeas.experimentEvidence,
         createdAt: playbookIdeas.createdAt,
       })
       .from(playbookIdeas)
@@ -113,6 +114,8 @@ export default async function PlaybookPage() {
     successThresholds: (row.successThresholds ?? null) as Record<string, number> | null,
     currentMetrics: (row.currentMetrics ?? null) as Record<string, number> | null,
     attribution: (row.attribution ?? null) as Record<string, unknown> | null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    experimentEvidence: (row.experimentEvidence ?? null) as any,
   }));
 
   const scores = rawScores.map((row) => ({

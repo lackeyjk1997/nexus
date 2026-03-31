@@ -829,6 +829,7 @@ export const playbookIdeas = pgTable("playbook_ideas", {
   experimentStart: timestamp("experiment_start"),
   experimentEnd: timestamp("experiment_end"),
   attribution: jsonb("attribution"), // { proposed_by, proposed_at, approved_by, impact_arr }
+  experimentEvidence: jsonb("experiment_evidence"), // { deals: [...] } — deal-level comparison data for drill-down
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
