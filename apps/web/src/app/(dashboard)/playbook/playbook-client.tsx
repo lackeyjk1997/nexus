@@ -1314,6 +1314,8 @@ function PromotedCard({
     .map((fid) => members.find((m) => m.id === fid)?.name)
     .filter(Boolean) as string[];
 
+  const [drillDownMetric, setDrillDownMetric] = useState<"velocity" | "sentiment" | "close_rate" | null>(null);
+
   // Attribution
   const attribution = idea.attribution as {
     proposed_by?: string;
@@ -1326,6 +1328,7 @@ function PromotedCard({
   const allAEs = members.filter((m) => m.role === "AE");
 
   return (
+    <>
     <div
       style={{
         background: "#FFFFFF",
@@ -1401,32 +1404,40 @@ function PromotedCard({
             RESULTS
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <MetricBox
-              label="Velocity"
-              value={
-                metrics?.velocity_pct !== undefined
-                  ? `+${metrics.velocity_pct}%`
-                  : r?.stage_velocity_change !== undefined
-                  ? `+${r.stage_velocity_change}%`
-                  : "—"
-              }
-              positive
-            />
-            {(metrics?.sentiment_pts !== undefined || r?.sentiment_shift !== undefined) && (
+            <div onClick={() => setDrillDownMetric("velocity")} style={{ cursor: "pointer" }}>
               <MetricBox
-                label="Sentiment"
-                value={`+${metrics?.sentiment_pts ?? r?.sentiment_shift} pts`}
+                label="Velocity"
+                value={
+                  metrics?.velocity_pct !== undefined
+                    ? `+${metrics.velocity_pct}%`
+                    : r?.stage_velocity_change !== undefined
+                    ? `+${r.stage_velocity_change}%`
+                    : "—"
+                }
                 positive
               />
+            </div>
+            {(metrics?.sentiment_pts !== undefined || r?.sentiment_shift !== undefined) && (
+              <div onClick={() => setDrillDownMetric("sentiment")} style={{ cursor: "pointer" }}>
+                <MetricBox
+                  label="Sentiment"
+                  value={`+${metrics?.sentiment_pts ?? r?.sentiment_shift} pts`}
+                  positive
+                />
+              </div>
             )}
             {metrics?.close_rate_pct !== undefined ? (
-              <MetricBox label="Close Rate" value={`+${metrics.close_rate_pct}%`} positive />
+              <div onClick={() => setDrillDownMetric("close_rate")} style={{ cursor: "pointer" }}>
+                <MetricBox label="Close Rate" value={`+${metrics.close_rate_pct}%`} positive />
+              </div>
             ) : r?.close_rate_test != null && r?.close_rate_control != null ? (
-              <MetricBox
-                label="Close Rate"
-                value={`${r.close_rate_test}% vs ${r.close_rate_control}%`}
-                positive
-              />
+              <div onClick={() => setDrillDownMetric("close_rate")} style={{ cursor: "pointer" }}>
+                <MetricBox
+                  label="Close Rate"
+                  value={`${r.close_rate_test}% vs ${r.close_rate_control}%`}
+                  positive
+                />
+              </div>
             ) : null}
             {(metrics?.deals_tested || r?.deals_influenced) && (
               <MetricBox
@@ -1503,6 +1514,15 @@ function PromotedCard({
         </>
       )}
     </div>
+    {/* Drill-down modal */}
+    {drillDownMetric && (
+      <MetricDrillDownModal
+        metricType={drillDownMetric}
+        idea={idea}
+        onClose={() => setDrillDownMetric(null)}
+      />
+    )}
+    </>
   );
 }
 

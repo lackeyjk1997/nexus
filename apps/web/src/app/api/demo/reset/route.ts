@@ -246,34 +246,29 @@ async function resetPlaybookData() {
     },
   ]);
 
-  // Apply lifecycle data to the 3 TESTING experiments
+  // ── Apply lifecycle data to the 3 TESTING experiments ──
 
   // Post-discovery prototype — graduation-ready: 9 deals, meets 3/3 thresholds
-  const postDiscoEvidence = JSON.stringify({
-    deals: [
-      { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "negotiation", amount: 2400000, days_in_stage: 8, avg_days_baseline: 20, sentiment_score: 85, avg_sentiment_baseline: 62, evidence: [
-        { type: "transcript", date: "2026-03-18", source: "Discovery Call", excerpt: "After building the EHR integration prototype live on the call, Dr. Patel immediately asked to bring in their CTO for a follow-up within the week." },
-        { type: "email", date: "2026-03-22", source: "Prospect follow-up", excerpt: "The prototype from our session is already being tested by two of our clinical teams — can we schedule the security review this week instead of next month?" },
-      ]},
-      { deal_name: "NordicMed Group Platform", deal_id: NORDICMED, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "proposal", amount: 1600000, days_in_stage: 10, avg_days_baseline: 20, sentiment_score: 78, avg_sentiment_baseline: 62, evidence: [
-        { type: "transcript", date: "2026-03-20", source: "Discovery Call", excerpt: "When Ryan demonstrated the claims-processing prototype during the call, their VP of Operations said 'This is exactly what we described to three other vendors and none of them could show us a working version.'" },
-        { type: "email", date: "2026-03-24", source: "Prospect follow-up", excerpt: "Our CTO reviewed the prototype and wants to discuss enterprise licensing. Can we move the technical review up to this Friday?" },
-      ]},
-      { deal_name: "PharmaBridge Analytics", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "discovery", amount: 340000, days_in_stage: 5, avg_days_baseline: 20, sentiment_score: 74, avg_sentiment_baseline: 62, evidence: [
-        { type: "transcript", date: "2026-03-25", source: "Discovery Call", excerpt: "Built a quick lab-results summarization prototype during the session. Their Director of Clinical Ops immediately shared the screen with two colleagues who joined the call." },
-      ]},
-      { deal_name: "NordicCare API Integration", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "technical_validation", amount: 780000, days_in_stage: 12, avg_days_baseline: 20, sentiment_score: 80, avg_sentiment_baseline: 62, evidence: [
-        { type: "transcript", date: "2026-03-19", source: "Technical Review", excerpt: "The patient-records API prototype we built last call cut their evaluation timeline — they skipped the usual 2-week internal review because the working demo answered their integration questions." },
-      ]},
-      { deal_name: "Meridian Health Network", deal_id: null, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "technical_validation", amount: 1100000, days_in_stage: 9, avg_days_baseline: 20, sentiment_score: 82, avg_sentiment_baseline: 62, evidence: [
-        { type: "transcript", date: "2026-03-26", source: "Discovery Call", excerpt: "Built a patient-intake automation prototype during the session. Their Head of Digital immediately asked to loop in procurement — 'We need this deployed before Q3.'" },
-      ]},
-      { deal_name: "HealthFirst Medical", deal_id: HEALTHFIRST, owner_name: "Sarah Chen", owner_id: SARAH, group: "control", stage: "closed_lost", amount: 3200000, days_in_stage: 22, avg_days_baseline: 20, sentiment_score: 48, avg_sentiment_baseline: 62, evidence: [] },
-      { deal_name: "Atlas Capital Analytics", deal_id: ATLAS, owner_name: "David Park", owner_id: DAVID, group: "control", stage: "negotiation", amount: 580000, days_in_stage: 18, avg_days_baseline: 20, sentiment_score: 58, avg_sentiment_baseline: 62, evidence: [] },
-      { deal_name: "TrustBank Financial", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "control", stage: "technical_validation", amount: 950000, days_in_stage: 25, avg_days_baseline: 20, sentiment_score: 55, avg_sentiment_baseline: 62, evidence: [] },
-      { deal_name: "GlobalTech Industries", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "discovery", amount: 720000, days_in_stage: 19, avg_days_baseline: 20, sentiment_score: 61, avg_sentiment_baseline: 62, evidence: [] },
-    ],
-  });
+  const postDiscoEvidence = JSON.stringify({ deals: [
+    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "negotiation", amount: 2400000, days_in_stage: 8, avg_days_baseline: 20, sentiment_score: 85, avg_sentiment_baseline: 60, evidence: [
+      { type: "transcript", date: "2026-03-18", source: "Discovery Call with Dr. Patel", excerpt: "After building the EHR integration prototype live on the call, Dr. Patel immediately asked to bring in their CTO for a follow-up. She said: 'This is the first vendor who actually showed us what it would look like instead of just talking about it.'" },
+      { type: "email", date: "2026-03-20", source: "Follow-up from Dr. Patel", excerpt: "The prototype from our session is already being reviewed by our compliance team. Can we schedule the security review this week instead of next month? We want to move quickly on this." },
+    ]},
+    { deal_name: "NordicMed Solutions", deal_id: NORDICMED, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "technical_validation", amount: 1100000, days_in_stage: 11, avg_days_baseline: 20, sentiment_score: 78, avg_sentiment_baseline: 60, evidence: [
+      { type: "transcript", date: "2026-03-14", source: "Discovery Call with CTO Eriksson", excerpt: "When we built the patient data routing automation live, Eriksson stopped the call to pull in two of his engineering leads. He said: 'They need to see this — this changes our whole evaluation timeline.'" },
+    ]},
+    { deal_name: "PharmaBridge Analytics", deal_id: null, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "proposal", amount: 890000, days_in_stage: 6, avg_days_baseline: 20, sentiment_score: 82, avg_sentiment_baseline: 60, evidence: [
+      { type: "transcript", date: "2026-03-21", source: "Discovery Call with VP Clinical Ops", excerpt: "Built a clinical trial data aggregation prototype during the call. The VP said: 'We've been asking our current vendor for this for 18 months. You just built it in 20 minutes.'" },
+    ]},
+    { deal_name: "NordicCare Group", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "discovery", amount: 750000, days_in_stage: 10, avg_days_baseline: 20, sentiment_score: 71, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Meridian Health Network", deal_id: null, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "technical_validation", amount: 1300000, days_in_stage: 9, avg_days_baseline: 20, sentiment_score: 88, avg_sentiment_baseline: 60, evidence: [
+      { type: "email", date: "2026-03-25", source: "Email from CIO to internal team (forwarded)", excerpt: "Forwarding the prototype link from today's call with Anthropic. This is significantly ahead of what we saw from Microsoft and Google. Let's fast-track the security review." },
+    ]},
+    { deal_name: "Coastal Medical Partners", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "technical_validation", amount: 680000, days_in_stage: 22, avg_days_baseline: 20, sentiment_score: 55, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Summit Healthcare", deal_id: null, owner_name: "James Wilson", owner_id: JAMES, group: "control", stage: "proposal", amount: 920000, days_in_stage: 19, avg_days_baseline: 20, sentiment_score: 62, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Westlake Medical Group", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "discovery", amount: 540000, days_in_stage: 24, avg_days_baseline: 20, sentiment_score: 48, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Pacific Health Alliance", deal_id: null, owner_name: "James Wilson", owner_id: JAMES, group: "control", stage: "negotiation", amount: 1050000, days_in_stage: 18, avg_days_baseline: 20, sentiment_score: 65, avg_sentiment_baseline: 60, evidence: [] },
+  ]});
 
   await db.execute(sql`
     UPDATE playbook_ideas SET
@@ -291,23 +286,21 @@ async function resetPlaybookData() {
     WHERE title LIKE 'Post-discovery prototype%' AND status = 'testing'
   `);
 
-  // Multi-threaded stakeholder — early stage: 6 deals, mixed results
-  const multiThreadEvidence = JSON.stringify({
-    deals: [
-      { deal_name: "Atlas Capital Analytics", deal_id: ATLAS, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "negotiation", amount: 580000, days_in_stage: 18, avg_days_baseline: 22, sentiment_score: 68, avg_sentiment_baseline: 60, evidence: [
-        { type: "transcript", date: "2026-03-14", source: "Multi-stakeholder Call", excerpt: "David brought in their CFO and Head of Risk together — the CFO immediately connected our pricing to their cost-of-compliance budget, which reframed the conversation from IT spend to risk mitigation." },
-      ]},
-      { deal_name: "Fintech Partners Group", deal_id: null, owner_name: "Elena Rodriguez", owner_id: ELENA, group: "test", stage: "proposal", amount: 490000, days_in_stage: 15, avg_days_baseline: 22, sentiment_score: 63, avg_sentiment_baseline: 60, evidence: [
-        { type: "email", date: "2026-03-20", source: "Prospect reply", excerpt: "Good call bringing our COO into that last session — she's now the one pushing this through procurement. Timeline just moved up two weeks." },
-      ]},
-      { deal_name: "RegionBank Digital", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "technical_validation", amount: 380000, days_in_stage: 20, avg_days_baseline: 22, sentiment_score: 56, avg_sentiment_baseline: 60, evidence: [
-        { type: "transcript", date: "2026-03-22", source: "Technical Review", excerpt: "Multi-threading backfired here — too many stakeholders in the room created conflicting priorities. Their CTO wanted speed, their compliance lead wanted thoroughness. Session ran over by 40 minutes." },
-      ]},
-      { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "control", stage: "negotiation", amount: 2400000, days_in_stage: 20, avg_days_baseline: 22, sentiment_score: 72, avg_sentiment_baseline: 60, evidence: [] },
-      { deal_name: "NordicMed Group Platform", deal_id: NORDICMED, owner_name: "Ryan Foster", owner_id: RYAN, group: "control", stage: "proposal", amount: 1600000, days_in_stage: 24, avg_days_baseline: 22, sentiment_score: 58, avg_sentiment_baseline: 60, evidence: [] },
-      { deal_name: "HealthBridge Analytics", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "closed_lost", amount: 1200000, days_in_stage: 28, avg_days_baseline: 22, sentiment_score: 42, avg_sentiment_baseline: 60, evidence: [] },
-    ],
-  });
+  // Multi-threaded stakeholder — 6 deals, mixed results, below threshold
+  const multiThreadEvidence = JSON.stringify({ deals: [
+    { deal_name: "TechFlow Systems", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "proposal", amount: 890000, days_in_stage: 15, avg_days_baseline: 18, sentiment_score: 65, avg_sentiment_baseline: 60, evidence: [
+      { type: "transcript", date: "2026-03-10", source: "Multi-stakeholder meeting", excerpt: "Brought in VP Engineering and Director of Product early. While both engaged positively, the VP later told David: 'Involving us this early felt premature — we hadn't even defined our requirements yet.'" },
+    ]},
+    { deal_name: "Apex Financial Corp", deal_id: null, owner_name: "Elena Rodriguez", owner_id: ELENA, group: "test", stage: "technical_validation", amount: 1200000, days_in_stage: 12, avg_days_baseline: 18, sentiment_score: 72, avg_sentiment_baseline: 60, evidence: [
+      { type: "email", date: "2026-03-15", source: "Email from Elena to team", excerpt: "Multi-threading worked here — getting the CFO involved at Stage 2 meant the budget conversation happened in parallel with technical eval. Saved us 2 weeks." },
+    ]},
+    { deal_name: "Granite Insurance Group", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "discovery", amount: 650000, days_in_stage: 20, avg_days_baseline: 18, sentiment_score: 52, avg_sentiment_baseline: 60, evidence: [
+      { type: "transcript", date: "2026-03-22", source: "Discovery call debrief", excerpt: "Tried to multi-thread by asking for CISO access during first discovery. Champion pushed back hard — said 'we don't bring security into vendor conversations until we've decided to move forward.' Felt like we overstepped." },
+    ]},
+    { deal_name: "Sterling Wealth Management", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "proposal", amount: 780000, days_in_stage: 18, avg_days_baseline: 18, sentiment_score: 61, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Pinnacle Credit Union", deal_id: null, owner_name: "James Wilson", owner_id: JAMES, group: "control", stage: "technical_validation", amount: 950000, days_in_stage: 16, avg_days_baseline: 18, sentiment_score: 58, avg_sentiment_baseline: 60, evidence: [] },
+    { deal_name: "Redwood Capital Partners", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "control", stage: "discovery", amount: 1100000, days_in_stage: 21, avg_days_baseline: 18, sentiment_score: 55, avg_sentiment_baseline: 60, evidence: [] },
+  ]});
 
   await db.execute(sql`
     UPDATE playbook_ideas SET
@@ -325,7 +318,19 @@ async function resetPlaybookData() {
     WHERE title LIKE 'Multi-threaded stakeholder%' AND status = 'testing'
   `);
 
-  // Two-disco minimum — moderate: 5 deals, meeting thresholds but low confidence
+  // Two-disco minimum — 5 deals, meeting thresholds but low confidence
+  const twoDiscoEvidence = JSON.stringify({ deals: [
+    { deal_name: "CloudNine Logistics", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "test", stage: "technical_validation", amount: 720000, days_in_stage: 10, avg_days_baseline: 16, sentiment_score: 79, avg_sentiment_baseline: 62, evidence: [
+      { type: "transcript", date: "2026-03-19", source: "Second discovery call", excerpt: "The second discovery uncovered that their real pain was in logistics routing, not the inventory management they initially mentioned. The demo we built targeted routing specifically and the CTO said: 'Finally, someone who actually listened before showing us slides.'" },
+    ]},
+    { deal_name: "DataVault Systems", deal_id: null, owner_name: "James Wilson", owner_id: JAMES, group: "test", stage: "proposal", amount: 880000, days_in_stage: 8, avg_days_baseline: 16, sentiment_score: 83, avg_sentiment_baseline: 62, evidence: [
+      { type: "email", date: "2026-03-24", source: "Follow-up from VP Engineering", excerpt: "Appreciate the thorough discovery process. The fact that you came back for a second conversation before jumping to a demo tells me your team actually cares about solving our problem, not just selling." },
+    ]},
+    { deal_name: "Quantum Analytics", deal_id: null, owner_name: "Priya Sharma", owner_id: PRIYA, group: "test", stage: "discovery", amount: 560000, days_in_stage: 14, avg_days_baseline: 16, sentiment_score: 68, avg_sentiment_baseline: 62, evidence: [] },
+    { deal_name: "Atlas Data Corp", deal_id: null, owner_name: "Elena Rodriguez", owner_id: ELENA, group: "control", stage: "proposal", amount: 690000, days_in_stage: 18, avg_days_baseline: 16, sentiment_score: 57, avg_sentiment_baseline: 62, evidence: [] },
+    { deal_name: "Nexgen Solutions", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "control", stage: "technical_validation", amount: 840000, days_in_stage: 15, avg_days_baseline: 16, sentiment_score: 64, avg_sentiment_baseline: 62, evidence: [] },
+  ]});
+
   await db.execute(sql`
     UPDATE playbook_ideas SET
       test_group = ARRAY[${PRIYA}, ${JAMES}]::text[],
@@ -337,7 +342,66 @@ async function resetPlaybookData() {
       experiment_start = '2026-03-09T09:00:00'::timestamp,
       experiment_duration_days = 30,
       experiment_end = '2026-04-08T09:00:00'::timestamp,
-      attribution = ${'{"proposed_by": "' + ALEX + '", "proposed_at": "2026-03-07", "approved_by": "' + MARCUS + '", "impact_arr": 0}'}::jsonb
+      attribution = ${'{"proposed_by": "' + ALEX + '", "proposed_at": "2026-03-07", "approved_by": "' + MARCUS + '", "impact_arr": 0}'}::jsonb,
+      experiment_evidence = ${twoDiscoEvidence}::jsonb
     WHERE title LIKE 'Two-disco minimum%' AND status = 'testing'
+  `);
+
+  // ── Apply evidence data to PROMOTED experiments ──
+
+  // CISO engagement before Stage 3 (PROMOTED)
+  const cisoEvidence = JSON.stringify({ deals: [
+    { deal_name: "Regional Health Network", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "closed_won", amount: 1800000, days_in_stage: 7, avg_days_baseline: 16, sentiment_score: 91, avg_sentiment_baseline: 65, evidence: [
+      { type: "transcript", date: "2026-02-12", source: "CISO introduction call", excerpt: "Getting the CISO engaged before Technical Validation meant the security review ran in parallel instead of blocking. The CISO said: 'I wish more vendors brought us in early — it saves everyone time.'" },
+    ]},
+    { deal_name: "HealthFirst Clinical", deal_id: null, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "closed_won", amount: 2200000, days_in_stage: 9, avg_days_baseline: 16, sentiment_score: 87, avg_sentiment_baseline: 65, evidence: [
+      { type: "email", date: "2026-02-18", source: "Internal Slack from Ryan", excerpt: "CISO engagement at Stage 2 completely changed the dynamic. Instead of security being a gate, they became an advocate. They're now pushing procurement to accelerate." },
+    ]},
+    { deal_name: "Metro Health Systems", deal_id: null, owner_name: "Alex Kim", owner_id: ALEX, group: "test", stage: "closed_won", amount: 1400000, days_in_stage: 11, avg_days_baseline: 16, sentiment_score: 79, avg_sentiment_baseline: 65, evidence: [] },
+    { deal_name: "Valley Medical Center", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "closed_lost", amount: 900000, days_in_stage: 14, avg_days_baseline: 16, sentiment_score: 58, avg_sentiment_baseline: 65, evidence: [] },
+  ]});
+
+  await db.execute(sql`
+    UPDATE playbook_ideas SET
+      experiment_evidence = ${cisoEvidence}::jsonb
+    WHERE title LIKE 'CISO engagement%' AND status = 'promoted'
+  `);
+
+  // Compliance-led discovery in Healthcare (PROMOTED)
+  const complianceEvidence = JSON.stringify({ deals: [
+    { deal_name: "MedVista Health Systems", deal_id: MEDVISTA, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "negotiation", amount: 2400000, days_in_stage: 6, avg_days_baseline: 14, sentiment_score: 88, avg_sentiment_baseline: 62, evidence: [
+      { type: "transcript", date: "2026-01-22", source: "Discovery Call", excerpt: "Opening with HIPAA compliance positioning immediately changed the tone. Dr. Patel said: 'Finally — a vendor that understands healthcare isn't just another enterprise sale. Compliance is table stakes.'" },
+    ]},
+    { deal_name: "NordicMed Group Platform", deal_id: NORDICMED, owner_name: "Ryan Foster", owner_id: RYAN, group: "test", stage: "closed_won", amount: 1600000, days_in_stage: 8, avg_days_baseline: 14, sentiment_score: 82, avg_sentiment_baseline: 62, evidence: [
+      { type: "email", date: "2026-01-28", source: "Follow-up from CTO", excerpt: "The fact that you led with data residency and AI governance — not features — made our compliance team comfortable from day one. That never happens with vendors." },
+    ]},
+    { deal_name: "Pacific Wellness Group", deal_id: null, owner_name: "Sarah Chen", owner_id: SARAH, group: "test", stage: "closed_won", amount: 1200000, days_in_stage: 9, avg_days_baseline: 14, sentiment_score: 79, avg_sentiment_baseline: 62, evidence: [] },
+    { deal_name: "Eastside Medical", deal_id: null, owner_name: "Ryan Foster", owner_id: RYAN, group: "control", stage: "closed_lost", amount: 850000, days_in_stage: 18, avg_days_baseline: 14, sentiment_score: 51, avg_sentiment_baseline: 62, evidence: [] },
+    { deal_name: "Lakeside Health Partners", deal_id: null, owner_name: "James Wilson", owner_id: JAMES, group: "control", stage: "proposal", amount: 960000, days_in_stage: 16, avg_days_baseline: 14, sentiment_score: 57, avg_sentiment_baseline: 62, evidence: [] },
+  ]});
+
+  await db.execute(sql`
+    UPDATE playbook_ideas SET
+      experiment_evidence = ${complianceEvidence}::jsonb
+    WHERE title LIKE 'Compliance-led discovery%' AND status = 'promoted'
+  `);
+
+  // Security documentation pre-delivery for FinServ (PROMOTED)
+  const secDocEvidence = JSON.stringify({ deals: [
+    { deal_name: "Atlas Capital Analytics", deal_id: ATLAS, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "negotiation", amount: 580000, days_in_stage: 5, avg_days_baseline: 14, sentiment_score: 84, avg_sentiment_baseline: 58, evidence: [
+      { type: "email", date: "2026-02-05", source: "Prospect CISO reply", excerpt: "Thank you for sending the SOC 2 Type II report ahead of our meeting. This is the first time a vendor has done this proactively — it saved us at least two weeks of back-and-forth." },
+    ]},
+    { deal_name: "TrustBank Financial", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "test", stage: "closed_won", amount: 950000, days_in_stage: 7, avg_days_baseline: 14, sentiment_score: 81, avg_sentiment_baseline: 58, evidence: [
+      { type: "transcript", date: "2026-02-10", source: "Technical Review", excerpt: "Their Head of Security opened with: 'I already reviewed your SOC 2 docs — let's skip the security overview and go straight to architecture.' We saved 30 minutes." },
+    ]},
+    { deal_name: "Pinnacle Financial Group", deal_id: null, owner_name: "Tom Bradley", owner_id: TOM, group: "test", stage: "closed_won", amount: 720000, days_in_stage: 6, avg_days_baseline: 14, sentiment_score: 77, avg_sentiment_baseline: 58, evidence: [] },
+    { deal_name: "Meridian Capital", deal_id: null, owner_name: "David Park", owner_id: DAVID, group: "control", stage: "technical_validation", amount: 680000, days_in_stage: 16, avg_days_baseline: 14, sentiment_score: 54, avg_sentiment_baseline: 58, evidence: [] },
+    { deal_name: "Heritage Banking Corp", deal_id: null, owner_name: "Tom Bradley", owner_id: TOM, group: "control", stage: "proposal", amount: 830000, days_in_stage: 15, avg_days_baseline: 14, sentiment_score: 52, avg_sentiment_baseline: 58, evidence: [] },
+  ]});
+
+  await db.execute(sql`
+    UPDATE playbook_ideas SET
+      experiment_evidence = ${secDocEvidence}::jsonb
+    WHERE title LIKE 'Security documentation%' AND status = 'promoted'
   `);
 }
