@@ -41,6 +41,7 @@ import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared"
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
 import { AgentMemory } from "@/components/agent-memory";
+import { WorkflowTracker } from "@/components/workflow-tracker";
 
 import { DealQuestionInput } from "@/components/deal-question-input";
 import { usePersona } from "@/components/providers";
@@ -132,6 +133,7 @@ type Transcript = {
   date: Date;
   durationSeconds: number | null;
   participants: unknown;
+  transcriptText: string | null;
   status: string | null;
   analysisSummary: string | null;
   callQualityScore: number | null;
@@ -717,6 +719,8 @@ export function DealDetailClient({
           currentStage={deal.stage}
           stageEnteredAt={deal.stageEnteredAt?.toISOString() ?? null}
         />
+
+        <WorkflowTracker dealId={deal.id} />
       </div>
 
       {/* Manager Deal Question Input */}
@@ -1317,7 +1321,7 @@ export function DealDetailClient({
           <ActivityFeed activities={mergedActivities} showFilters maxItems={50} />
         </div>
       )}
-      {activeTab === "calls" && <CallsTab transcripts={transcripts} onDraftFollowUp={handleDraftForTranscript} />}
+      {activeTab === "calls" && <CallsTab transcripts={transcripts} dealId={deal.id} onDraftFollowUp={handleDraftForTranscript} />}
 
       {/* Stage Change Modal */}
       <StageChangeModal
@@ -1948,7 +1952,36 @@ function StakeholdersTab({ contacts }: { contacts: Contact[] }) {
 
 // ── Calls Tab ──
 
-function CallsTab({ transcripts, onDraftFollowUp }: { transcripts: Transcript[]; onDraftFollowUp: (t: Transcript) => void }) {
+function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Transcript[]; dealId: string; onDraftFollowUp: (t: Transcript) => void }) {
+  const [processingIds, setProcessingIds] = useState<Record<string, "processing" | "done">>({});
+
+  async function handleProcessTranscript(t: Transcript) {
+    if (!t.transcriptText) return;
+    setProcessingIds((prev) => ({ ...prev, [t.id]: "processing" }));
+    try {
+      await fetch("/api/transcript-pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId,
+          transcriptText: t.transcriptText,
+          transcriptId: t.id,
+        }),
+      });
+      // Pipeline is running — deal agent events will drive the WorkflowTracker
+      // Mark as done after a short delay to indicate the request was sent
+      setTimeout(() => {
+        setProcessingIds((prev) => ({ ...prev, [t.id]: "done" }));
+      }, 2000);
+    } catch {
+      setProcessingIds((prev) => {
+        const next = { ...prev };
+        delete next[t.id];
+        return next;
+      });
+    }
+  }
+
   if (transcripts.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-border p-8 text-center">
@@ -2112,6 +2145,35 @@ function CallsTab({ transcripts, onDraftFollowUp }: { transcripts: Transcript[];
                     <Sparkles className="h-3 w-3" />
                     Draft Follow-Up
                   </button>
+                  {t.transcriptText && (
+                    <button
+                      onClick={() => handleProcessTranscript(t)}
+                      disabled={!!processingIds[t.id]}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
+                      style={{
+                        background: processingIds[t.id] === "done" ? "rgba(12,116,137,0.08)" : "rgba(12,116,137,0.08)",
+                        color: processingIds[t.id] === "done" ? "#0C7489" : "#0C7489",
+                        border: `1px solid ${processingIds[t.id] === "done" ? "rgba(12,116,137,0.3)" : "rgba(12,116,137,0.2)"}`,
+                      }}
+                    >
+                      {processingIds[t.id] === "processing" ? (
+                        <>
+                          <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
+                          Processing...
+                        </>
+                      ) : processingIds[t.id] === "done" ? (
+                        <>
+                          <Check className="h-3 w-3" />
+                          Processed
+                        </>
+                      ) : (
+                        <>
+                          <Bot className="h-3 w-3" />
+                          Process Transcript
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

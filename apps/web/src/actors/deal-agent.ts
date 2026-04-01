@@ -334,5 +334,16 @@ export const dealAgent = actor({
     getMemoryForPrompt: (c) => {
       return formatMemoryForPrompt(c.state);
     },
+
+    workflowProgress: (
+      c,
+      event: {
+        step: string;
+        status: "running" | "complete" | "error";
+        details?: string;
+      }
+    ) => {
+      c.broadcast("workflowProgress", event);
+    },
   },
 });

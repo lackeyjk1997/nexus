@@ -26,6 +26,7 @@ export default function AnalyzePage() {
   const [streamedText, setStreamedText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [charCount, setCharCount] = useState(0);
+  const [lastTranscript, setLastTranscript] = useState("");
 
   // Email draft state
   const [draftPhase, setDraftPhase] = useState<DraftPhase>("hidden");
@@ -44,6 +45,7 @@ export default function AnalyzePage() {
     setStreamedText("");
     setError(null);
     setCharCount(transcript.length);
+    setLastTranscript(transcript);
     setDraftPhase("hidden");
 
     try {
@@ -360,6 +362,7 @@ export default function AnalyzePage() {
           isStreaming={phase === "analyzing"}
           streamedText={streamedText}
           error={error}
+          transcriptText={lastTranscript}
         />
       )}
 

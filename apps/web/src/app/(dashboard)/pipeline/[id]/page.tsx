@@ -120,6 +120,7 @@ export default async function DealDetailPage({
         date: callTranscripts.date,
         durationSeconds: callTranscripts.durationSeconds,
         participants: callTranscripts.participants,
+        transcriptText: callTranscripts.transcriptText,
         status: callTranscripts.status,
         analysisSummary: callAnalyses.summary,
         callQualityScore: callAnalyses.callQualityScore,

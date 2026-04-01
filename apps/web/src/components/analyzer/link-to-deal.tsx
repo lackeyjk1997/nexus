@@ -24,8 +24,10 @@ type LinkMode = "deal" | "company";
 
 export function LinkToDeal({
   analysis,
+  transcriptText,
 }: {
   analysis: AnalysisResult;
+  transcriptText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<LinkMode>("deal");
@@ -61,7 +63,7 @@ export function LinkToDeal({
       const res = await fetch("/api/analyze/link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId: deal.id, analysis }),
+        body: JSON.stringify({ dealId: deal.id, analysis, transcriptText }),
       });
       if (res.ok) {
         setLinkedDealId(deal.id);

@@ -16,11 +16,13 @@ export function AnalysisStream({
   isStreaming,
   streamedText,
   error,
+  transcriptText,
 }: {
   result: AnalysisResult | null;
   isStreaming: boolean;
   streamedText: string;
   error: string | null;
+  transcriptText?: string;
 }) {
   if (error) {
     return (
@@ -134,7 +136,7 @@ export function AnalysisStream({
           {key === "tips" && result.coachingTips?.length > 0 && (
             <CoachingTips tips={result.coachingTips} />
           )}
-          {key === "link" && <LinkToDeal analysis={result} />}
+          {key === "link" && <LinkToDeal analysis={result} transcriptText={transcriptText} />}
         </div>
       ))}
     </div>

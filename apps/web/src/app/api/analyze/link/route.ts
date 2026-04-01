@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
-  const { dealId, companyId, analysis } = await request.json();
+  const { dealId, companyId, analysis, transcriptText } = await request.json();
 
   if ((!dealId && !companyId) || !analysis) {
     return NextResponse.json(
@@ -44,6 +44,25 @@ export async function POST(request: Request) {
     description: analysis.summary,
     metadata: { ...analysis, source: "call_analysis" },
   });
+
+  // Trigger the transcript pipeline if we have a deal and transcript text
+  if (dealId && transcriptText) {
+    try {
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3001");
+      await fetch(`${appUrl}/api/transcript-pipeline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId, transcriptText }),
+      });
+    } catch (e) {
+      console.error("Failed to trigger transcript pipeline:", e);
+      // Don't fail the link operation — pipeline is bonus, not required
+    }
+  }
 
   return NextResponse.json({ success: true });
 }
