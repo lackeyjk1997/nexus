@@ -132,35 +132,30 @@ export const transcriptPipeline = actor({
       });
       const input = message.body as PipelineInput;
 
-      await loopCtx.step("init-pipeline", async () => {
-        ctx.state.dealId = input.dealId;
-        ctx.state.status = "running";
-        ctx.state.startedAt = new Date().toISOString();
-        ctx.state.completedAt = null;
-        ctx.state.error = null;
-        ctx.state.actionItems = [];
-        ctx.state.meddpiccUpdates = {};
-        ctx.state.competitiveMentions = [];
-        ctx.state.stakeholderInsights = [];
-        ctx.state.newLearnings = [];
-        ctx.state.followUpEmail = null;
-      });
-
-      // Get handle to the deal agent for broadcasting progress
-      // Use ctx.client() for actor-to-actor communication (untyped to avoid circular import)
+      // Helper: get deal agent handle (must be called inside steps)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const client = loopCtx.client() as any;
-      const dealActor = client.dealAgent.getOrCreate([input.dealId]);
+      const getDealActor = () => (loopCtx.client() as any).dealAgent.getOrCreate([input.dealId]);
+
+      await loopCtx.step("init-pipeline", async () => {
+        loopCtx.state.dealId = input.dealId;
+        loopCtx.state.status = "running";
+        loopCtx.state.startedAt = new Date().toISOString();
+        loopCtx.state.completedAt = null;
+        loopCtx.state.error = null;
+        loopCtx.state.actionItems = [];
+        loopCtx.state.meddpiccUpdates = {};
+        loopCtx.state.competitiveMentions = [];
+        loopCtx.state.stakeholderInsights = [];
+        loopCtx.state.newLearnings = [];
+        loopCtx.state.followUpEmail = null;
+      });
 
       try {
         // STEP 1: Extract action items and commitments
-        await dealActor.workflowProgress({
-          step: "extract_actions",
-          status: "running",
-        });
-
         const actions = await loopCtx.step("extract-actions", async () => {
-          ctx.state.currentStep = "extract_actions";
+          loopCtx.state.currentStep = "extract_actions";
+          await getDealActor().workflowProgress({ step: "extract_actions", status: "running" });
+
           const raw = await callClaude(
             "You are a sales call analyst. Extract all action items, commitments, and key decisions from the transcript. Return valid JSON only — no markdown, no explanation.",
             `Extract action items from this call transcript between ${input.companyName} and our sales team.
@@ -170,30 +165,22 @@ Return JSON: { "actionItems": [{ "item": "description", "owner": "person name", 
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 15000)}`
           );
-          const parsed = parseJSON<{ actionItems: ActionItem[] }>(raw, {
-            actionItems: [],
+          const parsed = parseJSON<{ actionItems: ActionItem[] }>(raw, { actionItems: [] });
+          loopCtx.state.actionItems = parsed.actionItems;
+
+          await getDealActor().workflowProgress({
+            step: "extract_actions",
+            status: "complete",
+            details: `${parsed.actionItems.length} action items found`,
           });
           return parsed.actionItems;
         });
 
-        await loopCtx.step("save-actions", async () => {
-          ctx.state.actionItems = actions;
-        });
-
-        await dealActor.workflowProgress({
-          step: "extract_actions",
-          status: "complete",
-          details: `${actions.length} action items found`,
-        });
-
         // STEP 2: Score MEDDPICC with evidence
-        await dealActor.workflowProgress({
-          step: "score_meddpicc",
-          status: "running",
-        });
-
         const meddpicc = await loopCtx.step("score-meddpicc", async () => {
-          ctx.state.currentStep = "score_meddpicc";
+          loopCtx.state.currentStep = "score_meddpicc";
+          await getDealActor().workflowProgress({ step: "score_meddpicc", status: "running" });
+
           const currentScores = input.currentMeddpicc
             ? Object.entries(input.currentMeddpicc)
                 .filter(([k]) => k.endsWith("Confidence"))
@@ -218,26 +205,20 @@ Only include dimensions with new evidence.
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 15000)}`
           );
-          const parsed = parseJSON<{
-            updates: Record<string, MeddpiccUpdate>;
-          }>(raw, { updates: {} });
+          const parsed = parseJSON<{ updates: Record<string, MeddpiccUpdate> }>(raw, { updates: {} });
+          loopCtx.state.meddpiccUpdates = parsed.updates;
+
+          const updatedFields = Object.keys(parsed.updates).filter((k) => parsed.updates[k]?.delta !== 0);
+          await getDealActor().workflowProgress({
+            step: "score_meddpicc",
+            status: "complete",
+            details: `${updatedFields.length} fields updated`,
+          });
           return parsed.updates;
         });
 
-        await loopCtx.step("save-meddpicc", async () => {
-          ctx.state.meddpiccUpdates = meddpicc;
-        });
-
-        const updatedFields = Object.keys(meddpicc).filter(
-          (k) => meddpicc[k]?.delta !== 0
-        );
-        await dealActor.workflowProgress({
-          step: "score_meddpicc",
-          status: "complete",
-          details: `${updatedFields.length} fields updated`,
-        });
-
-        // Write MEDDPICC updates back to Supabase
+        // Persist MEDDPICC updates to Supabase
+        const updatedFields = Object.keys(meddpicc).filter((k) => meddpicc[k]?.delta !== 0);
         if (updatedFields.length > 0) {
           await loopCtx.step("persist-meddpicc", async () => {
             try {
@@ -253,13 +234,10 @@ ${input.transcriptText.slice(0, 15000)}`
         }
 
         // STEP 3: Detect competitive mentions + stakeholder sentiment
-        await dealActor.workflowProgress({
-          step: "detect_signals",
-          status: "running",
-        });
-
         const signals = await loopCtx.step("detect-signals", async () => {
-          ctx.state.currentStep = "detect_signals";
+          loopCtx.state.currentStep = "detect_signals";
+          await getDealActor().workflowProgress({ step: "detect_signals", status: "running" });
+
           const contactsCtx = input.existingContacts
             .map((c) => `${c.name} (${c.title}, ${c.role})`)
             .join("; ");
@@ -284,18 +262,16 @@ ${input.transcriptText.slice(0, 15000)}`
             competitiveMentions: CompetitiveMention[];
             stakeholderInsights: StakeholderInsight[];
           }>(raw, { competitiveMentions: [], stakeholderInsights: [] });
+
+          loopCtx.state.competitiveMentions = parsed.competitiveMentions;
+          loopCtx.state.stakeholderInsights = parsed.stakeholderInsights;
+
+          await getDealActor().workflowProgress({
+            step: "detect_signals",
+            status: "complete",
+            details: `${parsed.competitiveMentions.length} competitive mentions, ${parsed.stakeholderInsights.length} stakeholders analyzed`,
+          });
           return parsed;
-        });
-
-        await loopCtx.step("save-signals", async () => {
-          ctx.state.competitiveMentions = signals.competitiveMentions;
-          ctx.state.stakeholderInsights = signals.stakeholderInsights;
-        });
-
-        await dealActor.workflowProgress({
-          step: "detect_signals",
-          status: "complete",
-          details: `${signals.competitiveMentions.length} competitive mentions, ${signals.stakeholderInsights.length} stakeholders analyzed`,
         });
 
         // Create observations from competitive mentions
@@ -324,18 +300,13 @@ ${input.transcriptText.slice(0, 15000)}`
         }
 
         // STEP 4: Synthesize learnings for the deal agent
-        await dealActor.workflowProgress({
-          step: "synthesize_learnings",
-          status: "running",
-        });
+        const synthesis = await loopCtx.step("synthesize-learnings", async () => {
+          loopCtx.state.currentStep = "synthesize_learnings";
+          await getDealActor().workflowProgress({ step: "synthesize_learnings", status: "running" });
 
-        const synthesis = await loopCtx.step(
-          "synthesize-learnings",
-          async () => {
-            ctx.state.currentStep = "synthesize_learnings";
-            const raw = await callClaude(
-              "You are a deal strategist. Synthesize the transcript analysis into key learnings that should inform future interactions. Return valid JSON only.",
-              `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), what are the key learnings?
+          const raw = await callClaude(
+            "You are a deal strategist. Synthesize the transcript analysis into key learnings that should inform future interactions. Return valid JSON only.",
+            `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), what are the key learnings?
 
 Action items found: ${JSON.stringify(actions)}
 MEDDPICC updates: ${JSON.stringify(meddpicc)}
@@ -348,32 +319,23 @@ Maximum 5 learnings.
 
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 8000)}`
-            );
-            const parsed = parseJSON<{ learnings: string[] }>(raw, {
-              learnings: [],
-            });
-            return parsed.learnings;
-          }
-        );
+          );
+          const parsed = parseJSON<{ learnings: string[] }>(raw, { learnings: [] });
+          loopCtx.state.newLearnings = parsed.learnings;
 
-        await loopCtx.step("save-learnings", async () => {
-          ctx.state.newLearnings = synthesis;
-        });
-
-        await dealActor.workflowProgress({
-          step: "synthesize_learnings",
-          status: "complete",
-          details: `${synthesis.length} new learnings`,
+          await getDealActor().workflowProgress({
+            step: "synthesize_learnings",
+            status: "complete",
+            details: `${parsed.learnings.length} new learnings`,
+          });
+          return parsed.learnings;
         });
 
         // STEP 5: Draft follow-up email
-        await dealActor.workflowProgress({
-          step: "draft_email",
-          status: "running",
-        });
-
         const email = await loopCtx.step("draft-email", async () => {
-          ctx.state.currentStep = "draft_email";
+          loopCtx.state.currentStep = "draft_email";
+          await getDealActor().workflowProgress({ step: "draft_email", status: "running" });
+
           const raw = await callClaude(
             "You are a sales email writer. Draft a professional follow-up email incorporating key action items from the call. Return valid JSON only.",
             `Draft a follow-up email after a call with ${input.companyName} regarding ${input.dealName}.
@@ -389,52 +351,50 @@ Keep it professional, concise, and reference specific commitments from the call.
             subject: `Follow-up: ${input.dealName} Discussion`,
             body: "Thank you for taking the time to meet today.",
           });
+          loopCtx.state.followUpEmail = parsed;
+
+          await getDealActor().workflowProgress({
+            step: "draft_email",
+            status: "complete",
+            details: "Email draft ready",
+          });
           return parsed;
-        });
-
-        await loopCtx.step("save-email", async () => {
-          ctx.state.followUpEmail = email;
-        });
-
-        await dealActor.workflowProgress({
-          step: "draft_email",
-          status: "complete",
-          details: "Email draft ready",
         });
 
         // ALL STEPS COMPLETE — update the deal agent with accumulated intelligence
         await loopCtx.step("finalize", async () => {
-          ctx.state.status = "complete";
-          ctx.state.completedAt = new Date().toISOString();
-        });
+          loopCtx.state.status = "complete";
+          loopCtx.state.completedAt = new Date().toISOString();
 
-        await dealActor.recordInteraction({
-          type: "transcript_analysis",
-          summary: `Analyzed call transcript: ${actions.length} action items, ${updatedFields.length} MEDDPICC updates, ${signals.competitiveMentions.length} competitive mentions`,
-          insights: synthesis,
-        });
-
-        await dealActor.updateLearnings(synthesis);
-
-        for (const mention of signals.competitiveMentions) {
-          await dealActor.addCompetitiveIntel({
-            competitor: mention.competitor,
-            context: mention.context,
+          const dealActor = getDealActor();
+          await dealActor.recordInteraction({
+            type: "transcript_analysis",
+            summary: `Analyzed call transcript: ${actions.length} action items, ${updatedFields.length} MEDDPICC updates, ${signals.competitiveMentions.length} competitive mentions`,
+            insights: synthesis,
           });
-        }
+
+          await dealActor.updateLearnings(synthesis);
+
+          for (const mention of signals.competitiveMentions) {
+            await dealActor.addCompetitiveIntel({
+              competitor: mention.competitor,
+              context: mention.context,
+            });
+          }
+        });
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
         await loopCtx.step("handle-error", async () => {
-          ctx.state.status = "error";
-          ctx.state.error =
-            error instanceof Error ? error.message : "Unknown error";
+          loopCtx.state.status = "error";
+          loopCtx.state.error = errorMsg;
+          try {
+            await getDealActor().workflowProgress({
+              step: loopCtx.state.currentStep,
+              status: "error",
+              details: errorMsg,
+            });
+          } catch {}
         });
-        try {
-          await dealActor.workflowProgress({
-            step: ctx.state.currentStep,
-            status: "error",
-            details: ctx.state.error || "Unknown error",
-          });
-        } catch {}
       }
     });
   }),
