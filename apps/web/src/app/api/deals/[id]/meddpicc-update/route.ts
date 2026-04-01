@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 15;
 
 import { db } from "@/lib/db";
 import { meddpiccFields, activities, deals } from "@nexus/db";
