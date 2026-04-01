@@ -24,8 +24,6 @@ export default function LandingPage() {
     // Clear saved persona so PersonaProvider defaults to Sarah Chen
     try {
       localStorage.removeItem("nexus_persona_id");
-      localStorage.removeItem("nexus_walkthrough_seen");
-      localStorage.setItem("nexus_demo_step", "1");
     } catch {}
     window.location.href = "/playbook";
   }

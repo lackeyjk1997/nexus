@@ -13,5 +13,10 @@
   "devDependencies": {
     "turbo": "^2.5.0",
     "typescript": "^5.7.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "drizzle-orm": "^0.39.0"
+    }
   }
 }

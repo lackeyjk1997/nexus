@@ -3,10 +3,8 @@
 import { Bell, ChevronDown, User, X, Undo2, Clock } from "lucide-react";
 import { usePersona, type TeamMemberInfo } from "@/components/providers";
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import type { Role } from "@nexus/shared";
 import { cn } from "@/lib/utils";
-import { useTourState } from "@/components/demo-guide";
 
 const ROLE_LABELS: Record<string, string> = {
   AE: "Account Executive",
@@ -92,8 +90,6 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Guide / Resume Tour link */}
-          <GuideLink />
           {/* User Switcher */}
           <div ref={userRef} className="relative">
             <button
@@ -341,59 +337,3 @@ function UserButton({ user, currentUser, setCurrentUser, setUserOpen }: {
   );
 }
 
-function GuideLink() {
-  const { isActive, isComplete, setTourStep } = useTourState();
-
-  // Tour is active but guide was dismissed — show Resume Tour
-  if (isActive) {
-    return (
-      <button
-        onClick={() => {
-          // Re-dispatch the current step to re-activate the guide
-          try {
-            const step = localStorage.getItem("nexus_demo_step");
-            if (step) {
-              // Dispatch event to tell DemoGuide to re-show
-              window.dispatchEvent(new Event("nexus-tour-update"));
-              window.location.reload();
-            }
-          } catch {}
-        }}
-        className="flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:text-[#E07A5F]"
-        style={{ color: "#8A8078" }}
-      >
-        <span style={{ color: "#E07A5F" }}>{"\u2726"}</span>
-        Resume Tour
-      </button>
-    );
-  }
-
-  // Tour complete or not started — show Assistant (re-opens the card)
-  if (isComplete) {
-    return (
-      <button
-        onClick={() => {
-          window.dispatchEvent(new Event("nexus-tour-update"));
-          window.location.reload();
-        }}
-        className="flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:text-[#E07A5F]"
-        style={{ color: "#8A8078" }}
-      >
-        <span style={{ color: "#E07A5F" }}>{"\u2726"}</span>
-        Assistant
-      </button>
-    );
-  }
-
-  // Default: link to landing page
-  return (
-    <Link
-      href="/"
-      className="flex items-center gap-1.5 text-[13px] font-medium transition-colors hover:text-[#E07A5F]"
-      style={{ color: "#8A8078" }}
-    >
-      <span style={{ color: "#E07A5F" }}>{"\u2726"}</span>
-      Guide
-    </Link>
-  );
-}

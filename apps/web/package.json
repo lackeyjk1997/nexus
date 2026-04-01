@@ -22,6 +22,7 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.0",
+    "@rivetkit/react": "^2.2.0",
     "@tremor/react": "^3.18.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -31,6 +32,7 @@
     "postgres": "^3.4.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "rivetkit": "^2.2.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7"
   },

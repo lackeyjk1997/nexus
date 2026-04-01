@@ -40,9 +40,11 @@ import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@
 import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared";
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
+import { AgentMemory } from "@/components/agent-memory";
 
 import { DealQuestionInput } from "@/components/deal-question-input";
 import { usePersona } from "@/components/providers";
+import { useActor } from "@/lib/rivet";
 
 // ── Types ──
 
@@ -280,6 +282,12 @@ export function DealDetailClient({
 
   const { currentUser } = usePersona();
 
+  // Deal agent actor for recording interactions
+  const dealActor = useActor({
+    name: "dealAgent",
+    key: [deal.id],
+  });
+
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
   const health = getHealthColor(daysInStage, deal.stage);
   const vertColor = getVerticalColor(deal.vertical);
@@ -335,6 +343,17 @@ export function DealDetailClient({
         setCallBrief(data.brief);
         setCallBriefProvenPlays(data.provenPlayNames ?? []);
         setCallPrepPhase("result");
+
+        // Record interaction with deal agent
+        try {
+          if (dealActor.connection) {
+            await dealActor.connection.recordInteraction({
+              type: "call_prep",
+              summary: `Call prep for ${ctx}: ${data.brief?.headline || "Generated brief"}`,
+              insights: data.brief?.talking_points?.map((tp: { topic: string }) => tp.topic) || [],
+            });
+          }
+        } catch {}
       } else {
         setCallPrepPhase("error");
       }
@@ -688,6 +707,16 @@ export function DealDetailClient({
             );
           })}
         </div>
+
+        {/* Agent Memory */}
+        <AgentMemory
+          dealId={deal.id}
+          dealName={deal.name}
+          companyName={deal.companyName || ""}
+          vertical={deal.vertical}
+          currentStage={deal.stage}
+          stageEnteredAt={deal.stageEnteredAt?.toISOString() ?? null}
+        />
       </div>
 
       {/* Manager Deal Question Input */}

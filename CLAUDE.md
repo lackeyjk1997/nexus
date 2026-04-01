@@ -79,7 +79,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/agent/save-to-deal` | POST | Save agent action as deal activity |
 | `/api/playbook/ideas/[id]` | PATCH | Update experiment status with transitions |
 | `/api/demo/reset` | POST | Reset demo data to clean state |
-| `/api/demo/ask` | POST | AI demo assistant with product knowledge |
+| `/api/rivet/[...path]` | ALL | Rivet actor handler (deal agents) |
 
 ## Dashboard Pages
 
@@ -105,7 +105,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | File | Purpose |
 |------|---------|
 | `components/observation-input.tsx` | Universal Agent Bar (~1800 lines) — observe, quick check, call prep, email draft |
-| `components/demo-guide.tsx` | 3-mode demo guide: Tour (10 steps), Assistant (Claude chat), Hidden |
+| `components/agent-memory.tsx` | Deal agent memory display (expandable, connects to Rivet actor) |
 | `components/stage-change-modal.tsx` | Stage transitions + close/won/lost outcome capture |
 | `components/deal-question-input.tsx` | MANAGER-only "Ask about this deal" |
 | `components/activity-feed.tsx` | Timeline activity list with type icons |
@@ -140,10 +140,8 @@ Sales: Sarah Chen (AE), David Park (AE), Ryan Foster (AE) | Leadership: Marcus T
 ### 8 Playbook Experiments
 3 promoted (compliance-led discovery, CISO engagement, security doc pre-delivery), 3 testing (post-disco prototype, two-disco minimum, multi-threaded engagement), 1 proposed (competitive battlecard), 1 retired (ROI-first messaging)
 
-### Tour (10 steps, auto-progression via custom events)
-1. Field ideas (Sarah, agent bar) → 2. Leadership reviews (Marcus, approve proposed) → 3. Experiments with evidence → 4. Graduate & scale → 5. Proven plays (What's Working tab) → 6. Deal workspace (Sarah, pipeline) → 7. Call prep → 8. Intelligence in brief → 9. Intelligence dashboard → 10. Keep exploring
-
-Auto-progression: Steps 2→3 via `nexus-experiment-started` event, Steps 4→5 via `nexus-experiment-graduated` event, Step 6→7 via route change, Step 7→8 via element appearance.
+### Tour
+Removed in Session S10. Will be rebuilt later to tell the agent story.
 
 ## Code Conventions
 - TypeScript strict, ES modules, functional components only
@@ -184,3 +182,24 @@ git push origin main        # Vercel auto-deploys from main
 ```
 Live: https://nexus-web-plum-iota.vercel.app
 Reset link: `?reset=true` query param on landing page
+
+## Rivet Actors (Added Session S10)
+
+Nexus uses Rivet (rivet.dev) for stateful AI agents. Documentation: https://rivet.dev/llms.txt
+
+### Actor Architecture
+- `apps/web/src/actors/` — Actor definitions and registry
+- `/api/rivet/[...path]` — Rivet handler route
+- Deal Agent: one per deal, accumulates intelligence over time
+- React integration: `useActor()` hook from `@/lib/rivet` (no provider needed)
+
+### Key Patterns
+- Deal agents are created lazily via `getOrCreate([dealId])`
+- Agent state persists across sessions (not lost on page refresh)
+- Agents broadcast events via WebSocket to connected clients
+- Agent memory is injected into call prep prompts as a 9th intelligence layer
+- Supabase remains source of truth — agents are the intelligence/memory layer on top
+
+### Environment Variables
+- RIVET_PUBLIC_ENDPOINT — Rivet Cloud public endpoint
+- RIVET_ENDPOINT — Rivet Cloud internal endpoint

@@ -23,6 +23,8 @@ import {
 } from "@nexus/db";
 import { eq, desc, and, sql, or, ne, isNull, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { createClient } from "rivetkit/client";
+import type { Registry } from "@/actors/registry";
 
 // Map vertical enum values to display names for matching against industryFocus
 const VERTICAL_DISPLAY: Record<string, string[]> = {
@@ -697,6 +699,16 @@ export async function POST(request: Request) {
     })),
   };
 
+  // ── Retrieve agent memory (9th intelligence layer) ──
+  let agentMemory = "";
+  try {
+    const rivetClient = createClient<Registry>();
+    const dealActorHandle = rivetClient.dealAgent.getOrCreate([resolvedDealId!]);
+    agentMemory = await dealActorHandle.getMemoryForPrompt();
+  } catch (e) {
+    console.log("Deal agent not available for memory injection:", e);
+  }
+
   // ── Build attendee context if specific attendees selected ──
   let attendeeContext = "";
   if (attendeeIds && Array.isArray(attendeeIds) && attendeeIds.length > 0) {
@@ -744,7 +756,12 @@ Do NOT include team intelligence that isn't relevant to this specific deal or me
   const systemPrompt = `You are an AI sales agent preparing a call brief for ${rep?.name || "a sales rep"}. You have access to comprehensive CRM data, field intelligence from the team, and the rep's personal selling style.
 
 Generate a call brief that the rep can read in 2 minutes and walk into the call prepared.${prepContextSection}${attendeeContext}
+${agentMemory ? `
+## DEAL AGENT MEMORY
+The following insights were accumulated by this deal's AI agent over time through previous interactions, transcript analyses, and rep feedback. Use these to make your output more contextual and avoid repeating mistakes from previous generations.
 
+${agentMemory}
+` : ""}
 ${agentConfigRow ? `YOUR AGENT CONFIGURATION:
 Persona & Instructions: ${agentConfigRow.instructions}
 Communication style: ${outputPrefs?.communicationStyle || "Professional and data-driven"}
