@@ -1,4 +1,9 @@
 import { actor, event } from "rivetkit";
+import {
+  normalizeCompetitorName,
+  validateLearnings,
+  consolidateLearnings,
+} from "@/lib/validation";
 
 // ── Types ──
 
@@ -327,19 +332,8 @@ export const dealAgent = actor({
     },
 
     updateLearnings: (c, newLearnings: string[]) => {
-      const combined = [...c.state.learnings, ...newLearnings];
-      // Deduplicate by lowercase comparison
-      const seen = new Set<string>();
-      const deduped: string[] = [];
-      for (const l of combined) {
-        const key = l.toLowerCase().trim();
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduped.push(l);
-        }
-      }
-      // Keep last 20
-      c.state.learnings = deduped.slice(-20);
+      const validated = validateLearnings(newLearnings);
+      c.state.learnings = consolidateLearnings(c.state.learnings, validated);
       c.broadcast("learningsUpdated", { learnings: c.state.learnings });
     },
 
@@ -351,12 +345,18 @@ export const dealAgent = actor({
         differentiators?: string[];
       }
     ) => {
-      // Add competitor if new
-      if (!c.state.competitiveContext.competitors.includes(intel.competitor)) {
-        c.state.competitiveContext.competitors.push(intel.competitor);
+      const normalized = normalizeCompetitorName(intel.competitor);
+      if (!normalized) {
+        console.log(
+          `[deal-agent] Rejected competitor name: "${intel.competitor}"`
+        );
+        return;
       }
 
-      // Add differentiators
+      if (!c.state.competitiveContext.competitors.includes(normalized)) {
+        c.state.competitiveContext.competitors.push(normalized);
+      }
+
       if (intel.differentiators) {
         for (const d of intel.differentiators) {
           if (!c.state.competitiveContext.ourDifferentiators.includes(d)) {
@@ -365,17 +365,14 @@ export const dealAgent = actor({
         }
       }
 
-      // Add recent mention
-      c.state.competitiveContext.recentMentions.push({
-        date: new Date().toISOString().split("T")[0],
-        competitor: intel.competitor,
-        context: intel.context,
-      });
-      // Keep last 10
-      if (c.state.competitiveContext.recentMentions.length > 10) {
-        c.state.competitiveContext.recentMentions =
-          c.state.competitiveContext.recentMentions.slice(-10);
-      }
+      c.state.competitiveContext.recentMentions = [
+        ...c.state.competitiveContext.recentMentions.slice(-9),
+        {
+          date: new Date().toISOString().split("T")[0],
+          competitor: normalized,
+          context: intel.context,
+        },
+      ];
     },
 
     addRiskSignal: (c, signal: string, _details: string) => {
@@ -483,6 +480,19 @@ export const dealAgent = actor({
         detectedAt: string;
       }
     ) => {
+      if (!intel.synthesis || intel.synthesis.length < 20) {
+        console.log(
+          `[deal-agent] Rejected coordinated intel (synthesis too short): "${intel.synthesis}"`
+        );
+        return;
+      }
+      if (!intel.recommendations || intel.recommendations.length < 1) {
+        console.log(
+          `[deal-agent] Rejected coordinated intel (no recommendations)`
+        );
+        return;
+      }
+
       const existing = c.state.coordinatedIntel.findIndex(
         (i) => i.patternId === intel.patternId
       );

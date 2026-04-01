@@ -1,5 +1,13 @@
 import { actor, queue } from "rivetkit";
 import { workflow } from "rivetkit/workflow";
+import {
+  validateSignal,
+  validateLearnings,
+  validateMeddpiccScore,
+  normalizeCompetitorName,
+  findCompetitorInText,
+  type ValidatedSignal,
+} from "@/lib/validation";
 
 // ── Types ──
 
@@ -87,7 +95,7 @@ export interface TranscriptPipelineState {
 
 const MODEL = "claude-sonnet-4-20250514";
 
-async function callClaude(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callClaude(systemPrompt: string, userPrompt: string, maxTokens = 1024): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
@@ -100,7 +108,7 @@ async function callClaude(systemPrompt: string, userPrompt: string): Promise<str
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     }),
@@ -117,26 +125,70 @@ async function callClaude(systemPrompt: string, userPrompt: string): Promise<str
 }
 
 function parseJSON<T>(text: string, fallback: T): T {
-  try {
-    // Extract JSON from possible markdown code fences
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-    return JSON.parse(jsonMatch[1]!.trim());
-  } catch {
-    return fallback;
+  // Strategy 1: Extract from markdown code fences
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch?.[1]) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch (e) {
+      console.log(`[pipeline] parseJSON fence extraction failed: ${(e as Error).message}`);
+    }
   }
+
+  // Strategy 2: Find outermost { ... } or [ ... ]
+  const braceMatch = text.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    try {
+      return JSON.parse(braceMatch[0]);
+    } catch (e) {
+      console.log(`[pipeline] parseJSON brace extraction failed: ${(e as Error).message}`);
+    }
+  }
+
+  // Strategy 3: Try raw text directly
+  try {
+    return JSON.parse(text.trim());
+  } catch {}
+
+  // Strategy 4: Try to repair truncated JSON (close open brackets/braces)
+  if (braceMatch) {
+    try {
+      let json = braceMatch[0];
+      // Count open/close brackets and braces
+      let openBraces = 0, openBrackets = 0;
+      let inString = false, escape = false;
+      for (const ch of json) {
+        if (escape) { escape = false; continue; }
+        if (ch === "\\") { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === "{") openBraces++;
+        if (ch === "}") openBraces--;
+        if (ch === "[") openBrackets++;
+        if (ch === "]") openBrackets--;
+      }
+      // If we're inside a string, close it
+      if (inString) json += '"';
+      // Close any unclosed arrays and objects
+      while (openBrackets > 0) { json += "]"; openBrackets--; }
+      while (openBraces > 0) { json += "}"; openBraces--; }
+      const repaired = JSON.parse(json);
+      console.log("[pipeline] parseJSON repaired truncated JSON successfully");
+      return repaired;
+    } catch (e2) {
+      console.log(`[pipeline] parseJSON repair failed: ${(e2 as Error).message}`);
+    }
+  }
+
+  console.log(`[pipeline] parseJSON all strategies failed, text length: ${text.length}, first 200: "${text.substring(0, 200)}"`);
+  return fallback;
 }
 
 // ── Helpers ──
 
-function extractCompetitorName(content: string): string {
-  const competitors = [
-    "Microsoft", "OpenAI", "Google", "AWS", "Azure", "Copilot",
-    "Gemini", "GPT", "Salesforce", "Oracle", "SAP", "IBM",
-  ];
-  for (const comp of competitors) {
-    if (content.toLowerCase().includes(comp.toLowerCase())) return comp;
-  }
-  return "Unknown";
+function findCompetitorInSignal(signal: ValidatedSignal): string | null {
+  if (signal.competitor) return signal.competitor; // already normalized by validateSignal
+  return findCompetitorInText(signal.content);
 }
 
 // ── Actor Definition ──
@@ -248,6 +300,15 @@ TRANSCRIPT:
 ${input.transcriptText.slice(0, 15000)}`
           );
           const parsed = parseJSON<{ updates: Record<string, MeddpiccUpdate> }>(raw, { updates: {} });
+
+          // Validate MEDDPICC scores
+          for (const [field, update] of Object.entries(parsed.updates)) {
+            if (!update) continue;
+            const validated = validateMeddpiccScore(field, update.score, update.evidence);
+            update.score = validated.score;
+            update.evidence = validated.evidence;
+          }
+
           loopCtx.state.meddpiccUpdates = parsed.updates;
 
           const updatedFields = Object.keys(parsed.updates).filter((k) => parsed.updates[k]?.delta !== 0);
@@ -330,22 +391,33 @@ Only include signals where there is clear evidence in the transcript. Do not inv
 Known contacts: ${contactsCtx || "None specified"}
 
 TRANSCRIPT:
-${input.transcriptText.slice(0, 15000)}`
+${input.transcriptText.slice(0, 15000)}`,
+            2048
           );
           const parsed = parseJSON<{
             signals: DetectedSignal[];
             stakeholderInsights: StakeholderInsight[];
           }>(raw, { signals: [], stakeholderInsights: [] });
 
-          loopCtx.state.detectedSignals = parsed.signals;
+          // Validate each signal
+          const contactNames = input.existingContacts.map((c) => c.name);
+          const validatedSignals = parsed.signals
+            .map((s) => validateSignal(s, contactNames))
+            .filter((s): s is ValidatedSignal => s !== null);
+
+          console.log(
+            `[pipeline] Signal validation: ${parsed.signals.length} raw → ${validatedSignals.length} validated`
+          );
+
+          loopCtx.state.detectedSignals = validatedSignals as DetectedSignal[];
           loopCtx.state.stakeholderInsights = parsed.stakeholderInsights;
 
           await getDealActor().workflowProgress({
             step: "detect_signals",
             status: "complete",
-            details: `${parsed.signals.length} signals, ${parsed.stakeholderInsights.length} stakeholders`,
+            details: `${validatedSignals.length} signals, ${parsed.stakeholderInsights.length} stakeholders`,
           });
-          return parsed;
+          return { signals: validatedSignals, stakeholderInsights: parsed.stakeholderInsights };
         });
 
         // Create observations for ALL detected signals (fire-and-forget, don't block pipeline)
@@ -385,23 +457,35 @@ ${input.transcriptText.slice(0, 15000)}`
           await getDealActor().workflowProgress({ step: "synthesize_learnings", status: "running" });
 
           const raw = await callClaude(
-            "You are a deal strategist. Synthesize the transcript analysis into key learnings that should inform future interactions. Return valid JSON only.",
-            `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), what are the key learnings?
+            "You are a deal strategist. Synthesize the transcript analysis into key learnings. Return valid JSON only.",
+            `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), identify the key learnings that should inform future interactions.
+
+Each learning MUST combine:
+1. Specific evidence from the transcript (a person's name, a number, a stated preference, a direct quote)
+2. Broader context explaining WHY this matters and HOW to act on it
+
+Good example: "GDPR compliance is a hard gate — Henrik stated it is non-negotiable, and the team chose Anthropic over OpenAI specifically because of data privacy controls. Lead with compliance positioning in all stakeholder conversations."
+Bad example: "The customer cares about compliance." (too vague, no evidence)
+Bad example: "Henrik said GDPR is important." (evidence but no context or action)
 
 Action items found: ${JSON.stringify(actions)}
 MEDDPICC updates: ${JSON.stringify(meddpicc)}
 Signals detected: ${JSON.stringify(signals.signals)}
 Stakeholder insights: ${JSON.stringify(signals.stakeholderInsights)}
 
-Return JSON: { "learnings": ["concise actionable learning statement 1", "learning 2", ...] }
+Return JSON: { "learnings": ["actionable learning 1", "learning 2", ...] }
 Focus on: stakeholder preferences, decision criteria, competitive positioning, relationship dynamics, process obstacles.
-Maximum 5 learnings.
+Return 3-7 learnings. Each should be 1-2 sentences.
 
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 8000)}`
           );
           const parsed = parseJSON<{ learnings: string[] }>(raw, { learnings: [] });
-          loopCtx.state.newLearnings = parsed.learnings;
+          const validatedLearnings = validateLearnings(parsed.learnings);
+          console.log(
+            `[pipeline] Learning validation: ${parsed.learnings.length} raw → ${validatedLearnings.length} validated`
+          );
+          loopCtx.state.newLearnings = validatedLearnings;
 
           await getDealActor().workflowProgress({
             step: "synthesize_learnings",
@@ -529,13 +613,23 @@ Keep it professional, concise, and reference specific commitments from the call.
 
           await dealActor.updateLearnings(synthesis);
 
-          // Update competitive intel from all competitive mentions
-          const competitiveMentions = signals.signals.filter((s) => s.type === "competitive_intel");
+          // Update competitive intel from validated competitive mentions
+          const competitiveMentions = signals.signals.filter(
+            (s) => s.type === "competitive_intel"
+          );
           for (const mention of competitiveMentions) {
-            await dealActor.addCompetitiveIntel({
-              competitor: mention.source_speaker || "Unknown",
-              context: mention.content,
-            });
+            const competitor = findCompetitorInSignal(mention as ValidatedSignal);
+            if (competitor) {
+              console.log(`[pipeline] Competitor extracted: ${competitor}`);
+              await dealActor.addCompetitiveIntel({
+                competitor,
+                context: mention.content,
+              });
+            } else {
+              console.log(
+                `[pipeline] No valid competitor found in signal, skipping addCompetitiveIntel`
+              );
+            }
           }
 
           // Add risk signals from deal blockers and high-urgency process friction
@@ -564,16 +658,27 @@ Keep it professional, concise, and reference specific commitments from the call.
             }
           }
           console.log("[pipeline] Deal agent updated with intelligence");
+        });
 
-          // Send signals to intelligence coordinator
+        // FINALIZE STEP 1b: Send signals to intelligence coordinator (separate step for durability)
+        await loopCtx.step("send-signals-to-coordinator", async () => {
           try {
+            const detectedSignals = loopCtx.state.detectedSignals || [];
+            if (detectedSignals.length === 0) {
+              console.log("[pipeline] No signals to send to coordinator");
+              return;
+            }
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const coordClient = loopCtx.client() as any;
             const coordinator = coordClient.intelligenceCoordinator.getOrCreate(["default"]);
 
-            const detectedSignals = loopCtx.state.detectedSignals || [];
-
             for (const signal of detectedSignals) {
+              const competitor =
+                signal.type === "competitive_intel"
+                  ? findCompetitorInSignal(signal as ValidatedSignal)
+                  : undefined;
+
               await coordinator.receiveSignal({
                 id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 dealId: input.dealId,
@@ -582,10 +687,7 @@ Keep it professional, concise, and reference specific commitments from the call.
                 vertical: input.vertical,
                 signalType: signal.type,
                 content: signal.content,
-                competitor:
-                  signal.type === "competitive_intel"
-                    ? extractCompetitorName(signal.content)
-                    : undefined,
+                competitor: competitor ?? undefined,
                 urgency: signal.urgency || "medium",
                 receivedAt: new Date().toISOString(),
                 sourceAeId: input.assignedAeId || "",
@@ -601,7 +703,6 @@ Keep it professional, concise, and reference specific commitments from the call.
               "[pipeline] Failed to send signals to coordinator:",
               e
             );
-            // Non-fatal — don't fail the pipeline
           }
         });
 

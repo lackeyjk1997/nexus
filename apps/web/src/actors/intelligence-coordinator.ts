@@ -1,4 +1,9 @@
 import { actor, event } from "rivetkit";
+import {
+  validateSignal,
+  normalizeCompetitorName,
+  findCompetitorInText,
+} from "@/lib/validation";
 
 // ── Types ──
 
@@ -68,8 +73,34 @@ export const intelligenceCoordinator = actor({
 
   actions: {
     receiveSignal: (c, signal: Signal) => {
+      // Validate signal
+      const validated = validateSignal(signal);
+      if (!validated) {
+        console.log(
+          `[coordinator] Rejected invalid signal from ${signal.dealName}: type=${signal.signalType}`
+        );
+        return;
+      }
+
+      // Normalize competitor name for competitive_intel
+      if (validated.type === "competitive_intel") {
+        const normalized = normalizeCompetitorName(signal.competitor || "");
+        if (normalized) {
+          signal.competitor = normalized;
+        } else {
+          const fromContent = findCompetitorInText(signal.content);
+          if (fromContent) {
+            signal.competitor = fromContent;
+          } else {
+            console.log(
+              `[coordinator] competitive_intel signal has no valid competitor, storing without competitor match`
+            );
+          }
+        }
+      }
+
       console.log(
-        `[coordinator] Received signal: ${signal.signalType} from ${signal.dealName}`
+        `[coordinator] Received signal: ${signal.signalType} from ${signal.dealName}${signal.competitor ? ` (competitor: ${signal.competitor})` : ""}`
       );
 
       // Store signal (keep last 200)
