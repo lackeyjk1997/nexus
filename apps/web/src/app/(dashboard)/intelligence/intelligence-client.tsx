@@ -172,6 +172,32 @@ export function IntelligenceClient({
     window.history.replaceState({}, "", url.toString());
   }, []);
 
+  // Agent-detected patterns from coordinator
+  const [agentPatterns, setAgentPatterns] = useState<
+    Array<{
+      id: string;
+      signalType: string;
+      vertical: string;
+      competitor?: string;
+      dealIds: string[];
+      dealNames: string[];
+      signalCount: number;
+      synthesis: string;
+      recommendations: string[];
+      arrImpact: number;
+      detectedAt: string;
+      synthesizedAt: string | null;
+      pushStatus: string;
+    }>
+  >([]);
+
+  useEffect(() => {
+    fetch("/api/intelligence/agent-patterns")
+      .then((r) => r.json())
+      .then((data) => setAgentPatterns(data.patterns || []))
+      .catch(() => setAgentPatterns([]));
+  }, []);
+
   const isSupport = (currentUser?.role as string) === "SUPPORT";
   const isAE = currentUser?.role === "AE" || currentUser?.role === "SA" || currentUser?.role === "BDR" || currentUser?.role === "CSM";
   const userFunction = isSupport ? currentUser?.verticalSpecialization : null;
@@ -256,6 +282,106 @@ export function IntelligenceClient({
             <MetricCard icon={Clock} label="Avg Response" value={avgResponseTime} />
             <MetricCard icon={CheckCircle} label="Resolution Rate" value={`${resolutionRate}%`} color="text-success" />
           </div>
+
+          {/* Agent-Detected Patterns */}
+          {agentPatterns.filter((p) => p.synthesis).length > 0 && (
+            <div className="space-y-3">
+              {agentPatterns
+                .filter((p) => p.synthesis)
+                .map((pattern) => {
+                  const SignalIcon = SIGNAL_ICONS[pattern.signalType] || Eye;
+                  const signalColor = SIGNAL_COLORS[pattern.signalType] || "bg-muted text-muted-foreground";
+                  return (
+                    <div
+                      key={pattern.id}
+                      className="bg-white rounded-xl p-5"
+                      style={{
+                        borderLeft: "3px solid #E07A5F",
+                        border: "1px solid rgba(0,0,0,0.06)",
+                        borderLeftWidth: 3,
+                        borderLeftColor: "#E07A5F",
+                        boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="h-4 w-4" style={{ color: "#E07A5F" }} />
+                        <span
+                          className="text-xs font-semibold uppercase tracking-wider"
+                          style={{ color: "#E07A5F" }}
+                        >
+                          Agent-Detected Pattern
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium", signalColor)}>
+                          <SignalIcon className="h-3 w-3" />
+                          {pattern.signalType.replace(/_/g, " ").toUpperCase()}
+                        </span>
+                        <span className="text-xs" style={{ color: "#8A8078" }}>
+                          {pattern.vertical.charAt(0).toUpperCase() + pattern.vertical.slice(1).replace(/_/g, " ")}
+                        </span>
+                        {pattern.competitor && (
+                          <span className="text-xs font-medium" style={{ color: "#3D3833" }}>
+                            {pattern.competitor} active across {pattern.dealNames.length} deals
+                          </span>
+                        )}
+                      </div>
+
+                      <p
+                        className="text-sm leading-relaxed mb-3"
+                        style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        {pattern.synthesis}
+                      </p>
+
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {pattern.dealNames.map((name) => (
+                          <span
+                            key={name}
+                            className="text-[11px] px-2 py-0.5 rounded-md"
+                            style={{
+                              background: "#F5F3EF",
+                              color: "#3D3833",
+                              fontFamily: "'DM Sans', sans-serif",
+                            }}
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+
+                      {pattern.recommendations.length > 0 && (
+                        <div>
+                          <p
+                            className="text-[11px] font-semibold uppercase tracking-wider mb-1.5"
+                            style={{ color: "#8A8078" }}
+                          >
+                            Recommendations
+                          </p>
+                          <ul className="space-y-1">
+                            {pattern.recommendations.map((rec, i) => (
+                              <li
+                                key={i}
+                                className="text-[13px] leading-snug flex items-start gap-1.5"
+                                style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
+                              >
+                                <span className="mt-1 h-1 w-1 rounded-full bg-[#E07A5F] flex-shrink-0" />
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] mt-3" style={{ color: "#8A8078" }}>
+                        Detected {timeAgo(pattern.detectedAt)}
+                      </p>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
 
           {/* AE Impact Card — visible to AEs/SAs/BDRs/CSMs only */}
           {isAE && currentUser && (

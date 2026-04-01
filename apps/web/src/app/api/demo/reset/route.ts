@@ -111,6 +111,14 @@ export async function POST() {
           // Actor might not exist — that's fine
         }
       }
+
+      // Destroy intelligence coordinator
+      try {
+        const coordinator = rivetClient.intelligenceCoordinator.getOrCreate(["default"]);
+        await coordinator.destroyActor();
+      } catch {
+        // Actor might not exist
+      }
     } catch (e) {
       console.error("Failed to destroy Rivet actors during demo reset:", e);
       // Non-fatal — actors will be recreated fresh

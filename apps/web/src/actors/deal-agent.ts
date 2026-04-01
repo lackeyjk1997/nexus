@@ -32,6 +32,18 @@ export interface ActiveIntervention {
   dismissed: boolean;
 }
 
+export interface CoordinatedIntel {
+  patternId: string;
+  signalType: string;
+  vertical: string;
+  competitor?: string;
+  synthesis: string;
+  recommendations: string[];
+  affectedDeals: string[];
+  detectedAt: string;
+  receivedAt: string;
+}
+
 export interface DealAgentState {
   dealId: string;
   dealName: string;
@@ -56,6 +68,9 @@ export interface DealAgentState {
       context: string;
     }>;
   };
+
+  // Cross-deal coordinated intelligence (pushed by coordinator)
+  coordinatedIntel: CoordinatedIntel[];
 
   // Agent health
   daysSinceCreation: number;
@@ -145,6 +160,24 @@ export function formatMemoryForPrompt(state: DealAgentState): string {
     sections.push(compSection);
   }
 
+  // Cross-deal coordinated intelligence
+  if (state.coordinatedIntel.length > 0) {
+    sections.push(
+      "### Cross-Deal Intelligence (from Nexus Intelligence Coordinator)"
+    );
+    for (const intel of state.coordinatedIntel) {
+      sections.push(
+        `**${intel.signalType.replace(/_/g, " ").toUpperCase()}** across ${intel.affectedDeals.join(", ")}:`
+      );
+      sections.push(intel.synthesis);
+      if (intel.recommendations.length > 0) {
+        sections.push("Recommended actions:");
+        intel.recommendations.forEach((r) => sections.push(`- ${r}`));
+      }
+      sections.push("");
+    }
+  }
+
   return sections.join("\n\n");
 }
 
@@ -164,6 +197,7 @@ const DEFAULT_STATE: DealAgentState = {
     ourDifferentiators: [],
     recentMentions: [],
   },
+  coordinatedIntel: [],
   daysSinceCreation: 0,
   totalInteractions: 0,
   lastInteractionDate: null,
@@ -195,6 +229,10 @@ export const dealAgent = actor({
     }>(),
     briefReady: event<{ generatedAt: string }>(),
     healthChecked: event<{ score: number; issues: string[] }>(),
+    coordinatedIntelReceived: event<{
+      signalType: string;
+      synthesis: string;
+    }>(),
   },
 
   actions: {
@@ -430,6 +468,59 @@ export const dealAgent = actor({
         }
         c.state.totalInteractions++;
       }
+    },
+
+    addCoordinatedIntel: (
+      c,
+      intel: {
+        patternId: string;
+        signalType: string;
+        vertical: string;
+        competitor?: string;
+        synthesis: string;
+        recommendations: string[];
+        affectedDeals: string[];
+        detectedAt: string;
+      }
+    ) => {
+      const existing = c.state.coordinatedIntel.findIndex(
+        (i) => i.patternId === intel.patternId
+      );
+
+      const entry: CoordinatedIntel = {
+        ...intel,
+        receivedAt: new Date().toISOString(),
+      };
+
+      if (existing >= 0) {
+        c.state.coordinatedIntel[existing] = entry;
+      } else {
+        c.state.coordinatedIntel = [
+          ...c.state.coordinatedIntel.slice(-19),
+          entry,
+        ];
+      }
+
+      c.state.interactionMemory.push({
+        date: new Date().toISOString().split("T")[0],
+        type: "observation",
+        summary: `Cross-deal intelligence: ${intel.synthesis.substring(0, 150)}`,
+        insights: intel.recommendations,
+      });
+      if (c.state.interactionMemory.length > 50) {
+        c.state.interactionMemory = c.state.interactionMemory.slice(-50);
+      }
+      c.state.totalInteractions++;
+      c.state.lastInteractionDate = new Date().toISOString().split("T")[0];
+
+      c.broadcast("coordinatedIntelReceived", {
+        signalType: intel.signalType,
+        synthesis: intel.synthesis,
+      });
+
+      console.log(
+        `[deal-agent] Received coordinated intel: ${intel.signalType} — ${intel.synthesis.substring(0, 80)}`
+      );
     },
 
     runHealthCheck: (c) => {

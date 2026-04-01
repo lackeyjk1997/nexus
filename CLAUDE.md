@@ -186,42 +186,56 @@ git push origin main        # Vercel auto-deploys from main
 Live: https://nexus-web-plum-iota.vercel.app
 Reset link: `?reset=true` query param on landing page
 
-## Rivet Actors (Sessions S10-P1, S10-P2)
+## Rivet Actors (Sessions S10, S11)
 
 Nexus uses Rivet (rivet.dev) for stateful AI agents. Documentation: https://rivet.dev/llms.txt
 
 ### File Structure
 ```
-apps/web/src/actors/deal-agent.ts          → Deal agent actor (state, actions, events)
-apps/web/src/actors/transcript-pipeline.ts → Transcript pipeline workflow actor (5 Claude steps)
-apps/web/src/actors/registry.ts            → Actor registry (setup + type export)
+apps/web/src/actors/deal-agent.ts              → Deal agent actor (state, actions, events)
+apps/web/src/actors/transcript-pipeline.ts     → Transcript pipeline workflow actor (9 durable steps)
+apps/web/src/actors/intelligence-coordinator.ts → Cross-deal intelligence coordinator (simple actor)
+apps/web/src/actors/registry.ts                → Actor registry (setup + type export)
 apps/web/src/app/api/rivet/[...all]/route.ts → Rivet handler via @rivetkit/next-js toNextHandler
 apps/web/src/app/api/transcript-pipeline/route.ts → Pipeline trigger (fetches deal context, enqueues work)
 apps/web/src/app/api/deals/[id]/meddpicc-update/route.ts → MEDDPICC persistence (called by pipeline actor)
 apps/web/src/lib/rivet.ts                  → Client-side useActor hook (createRivetKit)
 apps/web/src/components/agent-memory.tsx    → Deal agent memory display (expandable on deal page)
-apps/web/src/components/workflow-tracker.tsx → Real-time 5-step pipeline progress tracker
+apps/web/src/components/workflow-tracker.tsx → Real-time pipeline progress tracker (subscribes to workflowProgress events)
+apps/web/src/components/agent-intervention.tsx → Proactive intervention card with health score bar
+apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected cross-deal patterns
 ```
 
 ### Deal Agent (`dealAgent`)
 - One per deal, created lazily via `getOrCreate([dealId])`
-- Accumulates intelligence: interactionMemory, learnings, competitiveContext, riskSignals
-- Actions: initialize, getState, recordInteraction, updateLearnings, addCompetitiveIntel, recordFeedback, updateStage, getMemoryForPrompt, workflowProgress
-- Events: memoryUpdated, learningsUpdated, riskDetected, workflowProgress, interventionReady
+- Persistent state: interactionMemory, learnings, competitiveContext, riskSignals, briefReady, activeIntervention, healthScore, lastHealthCheck
+- Actions:
+  - **Core**: initialize, getState, destroyActor, recordInteraction, updateLearnings, addCompetitiveIntel, addRiskSignal, removeRiskSignal, recordFeedback, updateStage, getMemoryForPrompt, workflowProgress
+  - **Brief Ready**: setBriefReady, dismissBrief, getBriefReady — manage auto-generated call prep from pipeline
+  - **Interventions**: setIntervention, dismissIntervention — manage proactive risk alerts
+  - **Health**: runHealthCheck — evaluates compound risk (customer silence, risk signals, MEDDPICC gaps, competitive pressure, stage age), creates interventions when score < 60, scheduled via `c.schedule.after()`
+  - **Coordinated Intel**: addCoordinatedIntel — receives cross-deal insights pushed by coordinator, stores in coordinatedIntel array, broadcasts coordinatedIntelReceived event
+- Events: memoryUpdated, learningsUpdated, riskDetected, workflowProgress, interventionReady, briefReady, healthChecked, coordinatedIntelReceived
 - `formatMemoryForPrompt()` exports agent memory as structured text for call prep (9th intelligence layer)
 - Agent state persists across sessions (not lost on page refresh)
 - Supabase remains source of truth — agents are the intelligence/memory layer on top
+- Health checks auto-schedule: 30s after initialize, 10s after recordInteraction (if not recently run)
 
 ### Transcript Pipeline (`transcriptPipeline`)
 - Durable Rivet workflow actor using `workflow()` + `ctx.loop()` + `loopCtx.step()`
 - Queue-driven: receives work via `pipeline.send("process", { ... })` from `/api/transcript-pipeline`
-- 5 sequential Claude API steps, each inside a `loopCtx.step()`:
-  1. **Extract Actions** — action items, commitments, decisions
-  2. **Score MEDDPICC** — evidence-based scoring with deltas
-  3. **Detect Signals** — competitive mentions + stakeholder sentiment
-  4. **Synthesize Learnings** — strategic insights for deal agent
-  5. **Draft Email** — follow-up email from call context
-- Downstream effects: persists MEDDPICC to Supabase, creates observations, updates deal agent memory
+- `/api/transcript-pipeline` fetches deal context (deal, MEDDPICC, contacts, agent config, active experiments) before enqueuing
+- 9 durable steps, each inside a `loopCtx.step()`:
+  1. **init-pipeline** — reset state, set status to running
+  2. **extract-actions** — Claude extracts action items, commitments, decisions
+  3. **score-meddpicc** — Claude scores MEDDPICC with evidence and deltas → **persist-meddpicc** sub-step writes to Supabase via `/api/deals/[id]/meddpicc-update`
+  4. **detect-signals** — Claude extracts all 9 signal types (competitive_intel, process_friction, deal_blocker, content_gap, win_pattern, field_intelligence, process_innovation) + per-stakeholder sentiment → **create-signal-observations** sub-step creates observations in parallel via `Promise.all`
+  5. **synthesize-learnings** — Claude synthesizes strategic insights for deal agent
+  6. **check-experiments** — (conditional, only if active experiments exist) Claude checks transcript for experiment tactic usage, auto-updates experiment evidence via `/api/playbook/ideas/[id]`
+  7. **draft-email** — Claude drafts follow-up email from call context
+  8. **update-deal-agent** — records interaction, updates learnings, adds competitive intel, adds risk signals from blockers/friction, records stakeholder engagement, sends all detected signals to intelligence coordinator
+  9. **auto-call-prep** (timeout: 180s) — calls `/api/agent/call-prep` to generate brief, stores result on deal agent via `setBriefReady` → "Brief Ready" button appears on deal page
+  10. **mark-complete** — sets pipeline status to complete
 - Progress broadcasts via deal agent's `workflowProgress` action → WebSocket to browser
 - **Workflow rule**: all `state`, `client()`, and actor-to-actor RPCs must be inside `loopCtx.step()` callbacks
 
@@ -229,12 +243,14 @@ apps/web/src/components/workflow-tracker.tsx → Real-time 5-step pipeline progr
 - `useActor({ name, key })` hook from `@/lib/rivet` — no provider needed
 - Used by: agent-memory.tsx, workflow-tracker.tsx, deal-detail-client.tsx
 - Client endpoint: `window.location.origin/api/rivet` (browser), `NEXT_PUBLIC_SITE_URL/api/rivet` (SSR)
+- deal-detail-client.tsx subscribes to `briefReady` event and polls `getBriefReady()` on mount — shows coral "Brief Ready" button when brief is available
 
 ### Vercel / Next.js Integration
 - `@rivetkit/next-js` package: `toNextHandler(registry)` auto-spawns local engine in dev, serverless on Vercel
 - `next.config.mjs`: `serverExternalPackages: ["rivetkit", "@rivetkit/next-js"]` (prevents webpack bundling)
 - `/api/rivet/[...all]/route.ts`: exports GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS with `maxDuration = 300`
-- `/api/transcript-pipeline/route.ts`: `maxDuration = 30`
+- `/api/transcript-pipeline/route.ts`: `maxDuration = 300`
+- `/api/agent/call-prep/route.ts`: `maxDuration = 120`
 - `/api/deals/[id]/meddpicc-update/route.ts`: `maxDuration = 15`
 
 ### Environment Variables
@@ -243,35 +259,42 @@ apps/web/src/components/workflow-tracker.tsx → Real-time 5-step pipeline progr
 - `NEXT_PUBLIC_SITE_URL` — Absolute URL for server-side Rivet client creation (e.g. `https://nexus-web-plum-iota.vercel.app`)
 - `ANTHROPIC_API_KEY` — Used by transcript pipeline actor for Claude API calls
 
-## Session S11: Proactive Intelligence
+### Intelligence Coordinator (`intelligenceCoordinator`)
+- Simple actor (NOT workflow) — one per org, key: `["default"]`
+- Receives signals from pipeline's update-deal-agent step after each transcript processing
+- Detects patterns: 2+ signals of same type in same vertical (competitive_intel also matches on competitor name)
+- Synthesizes cross-deal insights via Claude API (`claude-sonnet-4-20250514`, max_tokens: 1024)
+- Pushes synthesized intel back to affected deal agents via `addCoordinatedIntel()`
+- Uses `c.schedule.after(3000)` for synthesis delay (demo speed)
+- State: signals (last 200), patterns, totalSignalsReceived, totalPatternsDetected
+- Actions: receiveSignal, synthesizePattern, getPatterns, getPatternsForDeal, getStatus
+- Events: patternDetected, patternSynthesized
+
+### Demo Reset
+- POST `/api/demo/reset` destroys all Rivet actors (`dealAgent`, `transcriptPipeline`, `intelligenceCoordinator`) for clean restart
+
+## Session S12: Agent-to-Agent Coordination
 
 ### What was added
-- Pipeline extracts ALL 9 signal types from transcripts (not just competitive)
-- Auto-generates call prep after transcript processing ("Brief Ready" on deal page)
-- Experiment attribution: pipeline checks if tested tactics were used in calls
-- Deal agent health checks with scheduling (runs after interactions)
-- Proactive intervention cards when health score drops below threshold
-- Demo reset destroys all Rivet actors for clean restart
+- Intelligence Coordinator actor (simple actor, not workflow) — detects cross-deal patterns and synthesizes insights
+- Deal agents receive coordinatedIntel pushed by coordinator, stored in state, flows into call prep via getMemoryForPrompt()
+- Pipeline sends all detected signals to coordinator in the update-deal-agent step
+- Coordinator detects patterns (2+ deals with same signal type in same vertical) and synthesizes with Claude
+- Intelligence dashboard shows "Agent-Detected Patterns" section at top of Patterns tab
+- Agent memory displays cross-deal intelligence section
+- HealthFirst seed transcript with transcript_text for cross-deal demo
+- New API route: GET `/api/intelligence/agent-patterns`
+- Demo reset destroys coordinator actor
 
-### Deal Agent State (expanded)
-- briefReady: auto-generated call prep waiting for rep
-- activeIntervention: proactive risk detection with diagnosis
-- healthScore: 0-100 compound score from multiple signals
-- lastHealthCheck: timestamp of last evaluation
+### Actor Network
+- dealAgent (per deal) ← pipeline sends signals to → intelligenceCoordinator (per org)
+- intelligenceCoordinator → pushes synthesized intel back to → dealAgent(s)
+- Key: coordinator uses c.schedule.after() for synthesis, NOT workflow steps (avoids timeout issues)
 
-### New Actions
-- setBriefReady / dismissBrief / getBriefReady — manage auto-generated call prep
-- setIntervention / dismissIntervention — manage proactive risk alerts
-- runHealthCheck — evaluates compound risk from accumulated state, creates interventions
-
-### Pipeline Steps (expanded)
-1. Extract Actions (unchanged)
-2. Score MEDDPICC (unchanged)
-3. Detect ALL Signals (expanded from competitive-only to 9 signal types)
-4. Synthesize Learnings (unchanged)
-4b. Check Experiments (NEW — auto-attribute evidence to active experiments)
-5. Draft Email (unchanged)
-6. Finalize (expanded — auto-generates call prep, updates stakeholder engagement, adds risk signals)
-
-### New Files
-- `apps/web/src/components/agent-intervention.tsx` — Proactive intervention card with health score bar
+### Demo Flow for Cross-Deal Intelligence
+1. Process transcript on MedVista → signals sent to coordinator
+2. Process transcript on HealthFirst → signals sent to coordinator
+3. Coordinator detects pattern (same competitor/signal in same vertical)
+4. Coordinator synthesizes and pushes to both deal agents
+5. Intelligence dashboard shows agent-detected pattern
+6. Next call prep for either deal includes cross-deal insight

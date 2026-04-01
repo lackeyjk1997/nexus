@@ -75,6 +75,7 @@ export function AgentMemory({
     // Listen for events on the already-connected actor connection
     actor.connection.on("memoryUpdated", handleMemoryUpdate);
     actor.connection.on("learningsUpdated", handleMemoryUpdate);
+    actor.connection.on("coordinatedIntelReceived", handleMemoryUpdate);
   }, [actor.connection]);
 
   // Graceful degradation — if Rivet is unavailable, render nothing
@@ -215,6 +216,59 @@ export function AgentMemory({
                   </>
                 )}
               </p>
+            </div>
+          )}
+
+          {/* Cross-Deal Intelligence */}
+          {agentState.coordinatedIntel && agentState.coordinatedIntel.length > 0 && (
+            <div>
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: "#8A8078" }}
+              >
+                Cross-Deal Intelligence
+              </p>
+              <div className="space-y-2">
+                {agentState.coordinatedIntel.map((intel, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg p-2.5"
+                    style={{
+                      background: "rgba(224,122,95,0.04)",
+                      border: "1px solid rgba(224,122,95,0.15)",
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span style={{ color: "#E07A5F", fontSize: 12 }}>{"\u2726"}</span>
+                      <span
+                        className="text-[12px] font-medium"
+                        style={{ color: "#3D3833" }}
+                      >
+                        {intel.affectedDeals.join(", ")}
+                      </span>
+                    </div>
+                    <p
+                      className="text-[13px] leading-snug mb-1.5"
+                      style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
+                    >
+                      {intel.synthesis}
+                    </p>
+                    {intel.recommendations.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {intel.recommendations.map((rec, j) => (
+                          <li
+                            key={j}
+                            className="text-[12px] leading-snug"
+                            style={{ color: "#8A8078", fontFamily: "'DM Sans', sans-serif" }}
+                          >
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

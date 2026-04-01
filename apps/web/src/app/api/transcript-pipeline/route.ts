@@ -9,6 +9,7 @@ import {
   meddpiccFields,
   agentConfigs,
   playbookIdeas,
+  teamMembers,
 } from "@nexus/db";
 import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -103,6 +104,17 @@ export async function POST(request: Request) {
       );
   }
 
+  // Fetch assigned AE name
+  let assignedAeName = "";
+  if (deal.assignedAeId) {
+    const [ae] = await db
+      .select({ name: teamMembers.name })
+      .from(teamMembers)
+      .where(eq(teamMembers.id, deal.assignedAeId))
+      .limit(1);
+    assignedAeName = ae?.name || "";
+  }
+
   // Determine app URL for internal API calls from the actor
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -130,6 +142,7 @@ export async function POST(request: Request) {
     })),
     agentConfigInstructions: agentInstructions,
     assignedAeId: deal.assignedAeId || "",
+    assignedAeName,
     appUrl,
     activeExperiments: activeExperiments.map((e) => ({
       id: e.id,

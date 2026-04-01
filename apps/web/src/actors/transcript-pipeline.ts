@@ -22,6 +22,7 @@ interface PipelineInput {
   existingContacts: Array<{ name: string; title: string; role: string }>;
   agentConfigInstructions: string;
   assignedAeId: string;
+  assignedAeName: string;
   appUrl: string;
   activeExperiments?: ActiveExperiment[];
 }
@@ -123,6 +124,19 @@ function parseJSON<T>(text: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+// ── Helpers ──
+
+function extractCompetitorName(content: string): string {
+  const competitors = [
+    "Microsoft", "OpenAI", "Google", "AWS", "Azure", "Copilot",
+    "Gemini", "GPT", "Salesforce", "Oracle", "SAP", "IBM",
+  ];
+  for (const comp of competitors) {
+    if (content.toLowerCase().includes(comp.toLowerCase())) return comp;
+  }
+  return "Unknown";
 }
 
 // ── Actor Definition ──
@@ -550,6 +564,45 @@ Keep it professional, concise, and reference specific commitments from the call.
             }
           }
           console.log("[pipeline] Deal agent updated with intelligence");
+
+          // Send signals to intelligence coordinator
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const coordClient = loopCtx.client() as any;
+            const coordinator = coordClient.intelligenceCoordinator.getOrCreate(["default"]);
+
+            const detectedSignals = loopCtx.state.detectedSignals || [];
+
+            for (const signal of detectedSignals) {
+              await coordinator.receiveSignal({
+                id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                dealId: input.dealId,
+                dealName: input.dealName,
+                companyName: input.companyName,
+                vertical: input.vertical,
+                signalType: signal.type,
+                content: signal.content,
+                competitor:
+                  signal.type === "competitive_intel"
+                    ? extractCompetitorName(signal.content)
+                    : undefined,
+                urgency: signal.urgency || "medium",
+                receivedAt: new Date().toISOString(),
+                sourceAeId: input.assignedAeId || "",
+                sourceAeName: input.assignedAeName || "",
+              });
+            }
+
+            console.log(
+              `[pipeline] Sent ${detectedSignals.length} signals to intelligence coordinator`
+            );
+          } catch (e) {
+            console.error(
+              "[pipeline] Failed to send signals to coordinator:",
+              e
+            );
+            // Non-fatal — don't fail the pipeline
+          }
         });
 
         // FINALIZE STEP 2: Auto-generate call prep (separate step — calls Claude, can take 90s+)
