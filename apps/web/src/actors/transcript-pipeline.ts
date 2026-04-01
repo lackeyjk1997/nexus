@@ -334,35 +334,38 @@ ${input.transcriptText.slice(0, 15000)}`
           return parsed;
         });
 
-        // Create observations for ALL detected signals
+        // Create observations for ALL detected signals (fire-and-forget, don't block pipeline)
         if (signals.signals.length > 0) {
-          await loopCtx.step("create-observations", async () => {
-            for (const signal of signals.signals) {
-              try {
-                await fetch(`${input.appUrl}/api/observations`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    rawInput: `[From transcript] ${signal.content}`,
-                    context: {
-                      page: "pipeline",
-                      dealId: input.dealId,
-                      trigger: "transcript_pipeline",
-                      signalType: signal.type,
-                      urgency: signal.urgency,
-                      sourceSpeaker: signal.source_speaker,
-                    },
-                    observerId: input.assignedAeId,
-                  }),
-                });
-              } catch (e) {
+          await loopCtx.step("create-signal-observations", async () => {
+            console.log(`[pipeline] Creating observations for ${signals.signals.length} signals`);
+            // Fire all observation creates in parallel, don't await individually
+            const promises = signals.signals.map((signal) =>
+              fetch(`${input.appUrl}/api/observations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  rawInput: `[From transcript] ${signal.content}`,
+                  context: {
+                    page: "pipeline",
+                    dealId: input.dealId,
+                    trigger: "transcript_pipeline",
+                    signalType: signal.type,
+                    urgency: signal.urgency,
+                    sourceSpeaker: signal.source_speaker,
+                  },
+                  observerId: input.assignedAeId,
+                }),
+              }).catch((e) => {
                 console.error(`Failed to create observation for signal: ${signal.type}`, e);
-              }
-            }
+              })
+            );
+            await Promise.all(promises);
+            console.log(`[pipeline] All observation creates finished`);
           });
         }
 
         // STEP 4: Synthesize learnings for the deal agent
+        console.log("[pipeline] Starting synthesize-learnings step");
         const synthesis = await loopCtx.step("synthesize-learnings", async () => {
           loopCtx.state.currentStep = "synthesize_learnings";
           await getDealActor().workflowProgress({ step: "synthesize_learnings", status: "running" });
@@ -471,6 +474,7 @@ ${input.transcriptText.slice(0, 12000)}`
         }
 
         // STEP 5: Draft follow-up email
+        console.log("[pipeline] Starting draft-email step");
         await loopCtx.step("draft-email", async () => {
           loopCtx.state.currentStep = "draft_email";
           await getDealActor().workflowProgress({ step: "draft_email", status: "running" });
@@ -499,11 +503,9 @@ Keep it professional, concise, and reference specific commitments from the call.
           });
         });
 
-        // ALL STEPS COMPLETE — finalize and update the deal agent
-        await loopCtx.step("finalize", async () => {
-          loopCtx.state.status = "complete";
-          loopCtx.state.completedAt = new Date().toISOString();
-
+        // FINALIZE STEP 1: Update deal agent with accumulated intelligence
+        console.log("[pipeline] Starting update-deal-agent step");
+        await loopCtx.step("update-deal-agent", async () => {
           const dealActor = getDealActor();
           await dealActor.recordInteraction({
             type: "transcript_analysis",
@@ -547,8 +549,12 @@ Keep it professional, concise, and reference specific commitments from the call.
               });
             }
           }
+          console.log("[pipeline] Deal agent updated with intelligence");
+        });
 
-          // Auto-generate next call prep
+        // FINALIZE STEP 2: Auto-generate call prep (separate step — this calls Claude and can take 20s+)
+        console.log("[pipeline] Starting auto-call-prep step");
+        await loopCtx.step({ name: "auto-call-prep", timeout: 60000, run: async () => {
           try {
             const prepResponse = await fetch(`${input.appUrl}/api/agent/call-prep`, {
               method: "POST",
@@ -563,18 +569,30 @@ Keep it professional, concise, and reference specific commitments from the call.
 
             if (prepResponse.ok) {
               const briefData = await prepResponse.json();
+              const dealActor = getDealActor();
               await dealActor.setBriefReady({
                 brief: briefData.brief,
                 generatedAt: new Date().toISOString(),
                 context: "post_transcript_analysis",
               });
+              console.log("[pipeline] Brief ready set on deal agent");
+            } else {
+              console.error("[pipeline] Call prep returned", prepResponse.status);
             }
           } catch (e) {
-            console.error("Failed to auto-generate call prep:", e);
+            console.error("[pipeline] Failed to auto-generate call prep:", e);
           }
+        }});
+
+        // FINALIZE STEP 3: Mark pipeline complete
+        await loopCtx.step("mark-complete", async () => {
+          loopCtx.state.status = "complete";
+          loopCtx.state.completedAt = new Date().toISOString();
+          console.log("[pipeline] Pipeline complete!");
         });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[pipeline] ERROR at step ${loopCtx.state.currentStep}:`, errorMsg, error);
         await loopCtx.step("handle-error", async () => {
           loopCtx.state.status = "error";
           loopCtx.state.error = errorMsg;
