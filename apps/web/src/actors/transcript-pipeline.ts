@@ -552,9 +552,9 @@ Keep it professional, concise, and reference specific commitments from the call.
           console.log("[pipeline] Deal agent updated with intelligence");
         });
 
-        // FINALIZE STEP 2: Auto-generate call prep (separate step — this calls Claude and can take 20s+)
+        // FINALIZE STEP 2: Auto-generate call prep (separate step — calls Claude, can take 90s+)
         console.log("[pipeline] Starting auto-call-prep step");
-        await loopCtx.step({ name: "auto-call-prep", timeout: 60000, run: async () => {
+        await loopCtx.step({ name: "auto-call-prep", timeout: 180_000, run: async () => {
           try {
             const prepResponse = await fetch(`${input.appUrl}/api/agent/call-prep`, {
               method: "POST",
@@ -577,7 +577,8 @@ Keep it professional, concise, and reference specific commitments from the call.
               });
               console.log("[pipeline] Brief ready set on deal agent");
             } else {
-              console.error("[pipeline] Call prep returned", prepResponse.status);
+              const errText = await prepResponse.text().catch(() => "");
+              console.error("[pipeline] Call prep returned", prepResponse.status, errText);
             }
           } catch (e) {
             console.error("[pipeline] Failed to auto-generate call prep:", e);
