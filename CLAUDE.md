@@ -51,7 +51,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `playbookIdeas` | originatorId, title, hypothesis, status, testGroupDeals[], results (jsonb) | Process experiments |
 | `influenceScores` | memberId, dimension, vertical, score (0-100), tier, attributions (jsonb) | Per-member influence |
 
-## API Routes (25)
+## API Routes (27)
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -79,7 +79,9 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/agent/save-to-deal` | POST | Save agent action as deal activity |
 | `/api/playbook/ideas/[id]` | PATCH | Update experiment status with transitions |
 | `/api/demo/reset` | POST | Reset demo data to clean state |
-| `/api/rivet/[...path]` | ALL | Rivet actor handler (deal agents) |
+| `/api/rivet/[...all]` | ALL | Rivet actor handler (@rivetkit/next-js toNextHandler) |
+| `/api/transcript-pipeline` | POST | Trigger transcript pipeline (enqueues to Rivet actor) |
+| `/api/deals/[id]/meddpicc-update` | PATCH | Persist MEDDPICC scores from pipeline |
 
 ## Dashboard Pages
 
@@ -106,6 +108,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 |------|---------|
 | `components/observation-input.tsx` | Universal Agent Bar (~1800 lines) — observe, quick check, call prep, email draft |
 | `components/agent-memory.tsx` | Deal agent memory display (expandable, connects to Rivet actor) |
+| `components/workflow-tracker.tsx` | Real-time 5-step transcript pipeline progress tracker |
 | `components/stage-change-modal.tsx` | Stage transitions + close/won/lost outcome capture |
 | `components/deal-question-input.tsx` | MANAGER-only "Ask about this deal" |
 | `components/activity-feed.tsx` | Timeline activity list with type icons |
@@ -183,23 +186,59 @@ git push origin main        # Vercel auto-deploys from main
 Live: https://nexus-web-plum-iota.vercel.app
 Reset link: `?reset=true` query param on landing page
 
-## Rivet Actors (Added Session S10)
+## Rivet Actors (Sessions S10-P1, S10-P2)
 
 Nexus uses Rivet (rivet.dev) for stateful AI agents. Documentation: https://rivet.dev/llms.txt
 
-### Actor Architecture
-- `apps/web/src/actors/` — Actor definitions and registry
-- `/api/rivet/[...path]` — Rivet handler route
-- Deal Agent: one per deal, accumulates intelligence over time
-- React integration: `useActor()` hook from `@/lib/rivet` (no provider needed)
+### File Structure
+```
+apps/web/src/actors/deal-agent.ts          → Deal agent actor (state, actions, events)
+apps/web/src/actors/transcript-pipeline.ts → Transcript pipeline workflow actor (5 Claude steps)
+apps/web/src/actors/registry.ts            → Actor registry (setup + type export)
+apps/web/src/app/api/rivet/[...all]/route.ts → Rivet handler via @rivetkit/next-js toNextHandler
+apps/web/src/app/api/transcript-pipeline/route.ts → Pipeline trigger (fetches deal context, enqueues work)
+apps/web/src/app/api/deals/[id]/meddpicc-update/route.ts → MEDDPICC persistence (called by pipeline actor)
+apps/web/src/lib/rivet.ts                  → Client-side useActor hook (createRivetKit)
+apps/web/src/components/agent-memory.tsx    → Deal agent memory display (expandable on deal page)
+apps/web/src/components/workflow-tracker.tsx → Real-time 5-step pipeline progress tracker
+```
 
-### Key Patterns
-- Deal agents are created lazily via `getOrCreate([dealId])`
+### Deal Agent (`dealAgent`)
+- One per deal, created lazily via `getOrCreate([dealId])`
+- Accumulates intelligence: interactionMemory, learnings, competitiveContext, riskSignals
+- Actions: initialize, getState, recordInteraction, updateLearnings, addCompetitiveIntel, recordFeedback, updateStage, getMemoryForPrompt, workflowProgress
+- Events: memoryUpdated, learningsUpdated, riskDetected, workflowProgress, interventionReady
+- `formatMemoryForPrompt()` exports agent memory as structured text for call prep (9th intelligence layer)
 - Agent state persists across sessions (not lost on page refresh)
-- Agents broadcast events via WebSocket to connected clients
-- Agent memory is injected into call prep prompts as a 9th intelligence layer
 - Supabase remains source of truth — agents are the intelligence/memory layer on top
 
+### Transcript Pipeline (`transcriptPipeline`)
+- Durable Rivet workflow actor using `workflow()` + `ctx.loop()` + `loopCtx.step()`
+- Queue-driven: receives work via `pipeline.send("process", { ... })` from `/api/transcript-pipeline`
+- 5 sequential Claude API steps, each inside a `loopCtx.step()`:
+  1. **Extract Actions** — action items, commitments, decisions
+  2. **Score MEDDPICC** — evidence-based scoring with deltas
+  3. **Detect Signals** — competitive mentions + stakeholder sentiment
+  4. **Synthesize Learnings** — strategic insights for deal agent
+  5. **Draft Email** — follow-up email from call context
+- Downstream effects: persists MEDDPICC to Supabase, creates observations, updates deal agent memory
+- Progress broadcasts via deal agent's `workflowProgress` action → WebSocket to browser
+- **Workflow rule**: all `state`, `client()`, and actor-to-actor RPCs must be inside `loopCtx.step()` callbacks
+
+### React Integration
+- `useActor({ name, key })` hook from `@/lib/rivet` — no provider needed
+- Used by: agent-memory.tsx, workflow-tracker.tsx, deal-detail-client.tsx
+- Client endpoint: `window.location.origin/api/rivet` (browser), `NEXT_PUBLIC_SITE_URL/api/rivet` (SSR)
+
+### Vercel / Next.js Integration
+- `@rivetkit/next-js` package: `toNextHandler(registry)` auto-spawns local engine in dev, serverless on Vercel
+- `next.config.mjs`: `serverExternalPackages: ["rivetkit", "@rivetkit/next-js"]` (prevents webpack bundling)
+- `/api/rivet/[...all]/route.ts`: exports GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS with `maxDuration = 300`
+- `/api/transcript-pipeline/route.ts`: `maxDuration = 30`
+- `/api/deals/[id]/meddpicc-update/route.ts`: `maxDuration = 15`
+
 ### Environment Variables
-- RIVET_PUBLIC_ENDPOINT — Rivet Cloud public endpoint
-- RIVET_ENDPOINT — Rivet Cloud internal endpoint
+- `RIVET_ENDPOINT` — Rivet Cloud internal endpoint (production only)
+- `RIVET_PUBLIC_ENDPOINT` — Rivet Cloud public endpoint (production only)
+- `NEXT_PUBLIC_SITE_URL` — Absolute URL for server-side Rivet client creation (e.g. `https://nexus-web-plum-iota.vercel.app`)
+- `ANTHROPIC_API_KEY` — Used by transcript pipeline actor for Claude API calls
