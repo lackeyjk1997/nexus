@@ -702,7 +702,7 @@ export async function POST(request: Request) {
   // ── Retrieve agent memory (9th intelligence layer) ──
   let agentMemory = "";
   try {
-    const rivetEndpoint = process.env.RIVET_ENDPOINT || `http://localhost:${process.env.PORT || 3001}/api/rivet`;
+    const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
     const rivetClient = createClient<Registry>(rivetEndpoint);
     const dealActorHandle = rivetClient.dealAgent.getOrCreate([resolvedDealId!]);
     agentMemory = await dealActorHandle.getMemoryForPrompt();

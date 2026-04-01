@@ -7,6 +7,6 @@ const endpoint =
   process.env.NEXT_PUBLIC_RIVET_ENDPOINT ??
   (typeof window !== "undefined"
     ? `${window.location.origin}/api/rivet`
-    : "/api/rivet");
+    : `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001"}/api/rivet`);
 
 export const { useActor } = createRivetKit<Registry>(endpoint);
