@@ -56,6 +56,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.1.0
         version: 1.2.8(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@rivetkit/next-js':
+        specifier: ^2.2.0
+        version: 2.2.0(@standard-schema/spec@1.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.20.0)
       '@rivetkit/react':
         specifier: ^2.2.0
         version: 2.2.0(@standard-schema/spec@1.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.20.0)
@@ -1301,6 +1304,12 @@ packages:
 
   '@rivetkit/framework-base@2.2.0':
     resolution: {integrity: sha512-J9fVFsaJ6vZIISFYt82+5LHFPPFDHaZDd//wsdV8e9dVstGWHIfRPWY1fPSFcPOCf0jrehLgbDkwr1aP1bFUcg==}
+
+  '@rivetkit/next-js@2.2.0':
+    resolution: {integrity: sha512-e7WtlujNd8TbcNdOCO+0VPUGnOfEJ8fpRwKM17viklsNM4xfd6XcqAjkusIs8fxg7lzh/Kp5Ifo4YEBaRD8+3w==}
+    peerDependencies:
+      react: ^18 || ^19
+      react-dom: ^18 || ^19
 
   '@rivetkit/on-change@6.0.2-rc.1':
     resolution: {integrity: sha512-5RC9Ze/wTKqSlJvopdCgr+EfyV93+iiH8Thog0QXrl8PT1unuBNw/jadXNMtwgAxrIaCJL+JLaHQH9w7rqpMDw==}
@@ -3966,6 +3975,30 @@ snapshots:
     dependencies:
       '@tanstack/store': 0.7.7
       fast-deep-equal: 3.1.3
+      rivetkit: 2.2.0(@standard-schema/spec@1.0.0)(ws@8.20.0)
+    transitivePeerDependencies:
+      - '@cloudflare/sandbox'
+      - '@daytonaio/sdk'
+      - '@e2b/code-interpreter'
+      - '@fly/sprites'
+      - '@standard-schema/spec'
+      - '@vercel/sandbox'
+      - bufferutil
+      - computesdk
+      - dockerode
+      - drizzle-kit
+      - eventsource
+      - modal
+      - pyodide
+      - utf-8-validate
+      - ws
+
+  '@rivetkit/next-js@2.2.0(@standard-schema/spec@1.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.20.0)':
+    dependencies:
+      '@rivetkit/react': 2.2.0(@standard-schema/spec@1.0.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(ws@8.20.0)
+      hono: 4.12.9
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       rivetkit: 2.2.0(@standard-schema/spec@1.0.0)(ws@8.20.0)
     transitivePeerDependencies:
       - '@cloudflare/sandbox'

@@ -1,7 +1,5 @@
 import { actor, queue } from "rivetkit";
 import { workflow } from "rivetkit/workflow";
-import { createClient } from "rivetkit/client";
-import type { Registry } from "./registry";
 
 // ── Types ──
 
@@ -149,9 +147,9 @@ export const transcriptPipeline = actor({
       });
 
       // Get handle to the deal agent for broadcasting progress
-      const client = createClient<Registry>(
-        process.env.RIVET_ENDPOINT || `${input.appUrl}/api/rivet`
-      );
+      // Use ctx.client() for actor-to-actor communication (untyped to avoid circular import)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = loopCtx.client() as any;
       const dealActor = client.dealAgent.getOrCreate([input.dealId]);
 
       try {

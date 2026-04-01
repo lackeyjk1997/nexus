@@ -92,9 +92,8 @@ export async function POST(request: Request) {
       : "http://localhost:3001");
 
   // Send to Rivet pipeline actor
-  const rivetClient = createClient<Registry>(
-    process.env.RIVET_ENDPOINT || `${appUrl}/api/rivet`
-  );
+  const rivetEndpoint = process.env.RIVET_ENDPOINT || `http://localhost:${process.env.PORT || 3001}/api/rivet`;
+  const rivetClient = createClient<Registry>(rivetEndpoint);
   const pipeline = rivetClient.transcriptPipeline.getOrCreate([dealId]);
 
   await pipeline.send("process", {
