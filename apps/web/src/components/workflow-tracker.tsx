@@ -12,22 +12,36 @@ interface StepState {
 }
 
 const STEPS = [
-  { key: "extract_actions", label: "Extract Actions" },
-  { key: "score_meddpicc", label: "Score MEDDPICC" },
-  { key: "detect_signals", label: "Detect Signals" },
+  { key: "parallel_analysis", label: "Analyze Transcript" },
+  { key: "update_scores", label: "Update Scores" },
+  { key: "check_experiments", label: "Check Experiments" },
   { key: "synthesize_learnings", label: "Synthesize" },
-  { key: "draft_email", label: "Draft Email" },
+  { key: "finalize", label: "Finalize" },
 ] as const;
+
+// Map pipeline event step names to tracker step keys
+const STEP_MAPPING: Record<string, (typeof STEPS)[number]["key"]> = {
+  parallel_analysis: "parallel_analysis",
+  persist_meddpicc: "update_scores",
+  create_signal_observations: "update_scores",
+  check_experiments: "check_experiments",
+  synthesize_learnings: "synthesize_learnings",
+  draft_email: "finalize",
+  update_deal_agent: "finalize",
+  auto_call_prep: "finalize",
+  send_signals_to_coordinator: "finalize",
+  mark_complete: "finalize",
+};
 
 type StepKey = (typeof STEPS)[number]["key"];
 
 export function WorkflowTracker({ dealId }: { dealId: string }) {
   const [steps, setSteps] = useState<Record<StepKey, StepState>>({
-    extract_actions: { status: "pending" },
-    score_meddpicc: { status: "pending" },
-    detect_signals: { status: "pending" },
+    parallel_analysis: { status: "pending" },
+    update_scores: { status: "pending" },
+    check_experiments: { status: "pending" },
     synthesize_learnings: { status: "pending" },
-    draft_email: { status: "pending" },
+    finalize: { status: "pending" },
   });
   const [active, setActive] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -40,7 +54,7 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
 
   const handleProgress = useCallback(
     (event: { step: string; status: "running" | "complete" | "error"; details?: string }) => {
-      const stepKey = event.step as StepKey;
+      const stepKey = (STEP_MAPPING[event.step] || event.step) as StepKey;
       if (!STEPS.find((s) => s.key === stepKey)) return;
 
       setActive(true);
@@ -95,10 +109,9 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
 
   // Build summary
   const summaryParts: string[] = [];
-  if (steps.extract_actions.details) summaryParts.push(steps.extract_actions.details);
-  if (steps.score_meddpicc.details) summaryParts.push(steps.score_meddpicc.details);
-  if (steps.detect_signals.details) summaryParts.push(steps.detect_signals.details.split(",")[0]);
-  if (steps.draft_email.status === "complete") summaryParts.push("email draft ready");
+  if (steps.parallel_analysis.details) summaryParts.push(steps.parallel_analysis.details);
+  if (steps.synthesize_learnings.details) summaryParts.push(steps.synthesize_learnings.details);
+  if (steps.finalize.status === "complete") summaryParts.push("finalized");
 
   if (collapsed) {
     return (

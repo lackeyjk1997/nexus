@@ -197,7 +197,7 @@ Nexus uses Rivet (rivet.dev) for stateful AI agents. Documentation: https://rive
 ### File Structure
 ```
 apps/web/src/actors/deal-agent.ts              → Deal agent actor (state, actions, events)
-apps/web/src/actors/transcript-pipeline.ts     → Transcript pipeline workflow actor (9 durable steps)
+apps/web/src/actors/transcript-pipeline.ts     → Transcript pipeline workflow actor (parallelized, graceful degradation)
 apps/web/src/actors/intelligence-coordinator.ts → Cross-deal intelligence coordinator (simple actor)
 apps/web/src/actors/registry.ts                → Actor registry (setup + type export)
 apps/web/src/app/api/rivet/[...all]/route.ts → Rivet handler via @rivetkit/next-js toNextHandler
@@ -230,18 +230,19 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 - Durable Rivet workflow actor using `workflow()` + `ctx.loop()` + `loopCtx.step()`
 - Queue-driven: receives work via `pipeline.send("process", { ... })` from `/api/transcript-pipeline`
 - `/api/transcript-pipeline` fetches deal context (deal, MEDDPICC, contacts, agent config, active experiments) before enqueuing
-- 9 durable steps, each inside a `loopCtx.step()`:
+- Durable steps, each inside a `loopCtx.step()`:
   1. **init-pipeline** — reset state, set status to running
-  2. **extract-actions** — Claude extracts action items, commitments, decisions
-  3. **score-meddpicc** — Claude scores MEDDPICC with evidence and deltas → **persist-meddpicc** sub-step writes to Supabase via `/api/deals/[id]/meddpicc-update`
-  4. **detect-signals** — Claude extracts all 9 signal types (competitive_intel, process_friction, deal_blocker, content_gap, win_pattern, field_intelligence, process_innovation) + per-stakeholder sentiment → **create-signal-observations** sub-step creates observations in parallel via `Promise.all`
+  2. **parallel-analysis** (timeout: 180s) — runs 3 Claude calls in parallel via `Promise.all`: extract actions, score MEDDPICC, detect signals (all 9 types + stakeholder sentiment). Saves ~60-80s vs sequential.
+  3. **persist-meddpicc** — writes MEDDPICC scores to Supabase via `/api/deals/[id]/meddpicc-update`
+  4. **create-signal-observations** — creates observations in parallel via `Promise.all`
   5. **synthesize-learnings** — Claude synthesizes strategic insights for deal agent
-  6. **check-experiments** — (conditional, only if active experiments exist) Claude checks transcript for experiment tactic usage, auto-updates experiment evidence via `/api/playbook/ideas/[id]`
-  7. **draft-email** — Claude drafts follow-up email from call context
-  8. **update-deal-agent** — records interaction, updates learnings, adds competitive intel, adds risk signals from blockers/friction, records stakeholder engagement
-  9. **send-signals-to-coordinator** (timeout: 180s) — sends all detected signals to intelligence coordinator via RPC
-  10. **auto-call-prep** (timeout: 180s) — calls `/api/agent/call-prep` to generate brief, stores result on deal agent via `setBriefReady` → "Brief Ready" button appears on deal page
+  6. **check-experiments** — (conditional) Claude checks for experiment tactic usage
+  7. **draft-email** — Claude drafts follow-up email. **Graceful failure**: pipeline continues if this fails
+  8. **update-deal-agent** — records interaction, updates learnings, adds competitive intel, adds risk signals
+  9. **send-signals-to-coordinator** (timeout: 180s) — sends signals to intelligence coordinator via RPC
+  10. **auto-call-prep** (timeout: 180s) — generates brief via `/api/agent/call-prep`. **Graceful failure**: pipeline completes even if this fails
   11. **mark-complete** — sets pipeline status to complete
+- Workflow tracker UI shows 5 visual steps: Analyze Transcript → Update Scores → Check Experiments → Synthesize → Finalize
 - Actions: getState, destroyActor
 - Progress broadcasts via deal agent's `workflowProgress` action → WebSocket to browser
 - **Workflow rule**: all `state`, `client()`, and actor-to-actor RPCs must be inside `loopCtx.step()` callbacks
