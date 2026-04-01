@@ -3,4 +3,4 @@ import { registry } from "@/actors/registry";
 
 export const maxDuration = 300;
 
-export const { GET, POST, PUT, PATCH, HEAD, OPTIONS } = toNextHandler(registry);
+export const { GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS } = toNextHandler(registry);
