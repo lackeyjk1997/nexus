@@ -18,6 +18,7 @@ import {
   Sparkles,
   Send,
   X,
+  FileText,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -52,6 +53,7 @@ type Observation = {
   clusterId: string | null;
   arrImpact: unknown;
   structuredData: unknown;
+  sourceContext: unknown;
   createdAt: Date;
   observerId: string;
   observerName: string | null;
@@ -1347,6 +1349,7 @@ function FieldFeedTab({
         const signals = classification?.signals || [];
         const clusterTitle = obs.clusterId ? clusterMap.get(obs.clusterId) : null;
         const statusInfo = STATUS_FLOW[obs.status || "submitted"] || STATUS_FLOW.submitted!;
+        const isFromTranscript = (obs.sourceContext as { trigger?: string } | null)?.trigger === "transcript_pipeline";
 
         // Anonymize for support functions: show role + vertical instead of name
         const displayName = obs.observerRole === "SUPPORT"
@@ -1365,6 +1368,12 @@ function FieldFeedTab({
                   {obs.observerRole && obs.observerRole !== "SUPPORT" && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
                       {obs.observerRole}
+                    </span>
+                  )}
+                  {isFromTranscript && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1" style={{ background: "rgba(12,116,137,0.08)", color: "#0C7489" }}>
+                      <FileText className="h-3 w-3" />
+                      From transcript
                     </span>
                   )}
                   <span className="text-[10px] text-muted-foreground flex items-center gap-1">

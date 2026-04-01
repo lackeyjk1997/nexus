@@ -277,6 +277,10 @@ export function DealDetailClient({
   // Brief ready state (auto-generated from pipeline)
   const [briefReady, setBriefReady] = useState<{ brief: unknown; generatedAt: string } | null>(null);
 
+  // MEDDPICC data that can be refreshed after pipeline
+  const [meddpiccData, setMeddpiccData] = useState<Meddpicc>(meddpicc);
+  const [meddpiccUpdatedFromPipeline, setMeddpiccUpdatedFromPipeline] = useState(false);
+
   // Email draft state
   const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
@@ -317,8 +321,25 @@ export function DealDetailClient({
         }
       } catch {}
     });
-    return () => { unsub(); };
-  }, [dealActor.connection]);
+    // Subscribe to workflow completion to refresh MEDDPICC data
+    const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string }) => {
+      if (event.step === "score_meddpicc" && event.status === "complete") {
+        // Re-fetch MEDDPICC data from the server
+        try {
+          const res = await fetch(`/api/deals/${deal.id}/meddpicc`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data) {
+              setMeddpiccData(data);
+              setMeddpiccUpdatedFromPipeline(true);
+            }
+          }
+        } catch {}
+      }
+    });
+
+    return () => { unsub(); unsubWorkflow(); };
+  }, [dealActor.connection, deal.id]);
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
   const health = getHealthColor(daysInStage, deal.stage);
@@ -786,11 +807,11 @@ export function DealDetailClient({
             stage: deal.stage,
             stageEnteredAt: deal.stageEnteredAt,
           }}
-          meddpicc={meddpicc ? {
-            economicBuyerConfidence: meddpicc.economicBuyerConfidence,
-            championConfidence: meddpicc.championConfidence,
-            decisionProcessConfidence: meddpicc.decisionProcessConfidence,
-            metricsConfidence: meddpicc.metricsConfidence,
+          meddpicc={meddpiccData ? {
+            economicBuyerConfidence: meddpiccData.economicBuyerConfidence,
+            championConfidence: meddpiccData.championConfidence,
+            decisionProcessConfidence: meddpiccData.decisionProcessConfidence,
+            metricsConfidence: meddpiccData.metricsConfidence,
           } : null}
         />
       )}
@@ -1362,12 +1383,22 @@ export function DealDetailClient({
           )}
           {/* Close Analysis for closed deals */}
           {(deal.stage === "closed_won" || deal.stage === "closed_lost") && deal.closeAiAnalysis && (
-            <CloseAnalysisCard deal={deal} meddpicc={meddpicc} contacts={contacts} />
+            <CloseAnalysisCard deal={deal} meddpicc={meddpiccData} contacts={contacts} />
           )}
           <OverviewTab deal={deal} milestones={milestones} />
         </>
       )}
-      {activeTab === "meddpicc" && <MeddpiccTab meddpicc={meddpicc} />}
+      {activeTab === "meddpicc" && (
+        <div>
+          {meddpiccUpdatedFromPipeline && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(12,116,137,0.06)", border: "1px solid rgba(12,116,137,0.15)" }}>
+              <span style={{ color: "#0C7489", fontSize: 13 }}>{"\u2726"}</span>
+              <span className="text-xs" style={{ color: "#0C7489", fontFamily: "'DM Sans', sans-serif" }}>Scores updated from transcript analysis</span>
+            </div>
+          )}
+          <MeddpiccTab meddpicc={meddpiccData} />
+        </div>
+      )}
       {activeTab === "stakeholders" && <StakeholdersTab contacts={contacts} />}
       {activeTab === "activity" && (
         <div className="bg-card rounded-xl border border-border p-5">

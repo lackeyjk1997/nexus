@@ -216,6 +216,7 @@ export const transcriptPipeline = actor({
 
   actions: {
     getState: (c) => c.state,
+    destroyActor: (c) => { c.destroy(); },
   },
 
   run: workflow(async (ctx) => {
@@ -430,11 +431,12 @@ ${input.transcriptText.slice(0, 15000)}`,
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  rawInput: `[From transcript] ${signal.content}`,
+                  rawInput: signal.content,
                   context: {
                     page: "pipeline",
                     dealId: input.dealId,
                     trigger: "transcript_pipeline",
+                    transcriptId: input.transcriptId,
                     signalType: signal.type,
                     urgency: signal.urgency,
                     sourceSpeaker: signal.source_speaker,
@@ -661,11 +663,12 @@ Keep it professional, concise, and reference specific commitments from the call.
         });
 
         // FINALIZE STEP 1b: Send signals to intelligence coordinator (separate step for durability)
-        await loopCtx.step("send-signals-to-coordinator", async () => {
+        await loopCtx.step({ name: "send-signals-to-coordinator", timeout: 180_000, run: async () => {
           try {
             const detectedSignals = loopCtx.state.detectedSignals || [];
+            console.log(`[pipeline-coordinator] Preparing to send ${detectedSignals.length} signals`);
             if (detectedSignals.length === 0) {
-              console.log("[pipeline] No signals to send to coordinator");
+              console.log("[pipeline-coordinator] No signals to send to coordinator");
               return;
             }
 
@@ -679,6 +682,7 @@ Keep it professional, concise, and reference specific commitments from the call.
                   ? findCompetitorInSignal(signal as ValidatedSignal)
                   : undefined;
 
+              console.log(`[pipeline-coordinator] Signal sent: ${signal.type} for ${input.dealName}${competitor ? ` (competitor: ${competitor})` : ""}`);
               await coordinator.receiveSignal({
                 id: `sig-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 dealId: input.dealId,
@@ -696,15 +700,15 @@ Keep it professional, concise, and reference specific commitments from the call.
             }
 
             console.log(
-              `[pipeline] Sent ${detectedSignals.length} signals to intelligence coordinator`
+              `[pipeline-coordinator] All ${detectedSignals.length} signals sent to intelligence coordinator`
             );
           } catch (e) {
             console.error(
-              "[pipeline] Failed to send signals to coordinator:",
+              "[pipeline-coordinator] ERROR:",
               e
             );
           }
-        });
+        }});
 
         // FINALIZE STEP 2: Auto-generate call prep (separate step — calls Claude, can take 90s+)
         console.log("[pipeline] Starting auto-call-prep step");

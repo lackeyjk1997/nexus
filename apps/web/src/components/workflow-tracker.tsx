@@ -65,7 +65,7 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
         if (allComplete) {
           collapseTimer.current = setTimeout(() => {
             setCollapsed(true);
-          }, 10000);
+          }, 30000);
         }
         return prev;
       });

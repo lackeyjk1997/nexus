@@ -110,6 +110,12 @@ export async function POST() {
         } catch {
           // Actor might not exist — that's fine
         }
+        try {
+          const pipelineActor = rivetClient.transcriptPipeline.getOrCreate([deal.id]);
+          await pipelineActor.destroyActor();
+        } catch {
+          // Actor might not exist — that's fine
+        }
       }
 
       // Destroy intelligence coordinator

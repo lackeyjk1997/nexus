@@ -51,7 +51,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `playbookIdeas` | originatorId, title, hypothesis, status, testGroupDeals[], results (jsonb) | Process experiments |
 | `influenceScores` | memberId, dimension, vertical, score (0-100), tier, attributions (jsonb) | Per-member influence |
 
-## API Routes (27)
+## API Routes (28)
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -81,6 +81,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/demo/reset` | POST | Reset demo data to clean state |
 | `/api/rivet/[...all]` | ALL | Rivet actor handler (@rivetkit/next-js toNextHandler) |
 | `/api/transcript-pipeline` | POST | Trigger transcript pipeline (enqueues to Rivet actor) |
+| `/api/deals/[id]/meddpicc` | GET | Fetch MEDDPICC data for a deal (used for live refresh) |
 | `/api/deals/[id]/meddpicc-update` | PATCH | Persist MEDDPICC scores from pipeline |
 
 ## Dashboard Pages
@@ -130,7 +131,7 @@ Deal page "Prep Call" → POST `/api/agent/call-prep` → queries: (1) rep's age
 AE submits idea → proposed → manager approves (selects AEs, sets thresholds) → testing with A/B groups → measures velocity/sentiment/close rate with deal-level evidence → graduation when thresholds met → proven play injected into call prep as DIRECTIVE
 
 ### Demo Reset
-POST `/api/demo/reset` → resets MedVista to Discovery → resets deal probabilities → deletes all playbook ideas and re-inserts 8 experiments with lifecycle data (evidence imported from `packages/db/src/seed-data/`) → deletes recent observations/queries/activities → marks notifications unread → recalculates cluster metrics
+POST `/api/demo/reset` → resets MedVista to Discovery → resets deal probabilities → deletes all playbook ideas and re-inserts 8 experiments with lifecycle data (evidence imported from `packages/db/src/seed-data/`) → deletes recent observations/queries/activities → marks notifications unread → recalculates cluster metrics → destroys ALL Rivet actors (dealAgent, transcriptPipeline, intelligenceCoordinator)
 
 ## Demo Data
 
@@ -175,8 +176,11 @@ Verticals: Healthcare #3B82F6, Financial Services #10B981, Manufacturing #F59E0B
 - MedVista resets to Discovery via demo reset; may need manual reset after testing
 - `PgArray` errors from stale cache: fix with `rm -rf apps/web/.next && pnpm dev`
 - No auth — persona switching via PersonaProvider context only
-- Dev server default port 3001, auto-increments if occupied
+- Dev server default port 3001, auto-increments if occupied — when port shifts, Rivet actors can't connect (NEXT_PUBLIC_SITE_URL mismatch). Kill stale servers and restart.
 - Influence scores and playbook "Start Test"/"Follow" buttons are UI-only in demo
+- Coordinator `validateSignal` requires field mapping: Signal.signalType → type, Signal.sourceAeName → source_speaker (fixed in S13)
+- Observation deduplication: pipeline observations include `transcriptId` in `sourceContext` to prevent duplicates on re-processing
+- Demo reset destroys all 3 actor types (dealAgent, transcriptPipeline, intelligenceCoordinator) for clean restart
 
 ## Deploy
 ```
@@ -198,6 +202,7 @@ apps/web/src/actors/intelligence-coordinator.ts → Cross-deal intelligence coor
 apps/web/src/actors/registry.ts                → Actor registry (setup + type export)
 apps/web/src/app/api/rivet/[...all]/route.ts → Rivet handler via @rivetkit/next-js toNextHandler
 apps/web/src/app/api/transcript-pipeline/route.ts → Pipeline trigger (fetches deal context, enqueues work)
+apps/web/src/app/api/deals/[id]/meddpicc/route.ts → GET MEDDPICC data for live refresh after pipeline
 apps/web/src/app/api/deals/[id]/meddpicc-update/route.ts → MEDDPICC persistence (called by pipeline actor)
 apps/web/src/lib/rivet.ts                  → Client-side useActor hook (createRivetKit)
 apps/web/src/components/agent-memory.tsx    → Deal agent memory display (expandable on deal page)
@@ -233,9 +238,11 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
   5. **synthesize-learnings** — Claude synthesizes strategic insights for deal agent
   6. **check-experiments** — (conditional, only if active experiments exist) Claude checks transcript for experiment tactic usage, auto-updates experiment evidence via `/api/playbook/ideas/[id]`
   7. **draft-email** — Claude drafts follow-up email from call context
-  8. **update-deal-agent** — records interaction, updates learnings, adds competitive intel, adds risk signals from blockers/friction, records stakeholder engagement, sends all detected signals to intelligence coordinator
-  9. **auto-call-prep** (timeout: 180s) — calls `/api/agent/call-prep` to generate brief, stores result on deal agent via `setBriefReady` → "Brief Ready" button appears on deal page
-  10. **mark-complete** — sets pipeline status to complete
+  8. **update-deal-agent** — records interaction, updates learnings, adds competitive intel, adds risk signals from blockers/friction, records stakeholder engagement
+  9. **send-signals-to-coordinator** (timeout: 180s) — sends all detected signals to intelligence coordinator via RPC
+  10. **auto-call-prep** (timeout: 180s) — calls `/api/agent/call-prep` to generate brief, stores result on deal agent via `setBriefReady` → "Brief Ready" button appears on deal page
+  11. **mark-complete** — sets pipeline status to complete
+- Actions: getState, destroyActor
 - Progress broadcasts via deal agent's `workflowProgress` action → WebSocket to browser
 - **Workflow rule**: all `state`, `client()`, and actor-to-actor RPCs must be inside `loopCtx.step()` callbacks
 

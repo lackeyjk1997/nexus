@@ -69,6 +69,27 @@ export async function POST(request: Request) {
     );
   }
 
+  // Deduplication: if from transcript pipeline with a transcriptId, check for existing observation
+  if (context?.trigger === "transcript_pipeline" && context?.transcriptId && context?.dealId) {
+    const existing = await db
+      .select({ id: observations.id })
+      .from(observations)
+      .where(
+        and(
+          eq(observations.observerId, observerId),
+          sql`source_context->>'transcriptId' = ${context.transcriptId}`,
+          sql`source_context->>'signalType' = ${context.signalType || ""}`,
+          sql`source_context->>'dealId' = ${context.dealId}`,
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      console.log(`[observations] Skipping duplicate: transcriptId=${context.transcriptId} signalType=${context.signalType}`);
+      return NextResponse.json({ id: existing[0].id, duplicate: true });
+    }
+  }
+
   // Look up observer info for context
   const [observer] = await db
     .select({ name: teamMembers.name, role: teamMembers.role, verticalSpecialization: teamMembers.verticalSpecialization })

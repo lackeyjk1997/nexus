@@ -27,6 +27,7 @@ export default async function IntelligencePage() {
         clusterId: observations.clusterId,
         arrImpact: observations.arrImpact,
         structuredData: observations.structuredData,
+        sourceContext: observations.sourceContext,
         createdAt: observations.createdAt,
         observerId: observations.observerId,
         observerName: teamMembers.name,

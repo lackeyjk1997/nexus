@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useActor } from "@/lib/rivet";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DealAgentState } from "@/actors/deal-agent";
 
@@ -104,7 +104,7 @@ export function AgentMemory({
           {isLoading
             ? "Agent connecting..."
             : hasActivity
-              ? `Agent active \u00B7 ${agentState.totalInteractions} interaction${agentState.totalInteractions !== 1 ? "s" : ""} \u00B7 ${agentState.learnings.length} learning${agentState.learnings.length !== 1 ? "s" : ""}`
+              ? `Agent active \u00B7 ${agentState.totalInteractions} interaction${agentState.totalInteractions !== 1 ? "s" : ""} \u00B7 ${agentState.learnings.length} learning${agentState.learnings.length !== 1 ? "s" : ""}${agentState.riskSignals.length > 0 ? ` \u00B7 ${agentState.riskSignals.length} signal${agentState.riskSignals.length !== 1 ? "s" : ""}` : ""}`
               : "Agent initializing \u00B7 listening for deal activity"}
         </span>
         {hasActivity && (
@@ -146,20 +146,21 @@ export function AgentMemory({
               >
                 Learnings
               </p>
-              <ul className="space-y-1">
+              <div>
                 {agentState.learnings.map((l, i) => (
-                  <li
+                  <div
                     key={i}
-                    className="text-[13px] leading-snug"
+                    className="text-[13px] leading-snug py-2"
                     style={{
                       color: "#3D3833",
                       fontFamily: "'DM Sans', sans-serif",
+                      borderBottom: i < agentState.learnings.length - 1 ? "1px solid rgba(0,0,0,0.06)" : "none",
                     }}
                   >
                     {l}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
 
@@ -199,23 +200,26 @@ export function AgentMemory({
               >
                 Competitive Context
               </p>
-              <p
-                className="text-[13px]"
-                style={{
-                  color: "#3D3833",
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                Competitors:{" "}
-                {agentState.competitiveContext.competitors.join(", ")}
-                {agentState.competitiveContext.ourDifferentiators.length > 0 && (
-                  <>
-                    {" "}
-                    | Differentiators:{" "}
-                    {agentState.competitiveContext.ourDifferentiators.join(", ")}
-                  </>
-                )}
-              </p>
+              <div className="flex items-start gap-2">
+                <Swords className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: "#E07A5F" }} />
+                <p
+                  className="text-[13px]"
+                  style={{
+                    color: "#3D3833",
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  Competitors:{" "}
+                  {agentState.competitiveContext.competitors.join(", ")}
+                  {agentState.competitiveContext.ourDifferentiators.length > 0 && (
+                    <>
+                      {" "}
+                      | Differentiators:{" "}
+                      {agentState.competitiveContext.ourDifferentiators.join(", ")}
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
           )}
 
@@ -232,39 +236,51 @@ export function AgentMemory({
                 {agentState.coordinatedIntel.map((intel, i) => (
                   <div
                     key={i}
-                    className="rounded-lg p-2.5"
+                    className="rounded-lg p-3"
                     style={{
                       background: "rgba(224,122,95,0.04)",
-                      border: "1px solid rgba(224,122,95,0.15)",
+                      borderLeft: "3px solid #E07A5F",
+                      borderTop: "1px solid rgba(224,122,95,0.1)",
+                      borderRight: "1px solid rgba(224,122,95,0.1)",
+                      borderBottom: "1px solid rgba(224,122,95,0.1)",
                     }}
                   >
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span style={{ color: "#E07A5F", fontSize: 12 }}>{"\u2726"}</span>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span style={{ color: "#E07A5F", fontSize: 13 }}>{"\u2726"}</span>
                       <span
-                        className="text-[12px] font-medium"
+                        className="text-[12px] font-semibold"
                         style={{ color: "#3D3833" }}
                       >
-                        {intel.affectedDeals.join(", ")}
+                        {intel.signalType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(224,122,95,0.12)", color: "#E07A5F" }}>
+                        {intel.affectedDeals.length} deals
                       </span>
                     </div>
                     <p
-                      className="text-[13px] leading-snug mb-1.5"
+                      className="text-[13px] leading-snug mb-2"
                       style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
                     >
                       {intel.synthesis}
                     </p>
                     {intel.recommendations.length > 0 && (
-                      <ul className="space-y-0.5">
-                        {intel.recommendations.map((rec, j) => (
-                          <li
-                            key={j}
-                            className="text-[12px] leading-snug"
-                            style={{ color: "#8A8078", fontFamily: "'DM Sans', sans-serif" }}
-                          >
-                            {rec}
-                          </li>
-                        ))}
-                      </ul>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#8A8078" }}>
+                          Recommendations
+                        </p>
+                        <ul className="space-y-1">
+                          {intel.recommendations.map((rec, j) => (
+                            <li
+                              key={j}
+                              className="text-[12px] leading-snug flex items-start gap-1.5"
+                              style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
+                            >
+                              <span className="mt-1 shrink-0 w-1 h-1 rounded-full bg-[#E07A5F]" />
+                              {rec}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -297,8 +313,9 @@ export function AgentMemory({
 
           {/* Footer */}
           <p className="text-[11px] pt-1" style={{ color: "#8A8078" }}>
-            Watching for {agentState.daysSinceCreation} day
-            {agentState.daysSinceCreation !== 1 ? "s" : ""}
+            {agentState.daysSinceCreation === 0
+              ? "Watching since today"
+              : `Watching for ${agentState.daysSinceCreation} day${agentState.daysSinceCreation !== 1 ? "s" : ""}`}
           </p>
         </div>
       )}

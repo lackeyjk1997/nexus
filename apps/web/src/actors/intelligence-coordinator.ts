@@ -73,8 +73,14 @@ export const intelligenceCoordinator = actor({
 
   actions: {
     receiveSignal: (c, signal: Signal) => {
-      // Validate signal
-      const validated = validateSignal(signal);
+      // Validate signal — adapt Signal fields to what validateSignal expects
+      const validated = validateSignal({
+        type: signal.signalType,
+        content: signal.content,
+        context: signal.content, // use content as context for validation
+        urgency: signal.urgency,
+        source_speaker: signal.sourceAeName || "",
+      });
       if (!validated) {
         console.log(
           `[coordinator] Rejected invalid signal from ${signal.dealName}: type=${signal.signalType}`
@@ -83,7 +89,7 @@ export const intelligenceCoordinator = actor({
       }
 
       // Normalize competitor name for competitive_intel
-      if (validated.type === "competitive_intel") {
+      if (signal.signalType === "competitive_intel") {
         const normalized = normalizeCompetitorName(signal.competitor || "");
         if (normalized) {
           signal.competitor = normalized;
