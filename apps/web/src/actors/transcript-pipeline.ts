@@ -245,8 +245,11 @@ export const transcriptPipeline = actor({
         loopCtx.state.experimentAttributions = [];
       });
 
+      let currentStepName = "init-pipeline";
+      try {
       try {
         // STEP 1: Parallel analysis — extract actions, score MEDDPICC, detect signals simultaneously
+        currentStepName = "parallel_analysis";
         const parallelResults = await loopCtx.step({ name: "parallel-analysis", timeout: 180_000, run: async () => {
           loopCtx.state.currentStep = "parallel_analysis";
           await getDealActor().workflowProgress({ step: "parallel_analysis", status: "running" });
@@ -401,7 +404,10 @@ ${input.transcriptText.slice(0, 15000)}`,
 
         // Persist MEDDPICC updates to Supabase + create observations
         const updatedFields = Object.keys(meddpicc).filter((k) => meddpicc[k]?.delta !== 0);
-        await getDealActor().workflowProgress({ step: "update_scores", status: "running" });
+        currentStepName = "update_scores";
+        await loopCtx.step("progress-update-scores-start", async () => {
+          await getDealActor().workflowProgress({ step: "update_scores", status: "running" });
+        });
 
         if (updatedFields.length > 0) {
           await loopCtx.step("persist-meddpicc", async () => {
@@ -448,13 +454,16 @@ ${input.transcriptText.slice(0, 15000)}`,
           });
         }
 
-        await getDealActor().workflowProgress({
-          step: "update_scores",
-          status: "complete",
-          details: `${updatedFields.length} MEDDPICC fields, ${signals.signals.length} observations`,
+        await loopCtx.step("progress-update-scores-done", async () => {
+          await getDealActor().workflowProgress({
+            step: "update_scores",
+            status: "complete",
+            details: `${updatedFields.length} MEDDPICC fields, ${signals.signals.length} observations`,
+          });
         });
 
         // STEP 4: Synthesize learnings for the deal agent
+        currentStepName = "synthesize_learnings";
         console.log("[pipeline] Starting synthesize-learnings step");
         const synthesis = await loopCtx.step("synthesize-learnings", async () => {
           loopCtx.state.currentStep = "synthesize_learnings";
@@ -502,7 +511,10 @@ ${input.transcriptText.slice(0, 8000)}`
         // STEP 4b: Check active experiments for attribution
         const experiments = input.activeExperiments || [];
         if (experiments.length > 0) {
-          await getDealActor().workflowProgress({ step: "check_experiments", status: "running" });
+          await loopCtx.step("progress-check-experiments-start", async () => {
+            await getDealActor().workflowProgress({ step: "check_experiments", status: "running" });
+          });
+          currentStepName = "check_experiments";
           await loopCtx.step("check-experiments", async () => {
             loopCtx.state.currentStep = "check_experiments";
 
@@ -574,20 +586,28 @@ ${input.transcriptText.slice(0, 12000)}`
               }
             }
           });
-          await getDealActor().workflowProgress({
-            step: "check_experiments",
-            status: "complete",
-            details: `${loopCtx.state.experimentAttributions.filter((a) => a.evidenceFound).length} experiments matched`,
+          await loopCtx.step("progress-check-experiments-done", async () => {
+            await getDealActor().workflowProgress({
+              step: "check_experiments",
+              status: "complete",
+              details: `${loopCtx.state.experimentAttributions.filter((a) => a.evidenceFound).length} experiments matched`,
+            });
           });
         } else {
           // No experiments to check — mark step as complete (skipped)
-          await getDealActor().workflowProgress({ step: "check_experiments", status: "complete", details: "No active experiments" });
+          await loopCtx.step("progress-check-experiments-skip", async () => {
+            await getDealActor().workflowProgress({ step: "check_experiments", status: "complete", details: "No active experiments" });
+          });
         }
 
         // FINALIZE: draft email + update deal agent + send signals + auto-call-prep
-        await getDealActor().workflowProgress({ step: "finalize", status: "running" });
+        currentStepName = "finalize";
+        await loopCtx.step("progress-finalize-start", async () => {
+          await getDealActor().workflowProgress({ step: "finalize", status: "running" });
+        });
 
         // STEP 5: Draft follow-up email (graceful — pipeline continues if this fails)
+        currentStepName = "draft_email";
         console.log("[pipeline] Starting draft-email step");
         await loopCtx.step("draft-email", async () => {
           try {
@@ -616,6 +636,7 @@ Keep it professional, concise, and reference specific commitments from the call.
         });
 
         // FINALIZE STEP 1: Update deal agent with accumulated intelligence
+        currentStepName = "update_deal_agent";
         console.log("[pipeline] Starting update-deal-agent step");
         await loopCtx.step("update-deal-agent", async () => {
           const dealActor = getDealActor();
@@ -723,6 +744,7 @@ Keep it professional, concise, and reference specific commitments from the call.
         }});
 
         // FINALIZE STEP 2: Auto-generate call prep (graceful — pipeline continues if this fails)
+        currentStepName = "auto_call_prep";
         console.log("[pipeline] Starting auto-call-prep step");
         await loopCtx.step({ name: "auto-call-prep", timeout: 180_000, run: async () => {
           try {
@@ -764,18 +786,21 @@ Keep it professional, concise, and reference specific commitments from the call.
         });
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
-        console.error(`[pipeline] ERROR at step ${loopCtx.state.currentStep}:`, errorMsg, error);
+        console.error(`[pipeline] ERROR at step ${currentStepName}:`, errorMsg, error);
         await loopCtx.step("handle-error", async () => {
           loopCtx.state.status = "error";
           loopCtx.state.error = errorMsg;
           try {
             await getDealActor().workflowProgress({
-              step: loopCtx.state.currentStep,
+              step: currentStepName,
               status: "error",
               details: errorMsg,
             });
           } catch {}
         });
+      }
+      } catch (fatalError) {
+        console.error('[pipeline] FATAL:', fatalError);
       }
     });
   }),
