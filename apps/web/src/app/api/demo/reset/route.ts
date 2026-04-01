@@ -118,10 +118,29 @@ export async function POST() {
     await db.execute(sql`UPDATE deals SET win_probability = 55 WHERE name ILIKE '%NordicMed%' AND stage::text NOT LIKE '%closed%'`);
     await db.execute(sql`UPDATE deals SET win_probability = 40 WHERE name ILIKE '%Atlas%' AND stage::text NOT LIKE '%closed%'`);
 
-    // 10. Reset playbook experiments
+    // 10. Reset close dates to relative values (so interventions always trigger correctly)
+    const relativeDate = (daysOut: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + daysOut);
+      return d.toISOString().split('T')[0];
+    };
+    const medVistaClose = relativeDate(55);
+    const nordicMedClose = relativeDate(42);
+    const trustBankClose = relativeDate(60);
+    const pharmaBridgeClose = relativeDate(90);
+    const nordicCareClose = relativeDate(45);
+    const atlasClose = relativeDate(30);
+    await db.execute(sql`UPDATE deals SET close_date = ${medVistaClose}::date WHERE name ILIKE '%MedVista%'`);
+    await db.execute(sql`UPDATE deals SET close_date = ${nordicMedClose}::date WHERE name ILIKE '%NordicMed%' AND name NOT ILIKE '%NordicCare%'`);
+    await db.execute(sql`UPDATE deals SET close_date = ${trustBankClose}::date WHERE name ILIKE '%TrustBank%'`);
+    await db.execute(sql`UPDATE deals SET close_date = ${pharmaBridgeClose}::date WHERE name ILIKE '%PharmaBridge%'`);
+    await db.execute(sql`UPDATE deals SET close_date = ${nordicCareClose}::date WHERE name ILIKE '%NordicCare%' AND stage::text = 'technical_validation'`);
+    await db.execute(sql`UPDATE deals SET close_date = ${atlasClose}::date WHERE name ILIKE '%Atlas%'`);
+
+    // 11. Reset playbook experiments
     await resetPlaybookData();
 
-    // 11. Mark all notifications as unread
+    // 12. Mark all notifications as unread
     await db.execute(sql`UPDATE notifications SET is_read = false`);
 
     // ── Phase 3: Destroy Rivet agents ──────────────────────────────────
