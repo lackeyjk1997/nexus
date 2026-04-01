@@ -2230,6 +2230,49 @@ function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Trans
                 </div>
               </div>
             )}
+
+            {/* Actions — always visible when transcript has text, even without analysis */}
+            {!t.analysisSummary && t.transcriptText && (
+              <div className="px-4 pb-4">
+                <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                  <button
+                    onClick={() => onDraftFollowUp(t)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                    style={{ background: "rgba(224,122,95,0.08)", color: "#E07A5F", border: "1px solid rgba(224,122,95,0.2)" }}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Draft Follow-Up
+                  </button>
+                  <button
+                    onClick={() => handleProcessTranscript(t)}
+                    disabled={!!processingIds[t.id]}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
+                    style={{
+                      background: processingIds[t.id] === "done" ? "rgba(12,116,137,0.08)" : "rgba(12,116,137,0.08)",
+                      color: processingIds[t.id] === "done" ? "#0C7489" : "#0C7489",
+                      border: `1px solid ${processingIds[t.id] === "done" ? "rgba(12,116,137,0.3)" : "rgba(12,116,137,0.2)"}`,
+                    }}
+                  >
+                    {processingIds[t.id] === "processing" ? (
+                      <>
+                        <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
+                        Processing...
+                      </>
+                    ) : processingIds[t.id] === "done" ? (
+                      <>
+                        <Check className="h-3 w-3" />
+                        Processed
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="h-3 w-3" />
+                        Process Transcript
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

@@ -1,6 +1,8 @@
 /**
- * Seed: HealthFirst transcript with transcript_text populated
+ * Seed: NordicMed Group transcript with transcript_text populated
  * This enables the "Process Transcript" button for the cross-deal intelligence demo.
+ * NordicMed is Ryan Foster's healthcare deal (Proposal stage) — combined with
+ * MedVista (Sarah's healthcare deal), this creates the cross-deal pattern.
  */
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -8,69 +10,63 @@ import * as schema from "../schema";
 import { eq, and, ilike } from "drizzle-orm";
 
 const TRANSCRIPT_TEXT = `PARTICIPANTS:
-- Sarah Chen (Account Executive, Anthropic)
-- Alexander Goh (VP of Engineering, HealthFirst Insurance)
-- Priya Mehta (Senior Data Engineer, HealthFirst Insurance)
+- Ryan Foster (Account Executive, Anthropic)
+- Katarina Holm (VP IT Infrastructure, NordicMed Group)
+- Dr. Lars Eriksson (Chief Medical Officer, NordicMed Group)
 
 ---
 
-Sarah Chen: Thanks for making time today, Alexander, Priya. I know your schedules are packed. Last time we talked about the claims processing automation at a high level — today I'd love to go deeper on the technical architecture and integration requirements.
+Ryan Foster: Thanks for taking the time today, Katarina, Dr. Eriksson. I know you're juggling a lot across the 12 hospitals. Last time we discussed the clinical documentation burden at a high level — today I'd love to dig into the technical requirements and talk about how we can get this moving for your board presentation.
 
-Alexander Goh: Absolutely. We've actually been doing some internal evaluation since our last call. Priya, do you want to walk through where we are?
+Katarina Holm: Good timing, Ryan. We've been doing some internal benchmarking since our last call. Lars, do you want to give the clinical perspective first?
 
-Priya Mehta: Sure. So right now we process about 50,000 patient records monthly through our claims pipeline. The manual review step takes roughly 2 minutes per record on average, and we need to get that under 30 seconds to hit our Q3 targets. We've been looking at a few options.
+Dr. Lars Eriksson: Sure. The core problem hasn't changed — our physicians are spending over three hours a day on documentation. That's time they're not spending with patients. We've measured it across all 12 hospitals and the average is 3.2 hours per physician per day. At our scale, that's roughly 28,000 physician-hours per month lost to paperwork. We need to cut that by at least 35 percent to stop the attrition.
 
-Sarah Chen: That's a significant volume. What does the current architecture look like?
+Ryan Foster: That's a staggering number. What's the current documentation workflow look like?
 
-Priya Mehta: We run on GCP, Python microservices, MongoDB for document storage. The claims come in as HL7 FHIR data, get normalized, then go through our rules engine. The bottleneck is the unstructured data extraction — discharge summaries, clinical notes, that kind of thing. Our current NLP models catch maybe 70% of the relevant codes.
+Katarina Holm: We run Epic across all sites with a custom middleware layer. Clinical notes come in as a mix of free-text dictation and structured FHIR resources. The problem is the unstructured dictation — it needs to be coded, summarized, and cross-referenced against patient history before it's usable. Our current NLP system handles maybe 60 percent accurately, and the rest requires manual physician review.
 
-Alexander Goh: Which is why we're looking at LLMs for this. We need something that can handle the nuance of medical terminology without requiring us to retrain models every time CMS updates their coding guidelines.
+Dr. Lars Eriksson: Which is exactly why the documentation takes so long. Physicians dictate, then spend another 45 minutes reviewing and correcting what the system produced. It's demoralizing. Our turnover is at a five-year high and exit interviews consistently cite documentation burden as the top reason.
 
-Sarah Chen: That's exactly the use case where Claude excels. The ability to reason about medical context rather than pattern-matching against a fixed vocabulary — that's a fundamental architectural difference. How are you thinking about the integration?
+Ryan Foster: That's exactly the pattern we see across Scandinavian health systems. Claude's clinical reasoning capability is fundamentally different from traditional NLP — it understands medical context rather than pattern-matching. In our deployments, we're consistently seeing 94 percent accuracy on first-pass documentation, which means physicians only need to review edge cases.
 
-Priya Mehta: We'd need the API to handle HL7 FHIR data formats natively, or at least be able to parse the JSON FHIR bundles without us having to pre-process everything. Is that something Claude can do out of the box?
+Katarina Holm: That accuracy number is important to us. Now I should be transparent — we've been evaluating Microsoft's Azure AI Health services in parallel. They've been pushing hard on their Copilot integration with our existing Microsoft 365 stack, and their pricing came in about 25 percent below what we expected. But Lars has concerns.
 
-Sarah Chen: Yes, Claude handles FHIR bundles directly. I can share our healthcare integration guide that walks through the exact API patterns. Let me also mention — we've been working with several healthcare organizations on exactly this kind of pipeline, and the extraction accuracy is consistently above 95%.
+Dr. Lars Eriksson: My concern with Microsoft is specificity. Their demos looked polished, but when we tested Copilot on actual Swedish-language clinical notes with ICD-10-SE codes, the accuracy dropped significantly. They're optimizing for English-language US healthcare. Our needs are different — multi-language support across Swedish, Norwegian, and Finnish clinical terminology is non-negotiable.
 
-Alexander Goh: That's promising. Now, I should mention — we've been evaluating Microsoft's Azure AI services as well. They've been pushing their compliance certifications and pricing is competitive. But we have concerns about vendor lock-in with Azure. Their solution requires us to deploy within their ecosystem, and we're already heavily invested in GCP.
+Ryan Foster: That's a critical differentiator. Claude's multi-language clinical reasoning is trained on medical literature across all those languages. We can demonstrate that in the pilot. And on the pricing question — I'd encourage looking at total cost of ownership rather than per-API-call pricing. Microsoft's model requires you to host within Azure, which means infrastructure migration costs on top of the license fees.
 
-Sarah Chen: That's an important consideration. With Claude, you maintain full platform independence — our API works identically regardless of your cloud provider. There's no infrastructure lock-in. And on pricing, while I can't speak to Microsoft's specific numbers, our customers consistently see better total cost of ownership over a 3-year horizon because there's no hidden infrastructure markup.
+Katarina Holm: That's actually a major sticking point for us. We're on AWS and migrating to Azure just for one AI service isn't realistic. We spent two years getting our current infrastructure stable after the last migration.
 
-Priya Mehta: The vendor lock-in concern is real for us. We spent 18 months migrating off a proprietary system two years ago. Nobody wants to repeat that.
+Ryan Foster: Understood. Claude is fully cloud-agnostic — same API, same performance regardless of where you host. No infrastructure lock-in.
 
-Alexander Goh: Agreed. Now, the compliance side — HIPAA is non-negotiable for us. We also need BAA signing capability. And our security review process is pretty involved. Typically 4-6 weeks. We need SOC 2 Type II, penetration test results, and our CISO has to do a full architecture review before we can proceed.
+Katarina Holm: Good. Now on the compliance side — our security review process is extensive. Typically 4 to 6 weeks minimum. We need GDPR compliance documentation, EU data residency guarantees, penetration test results, and our CISO needs to conduct a full architecture review. This is a hard gate — nothing moves to procurement without security sign-off.
 
-Sarah Chen: We have all of those ready. SOC 2 Type II, HIPAA compliance with BAA signing — I can get those documents to you this week so your CISO can start the review in parallel with our technical evaluation. The earlier we start that clock, the better.
+Ryan Foster: We anticipated that. I can have our full GDPR compliance package, including EU data residency certifications and pen test results, to your CISO by end of this week. Starting the security review now means it can run in parallel with the technical pilot — that way you're not waiting sequentially.
 
-Alexander Goh: Smart. Dr. Williams — she's our Chief Medical Officer — she controls the AI budget for the organization. She's been pushing for this automation initiative since last year, so the budget is pre-approved. But she'll want to see the accuracy numbers before she signs off on the final vendor selection.
+Dr. Lars Eriksson: Smart approach. On the budget side — I control the AI transformation budget for the organization. The board approved 4.2 million euros for this initiative last quarter, so funding isn't the blocker. What I need is proof that the accuracy holds on our actual clinical data. If it does, I'll present the recommendation to the board myself.
 
-Sarah Chen: Understood. Would it be possible to set up a brief session with Dr. Williams? Even 20 minutes to walk through our accuracy benchmarks and customer case studies would help her feel confident in the recommendation.
+Ryan Foster: That's great to hear. Would it make sense to structure a 30-day pilot across two of your hospitals? We'd process real de-identified clinical notes through Claude and measure accuracy, time savings, and physician satisfaction against your current system.
 
-Alexander Goh: I can arrange that. She's on the technology review board too — they meet monthly, and any AI vendor needs board approval. The next meeting is in three weeks.
+Katarina Holm: A two-hospital pilot is exactly what we've been discussing internally. We'd want to use Karolinska and Uppsala — they have the highest documentation volumes and the most engaged physician champions.
 
-Priya Mehta: On the technical side, can we talk about the live demo you showed us last time? When you showed the real-time extraction on that sample discharge summary, that was the moment our team got excited. Can we do a larger-scale test with our actual documents?
+Dr. Lars Eriksson: There's one thing that really caught my attention from your last demo, Ryan. When you showed the real-time clinical note generation from that sample patient encounter — the way it structured the assessment and plan section with proper ICD-10 codes and cross-referenced the medication list — that was the moment I thought, this is actually different. Our physicians have never seen an AI tool produce output that clean. Can we set up a live demonstration with our clinical informatics team?
 
-Sarah Chen: Absolutely. We can set up a sandbox environment with a dedicated API endpoint. You'd send us a batch of de-identified records, and we'll process them through our healthcare-specific pipeline. You'll get back structured extractions with confidence scores for each field.
+Ryan Foster: Absolutely. Let's schedule that for next week. I'd like to bring our Solutions Architect, Alex Kim — he's worked on three Scandinavian health system deployments and can speak directly to the Epic integration architecture.
 
-Priya Mehta: That would be exactly what we need. The engineering team has been asking for this. If the accuracy holds up on our actual data, I think we can move fast on the recommendation.
+Katarina Holm: Perfect. One more thing — Anders Bjork, our CFO, wants to see a formal TCO comparison before the board presentation. He's been leaning toward Microsoft purely on initial pricing, so we need to make the infrastructure and accuracy case clearly.
 
-Alexander Goh: One more thing — we have a technology review board that meets monthly. Any AI vendor needs board approval. I want to make sure we have everything lined up for the next board meeting. What materials would you suggest we prepare?
+Ryan Foster: I'll prepare a detailed TCO analysis that factors in infrastructure costs, accuracy-driven time savings, and the multi-language advantage. We can walk Anders through it separately if that helps.
 
-Sarah Chen: I'd recommend three things: first, the accuracy results from the sandbox test — that's your hard evidence. Second, a TCO comparison showing the 3-year cost differential. Third, our compliance documentation package so the security team can confirm everything checks out. I'll help you put together a concise board brief that covers all three.
+Dr. Lars Eriksson: That would help enormously. Anders respects data. If we can show that the total cost is competitive and the clinical accuracy is measurably better, he'll support it.
 
-Alexander Goh: Perfect. Priya, can you own the sandbox test setup?
+Katarina Holm: Let me summarize our action items. Ryan sends the GDPR compliance package this week. We schedule the live clinical demo with our informatics team next week. Ryan prepares the TCO comparison for Anders. And we aim to have the pilot proposal ready for the board meeting on the 15th.
 
-Priya Mehta: Already on it. Sarah, if you can send me the API documentation and the sandbox credentials, I'll have our test pipeline ready within a week. We have about 500 de-identified records we can use.
+Ryan Foster: That all tracks. I'll also include our EU healthcare customer reference list — four health systems in the Nordics and DACH region that went live in the last 12 months. That tends to address board concerns about proven deployments.
 
-Sarah Chen: I'll send those over today. And I'll include our FHIR integration guide — it covers the exact JSON schema mapping for claims data.
+Dr. Lars Eriksson: References from other Scandinavian health systems would be very compelling. Thank you, Ryan. I'm cautiously optimistic about this.
 
-Alexander Goh: Great. I think we have a clear path forward. Let me summarize: Priya runs the sandbox test, I'll schedule the Dr. Williams meeting, and we'll target the board review in three weeks. Sarah, anything else from your side?
-
-Sarah Chen: Just one thing — I'd like to bring our Solutions Architect, Alex Kim, to the Dr. Williams meeting. He specializes in healthcare implementations and can speak to the clinical accuracy in detail.
-
-Alexander Goh: That would be great. Let's plan on it.
-
-Sarah Chen: Excellent. Thanks Alexander, Priya. I'll have the sandbox credentials and compliance docs to you by end of day.`;
+Ryan Foster: Thank you both. I'll have everything to you by Friday.`;
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
@@ -82,53 +78,56 @@ async function main() {
   const client = postgres(connectionString);
   const db = drizzle(client, { schema });
 
-  console.log("Seeding HealthFirst transcript with transcript_text...");
+  console.log("Seeding NordicMed Group transcript with transcript_text...");
 
-  // Find the HealthFirst deal
+  // Find the NordicMed Group deal
   const [deal] = await db
     .select({ id: schema.deals.id, name: schema.deals.name })
     .from(schema.deals)
-    .where(ilike(schema.deals.name, "%healthfirst%"))
+    .where(ilike(schema.deals.name, "%NordicMed%Clinical%"))
     .limit(1);
 
   if (!deal) {
-    console.error("HealthFirst deal not found");
+    console.error("NordicMed Group deal not found");
     await client.end();
     process.exit(1);
   }
 
   console.log(`  Found deal: ${deal.name} (${deal.id})`);
 
-  // Check if there's already a transcript with transcript_text
+  // Check if there's already a transcript for this deal
   const [existing] = await db
     .select({ id: schema.callTranscripts.id, title: schema.callTranscripts.title })
     .from(schema.callTranscripts)
-    .where(
-      and(
-        eq(schema.callTranscripts.dealId, deal.id),
-        ilike(schema.callTranscripts.title, "%Technical Deep-Dive%")
-      )
-    )
+    .where(eq(schema.callTranscripts.dealId, deal.id))
     .limit(1);
 
   if (existing) {
     // Update existing transcript to add transcript_text
     await db
       .update(schema.callTranscripts)
-      .set({ transcriptText: TRANSCRIPT_TEXT })
+      .set({
+        transcriptText: TRANSCRIPT_TEXT,
+        title: "Proposal Review with NordicMed Clinical & IT Leadership",
+        participants: [
+          { name: "Ryan Foster", role: "AE" },
+          { name: "Katarina Holm", role: "VP IT Infrastructure" },
+          { name: "Dr. Lars Eriksson", role: "Chief Medical Officer" },
+        ],
+      })
       .where(eq(schema.callTranscripts.id, existing.id));
-    console.log(`  Updated existing transcript "${existing.title}" with transcript_text`);
+    console.log(`  Updated existing transcript with transcript_text`);
   } else {
     // Insert new transcript
     await db.insert(schema.callTranscripts).values({
       dealId: deal.id,
-      title: "Technical Deep-Dive with HealthFirst Engineering Team",
-      date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      durationSeconds: 35 * 60,
+      title: "Proposal Review with NordicMed Clinical & IT Leadership",
+      date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      durationSeconds: 38 * 60,
       participants: [
-        { name: "Sarah Chen", role: "AE" },
-        { name: "Alexander Goh", role: "VP of Engineering" },
-        { name: "Priya Mehta", role: "Senior Data Engineer" },
+        { name: "Ryan Foster", role: "AE" },
+        { name: "Katarina Holm", role: "VP IT Infrastructure" },
+        { name: "Dr. Lars Eriksson", role: "Chief Medical Officer" },
       ],
       transcriptText: TRANSCRIPT_TEXT,
       source: "simulated",
@@ -136,6 +135,18 @@ async function main() {
     });
     console.log("  Inserted new transcript with transcript_text");
   }
+
+  // Also clear transcript_text from HealthFirst if it was previously seeded
+  await db
+    .update(schema.callTranscripts)
+    .set({ transcriptText: null })
+    .where(
+      and(
+        ilike(schema.callTranscripts.title, "%HealthFirst%"),
+        eq(schema.callTranscripts.dealId, "f4fee3bc-b65c-49e8-a34f-0fab8b8724c9")
+      )
+    );
+  console.log("  Cleared transcript_text from HealthFirst transcript");
 
   console.log("Done!");
   await client.end();
