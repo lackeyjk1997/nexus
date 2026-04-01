@@ -1,32 +1,113 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+
+const LOADING_STEPS = [
+  "Preparing fresh demo...",
+  "Clearing AI agents...",
+  "Resetting pipeline data...",
+];
+
+const STEP_DURATION = 1500;
+const DONE_DISPLAY = 1000;
 
 export default function LandingPage() {
-  const [resetting, setResetting] = useState(false);
+  const router = useRouter();
+  const [resetState, setResetState] = useState<
+    "idle" | "loading" | "done"
+  >("idle");
+  const [stepIndex, setStepIndex] = useState(0);
+  const apiDoneRef = useRef(false);
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const finishAndNavigate = useCallback(() => {
+    setResetState("done");
+    setTimeout(() => {
+      localStorage.clear();
+      router.push("/pipeline");
+    }, DONE_DISPLAY);
+  }, [router]);
+
+  const runReset = useCallback(async () => {
+    if (resetState !== "idle") return;
+    setResetState("loading");
+    setStepIndex(0);
+    apiDoneRef.current = false;
+
+    // Fire API call
+    fetch("/api/demo/reset", { method: "POST" })
+      .then(() => {
+        apiDoneRef.current = true;
+      })
+      .catch(() => {
+        apiDoneRef.current = true;
+      });
+
+    // Step cycling — runs on timers independent of API
+    let current = 0;
+    const advanceStep = () => {
+      current++;
+      if (current < LOADING_STEPS.length) {
+        setStepIndex(current);
+        stepTimerRef.current = setTimeout(() => {
+          // After showing this step for STEP_DURATION, check if API is done
+          if (apiDoneRef.current) {
+            finishAndNavigate();
+          } else {
+            advanceStep();
+          }
+        }, STEP_DURATION);
+      } else {
+        // All steps shown — wait for API if not done yet
+        const poll = () => {
+          if (apiDoneRef.current) {
+            finishAndNavigate();
+          } else {
+            stepTimerRef.current = setTimeout(poll, 200);
+          }
+        };
+        // Show last step for at least 500ms before checking
+        stepTimerRef.current = setTimeout(poll, 500);
+      }
+    };
+
+    // Show first step for STEP_DURATION then advance
+    stepTimerRef.current = setTimeout(() => {
+      if (apiDoneRef.current) {
+        // API finished during first step — show it for a bit then finish
+        setTimeout(finishAndNavigate, 500);
+      } else {
+        advanceStep();
+      }
+    }, STEP_DURATION);
+  }, [resetState, finishAndNavigate]);
+
+  // Handle ?reset=true query param
+  const autoResetRef = useRef(false);
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && !autoResetRef.current) {
       const params = new URLSearchParams(window.location.search);
       if (params.get("reset") === "true") {
-        // Call the reset API, then clear localStorage
-        fetch("/api/demo/reset", { method: "POST" })
-          .catch(() => {})
-          .finally(() => {
-            localStorage.clear();
-            window.history.replaceState({}, "", "/");
-          });
+        autoResetRef.current = true;
+        // Clear URL without triggering Next.js navigation
+        window.history.replaceState({}, document.title, "/");
+        // Delay runReset to next tick so replaceState settles
+        setTimeout(() => runReset(), 50);
       }
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    };
   }, []);
 
-  function handleEnter() {
-    // Clear saved persona so PersonaProvider defaults to Sarah Chen
-    try {
-      localStorage.removeItem("nexus_persona_id");
-    } catch {}
-    window.location.href = "/playbook";
-  }
+  const isLoading = resetState === "loading";
+  const isDone = resetState === "done";
+  const isActive = isLoading || isDone;
 
   return (
     <div
@@ -183,29 +264,57 @@ export default function LandingPage() {
         {/* Enter button */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <button
-            onClick={handleEnter}
+            onClick={runReset}
+            disabled={isActive}
             style={{
-              display: "inline-block",
-              background: "#E07A5F",
-              color: "#FFFFFF",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              minWidth: 240,
+              background: isActive ? "#F5F3EF" : "#E07A5F",
+              color: isDone ? "#4A9E6B" : isLoading ? "#8A8078" : "#FFFFFF",
               padding: "14px 36px",
               borderRadius: 8,
               fontSize: 16,
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
-              cursor: "pointer",
-              border: "none",
-              transition: "background 0.2s ease",
+              cursor: isActive ? "not-allowed" : "pointer",
+              border: isActive ? "1px solid rgba(0,0,0,0.06)" : "none",
+              transition: "background 0.2s ease, color 0.2s ease",
             }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.background = "#D06A4F")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.background = "#E07A5F")
-            }
+            onMouseOver={(e) => {
+              if (!isActive) e.currentTarget.style.background = "#D06A4F";
+            }}
+            onMouseOut={(e) => {
+              if (!isActive) e.currentTarget.style.background = "#E07A5F";
+            }}
           >
-            Enter Demo →
+            {isDone ? (
+              <>
+                <span style={{ color: "#4A9E6B", fontSize: 18 }}>✓</span>
+                <span style={{ color: "#3D3833" }}>Demo Ready</span>
+              </>
+            ) : isLoading ? (
+              <>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 16,
+                    height: 16,
+                    border: "2px solid #E07A5F",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "nexus-spin 0.8s linear infinite",
+                  }}
+                />
+                {LOADING_STEPS[stepIndex]}
+              </>
+            ) : (
+              "Enter Demo →"
+            )}
           </button>
+          <style>{`@keyframes nexus-spin { to { transform: rotate(360deg); } }`}</style>
         </div>
 
         {/* Footer */}
@@ -213,7 +322,7 @@ export default function LandingPage() {
           <p style={{ fontSize: 13, color: "#8A8078", margin: "0 0 4px 0" }}>
             Built by Jeff Lackey
           </p>
-          <p style={{ fontSize: 12, color: "#8A8078", margin: "0 0 12px 0" }}>
+          <p style={{ fontSize: 12, color: "#8A8078", margin: 0 }}>
             <a
               href="mailto:jeff.lackey97@gmail.com"
               style={{ color: "#8A8078", textDecoration: "none" }}
@@ -237,31 +346,6 @@ export default function LandingPage() {
               LinkedIn
             </a>
           </p>
-          <button
-            onClick={async () => {
-              setResetting(true);
-              try {
-                await fetch("/api/demo/reset", { method: "POST" });
-                localStorage.clear();
-                window.location.reload();
-              } catch {
-                setResetting(false);
-              }
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 11,
-              color: resetting ? "#E07A5F" : "#D4C9BD",
-              cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
-              transition: "color 0.2s ease",
-            }}
-            onMouseOver={(e) => { if (!resetting) e.currentTarget.style.color = "#E07A5F"; }}
-            onMouseOut={(e) => { if (!resetting) e.currentTarget.style.color = "#D4C9BD"; }}
-          >
-            {resetting ? "Resetting..." : "\u21BB Reset Demo Data"}
-          </button>
         </div>
       </div>
     </div>

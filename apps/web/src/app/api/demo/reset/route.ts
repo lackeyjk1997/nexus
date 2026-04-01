@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sql } from "drizzle-orm";
+import { sql, ilike, and, not } from "drizzle-orm";
 import { playbookIdeas, deals } from "@nexus/db";
 import { MEMBER_IDS, postDiscoveryEvidence, multiThreadedEvidence, twoDiscoEvidence, cisoEngagementEvidence, complianceDiscoveryEvidence, securityDocEvidence } from "@nexus/db/seed-data/playbook-evidence";
 import { getBaseExperiments } from "@nexus/db/seed-data/playbook-experiments";
@@ -8,72 +8,29 @@ import { createClient } from "rivetkit/client";
 import type { Registry } from "@/actors/registry";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const { SARAH, ALEX, RYAN, DAVID, MARCUS, PRIYA, JAMES, ELENA } = MEMBER_IDS;
 
 export async function POST() {
   try {
-    // 1. Reset MedVista to Discovery stage for demo flow
-    await db.execute(sql`
-      UPDATE deals SET
-        stage = 'discovery',
-        win_probability = 25,
-        close_competitor = NULL,
-        close_notes = NULL,
-        close_improvement = NULL,
-        win_turning_point = NULL,
-        win_replicable = NULL,
-        closed_at = NULL,
-        close_ai_analysis = NULL,
-        close_factors = NULL,
-        win_factors = NULL,
-        close_ai_ran_at_timestamp = NULL,
-        loss_reason = NULL,
-        stage_entered_at = NOW() - INTERVAL '3 days'
-      WHERE name ILIKE '%MedVista%'
-    `);
+    // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 
-    // 2. Reset other deals to original seed win_probability values
-    await db.execute(sql`UPDATE deals SET win_probability = 60 WHERE name ILIKE '%HealthFirst%' AND stage::text NOT LIKE '%closed%'`);
-    await db.execute(sql`UPDATE deals SET win_probability = 45 WHERE name ILIKE '%TrustBank%' AND stage::text NOT LIKE '%closed%'`);
-    await db.execute(sql`UPDATE deals SET win_probability = 35 WHERE name ILIKE '%PharmaBridge%' AND stage::text NOT LIKE '%closed%'`);
-    await db.execute(sql`UPDATE deals SET win_probability = 50 WHERE name ILIKE '%NordicCare%' AND stage::text = 'technical_validation'`);
-    await db.execute(sql`UPDATE deals SET win_probability = 55 WHERE name ILIKE '%NordicMed%' AND stage::text NOT LIKE '%closed%'`);
-    await db.execute(sql`UPDATE deals SET win_probability = 40 WHERE name ILIKE '%Atlas%' AND stage::text NOT LIKE '%closed%'`);
-
-    // 3. Reset playbook experiments BEFORE deleting observations (FK constraint)
-    await resetPlaybookData();
-
-    // 4. Delete very recent test observations (last 2 hours)
+    // 1. Delete observation_routing for pipeline-created observations (FK first)
     await db.execute(sql`
       DELETE FROM observation_routing WHERE observation_id IN (
-        SELECT id FROM observations WHERE created_at > NOW() - INTERVAL '4 hours'
+        SELECT id FROM observations
+        WHERE source_context->>'trigger' = 'transcript_pipeline'
       )
     `);
-    await db.execute(sql`DELETE FROM observations WHERE created_at > NOW() - INTERVAL '4 hours'`);
 
-    // 4. Delete recent test field queries and their questions
-    await db.execute(sql`DELETE FROM field_query_questions WHERE created_at > NOW() - INTERVAL '4 hours'`);
-    await db.execute(sql`DELETE FROM field_queries WHERE created_at > NOW() - INTERVAL '4 hours'`);
-
-    // 5. Delete test activities
+    // 2. Delete pipeline-created observations (preserves seed observations)
     await db.execute(sql`
-      DELETE FROM activities
-      WHERE created_at > NOW() - INTERVAL '4 hours'
-      AND (
-        subject ILIKE '%intelligence update%'
-        OR subject ILIKE '%close%lost%'
-        OR subject ILIKE '%field intel%'
-        OR subject ILIKE '%stage change%'
-        OR subject ILIKE '%deal closed%'
-        OR subject ILIKE '%stage changed from closed%'
-      )
+      DELETE FROM observations
+      WHERE source_context->>'trigger' = 'transcript_pipeline'
     `);
 
-    // 6. Mark all notifications as unread
-    await db.execute(sql`UPDATE notifications SET is_read = false`);
-
-    // 7. Recalculate observation cluster counts and ARR
+    // 3. Delete observation clusters with zero remaining observations
     await db.execute(sql`
       UPDATE observation_clusters SET
         observation_count = sub.cnt,
@@ -93,8 +50,82 @@ export async function POST() {
       ) sub
       WHERE observation_clusters.id = sub.cluster_id
     `);
+    await db.execute(sql`
+      DELETE FROM observation_clusters
+      WHERE id NOT IN (
+        SELECT DISTINCT cluster_id FROM observations WHERE cluster_id IS NOT NULL
+      )
+    `);
 
-    // 8. Destroy all Rivet actors for a clean demo start
+    // 4. Delete recent test field queries and their questions (keep 4-hour window — user-triggered)
+    await db.execute(sql`DELETE FROM field_query_questions WHERE created_at > NOW() - INTERVAL '4 hours'`);
+    await db.execute(sql`DELETE FROM field_queries WHERE created_at > NOW() - INTERVAL '4 hours'`);
+
+    // 5. Delete pipeline-generated activities (expanded pattern matching)
+    await db.execute(sql`
+      DELETE FROM activities
+      WHERE
+        subject ILIKE 'transcript%'
+        OR subject ILIKE 'meddpicc%'
+        OR subject ILIKE 'observation%'
+        OR subject ILIKE 'call prep%'
+        OR subject ILIKE 'email draft%'
+        OR subject ILIKE 'brief%'
+        OR subject ILIKE 'agent%'
+        OR subject ILIKE 'intelligence update%'
+        OR subject ILIKE 'signal%'
+        OR subject ILIKE '%close%lost%'
+        OR subject ILIKE '%field intel%'
+        OR subject ILIKE '%stage change%'
+        OR subject ILIKE '%deal closed%'
+        OR subject ILIKE '%stage changed from closed%'
+    `);
+
+    // 6. Delete ALL deal stage history (only populated by live stage changes)
+    await db.execute(sql`DELETE FROM deal_stage_history`);
+
+    // 7. Reset MEDDPICC fields — delete all, then re-insert seed values
+    await db.execute(sql`DELETE FROM meddpicc_fields`);
+    await resetMeddpiccData();
+
+    // ── Phase 2: Reset demo environment ────────────────────────────────
+
+    // 8. Reset MedVista to Discovery stage
+    await db.execute(sql`
+      UPDATE deals SET
+        stage = 'discovery',
+        win_probability = 25,
+        close_competitor = NULL,
+        close_notes = NULL,
+        close_improvement = NULL,
+        win_turning_point = NULL,
+        win_replicable = NULL,
+        closed_at = NULL,
+        close_ai_analysis = NULL,
+        close_factors = NULL,
+        win_factors = NULL,
+        close_ai_ran_at_timestamp = NULL,
+        loss_reason = NULL,
+        stage_entered_at = NOW() - INTERVAL '3 days'
+      WHERE name ILIKE '%MedVista%'
+    `);
+
+    // 9. Reset other deals to original seed win_probability values
+    await db.execute(sql`UPDATE deals SET win_probability = 60 WHERE name ILIKE '%HealthFirst%' AND stage::text NOT LIKE '%closed%'`);
+    await db.execute(sql`UPDATE deals SET win_probability = 45 WHERE name ILIKE '%TrustBank%' AND stage::text NOT LIKE '%closed%'`);
+    await db.execute(sql`UPDATE deals SET win_probability = 35 WHERE name ILIKE '%PharmaBridge%' AND stage::text NOT LIKE '%closed%'`);
+    await db.execute(sql`UPDATE deals SET win_probability = 50 WHERE name ILIKE '%NordicCare%' AND stage::text = 'technical_validation'`);
+    await db.execute(sql`UPDATE deals SET win_probability = 55 WHERE name ILIKE '%NordicMed%' AND stage::text NOT LIKE '%closed%'`);
+    await db.execute(sql`UPDATE deals SET win_probability = 40 WHERE name ILIKE '%Atlas%' AND stage::text NOT LIKE '%closed%'`);
+
+    // 10. Reset playbook experiments
+    await resetPlaybookData();
+
+    // 11. Mark all notifications as unread
+    await db.execute(sql`UPDATE notifications SET is_read = false`);
+
+    // ── Phase 3: Destroy Rivet agents ──────────────────────────────────
+
     try {
       const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
       const rivetClient = createClient<Registry>(rivetEndpoint);
@@ -130,13 +161,76 @@ export async function POST() {
       // Non-fatal — actors will be recreated fresh
     }
 
-    return NextResponse.json({ success: true, message: "Demo data reset to clean state" });
+    return NextResponse.json({
+      success: true,
+      phases: {
+        pipeline_data: "done",
+        agents: "done",
+        demo_env: "done",
+      },
+    });
   } catch (error) {
     console.error("Demo reset error:", error);
     return NextResponse.json(
       { success: false, message: "Reset failed", error: String(error) },
       { status: 500 }
     );
+  }
+}
+
+// ── MEDDPICC Seed Reset ──────────────────────────────────────────────────────
+
+async function resetMeddpiccData() {
+  // Re-insert seed MEDDPICC for NordicMed
+  const [nordicmed] = await db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(and(ilike(deals.name, '%NordicMed%'), not(ilike(deals.name, '%NordicCare%'))))
+    .limit(1);
+  if (nordicmed) {
+    await db.execute(sql`
+      INSERT INTO meddpicc_fields (deal_id, metrics, metrics_confidence, economic_buyer, economic_buyer_confidence, decision_criteria, decision_criteria_confidence, decision_process, decision_process_confidence, identify_pain, identify_pain_confidence, champion, champion_confidence, competition, competition_confidence)
+      VALUES (${nordicmed.id}, 'Target: 35% reduction in clinical documentation time across 12 hospitals', 70, 'Anders Björk, CFO — engaged but cautious about implementation costs', 55, 'EU data residency, multi-language support, EHR integration, GDPR compliance', 75, 'CMO recommendation → IT security review → CFO approval → board vote', 60, 'Physicians spending 3+ hours/day on documentation, highest turnover in 5 years', 85, 'Dr. Eriksson — personally experienced documentation burden, presenting to board', 75, 'Microsoft Copilot in evaluation — Eriksson prefers Claude for healthcare specificity', 65)
+    `);
+  }
+
+  // Re-insert seed MEDDPICC for Atlas Capital
+  const [atlas] = await db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(ilike(deals.name, '%Atlas%'))
+    .limit(1);
+  if (atlas) {
+    await db.execute(sql`
+      INSERT INTO meddpicc_fields (deal_id, metrics, metrics_confidence, economic_buyer, economic_buyer_confidence, decision_criteria, decision_criteria_confidence, decision_process, decision_process_confidence, identify_pain, identify_pain_confidence, champion, champion_confidence, competition, competition_confidence)
+      VALUES (${atlas.id}, 'Target: 50% faster risk assessment turnaround, $2M annual savings', 65, 'Maria Santos, CFO — budget approved but hesitant on timeline', 50, 'SOC 2 Type II, real-time processing, integration with Bloomberg terminal', 80, 'VP Risk recommendation → compliance review → CFO sign-off', 70, 'Risk assessments taking 5 days, competitors doing it in 2', 90, 'James Chen — frustrated with current tools, wants to modernize', 70, 'CompetitorX offered 30% lower pricing with a free 90-day pilot', 85)
+    `);
+  }
+
+  // Re-insert seed MEDDPICC for HealthBridge (Closed Lost)
+  const [healthbridge] = await db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(ilike(deals.name, '%HealthBridge%'))
+    .limit(1);
+  if (healthbridge) {
+    await db.execute(sql`
+      INSERT INTO meddpicc_fields (deal_id, metrics, metrics_confidence, economic_buyer, economic_buyer_confidence, identify_pain, identify_pain_confidence, champion, champion_confidence, competition, competition_confidence)
+      VALUES (${healthbridge.id}, 'Target: 30% reduction in telemedicine wait times', 40, 'Unknown — never identified real budget holder', 15, 'Long telemedicine wait times driving patient complaints', 60, 'Dr. Sarah Park — left mid-cycle, single-threaded', 25, 'No active competitor — deal died from inaction', 20)
+    `);
+  }
+
+  // Re-insert seed MEDDPICC for MedTech Solutions (Closed Won)
+  const [medtech] = await db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(ilike(deals.name, '%MedTech%'))
+    .limit(1);
+  if (medtech) {
+    await db.execute(sql`
+      INSERT INTO meddpicc_fields (deal_id, metrics, metrics_confidence, economic_buyer, economic_buyer_confidence, decision_criteria, decision_criteria_confidence, decision_process, decision_process_confidence, identify_pain, identify_pain_confidence, champion, champion_confidence, competition, competition_confidence)
+      VALUES (${medtech.id}, '45% reduction in documentation time, $890K annual savings', 90, 'Robert Chang, CFO — approved after seeing pilot ROI', 90, 'EHR integration, documentation time reduction, HIPAA compliance', 85, 'VP Clinical Ops → CFO approval → board vote', 80, 'Physicians spending 40% of time on documentation, burnout driving turnover', 95, 'Jennifer Walsh — drove internal adoption, presented ROI deck to board', 95, 'No active competitor — won on compliance and champion strength', 50)
+    `);
   }
 }
 
