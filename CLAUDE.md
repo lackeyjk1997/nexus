@@ -131,7 +131,7 @@ Deal page "Prep Call" → POST `/api/agent/call-prep` → queries: (1) rep's age
 AE submits idea → proposed → manager approves (selects AEs, sets thresholds) → testing with A/B groups → measures velocity/sentiment/close rate with deal-level evidence → graduation when thresholds met → proven play injected into call prep as DIRECTIVE
 
 ### Demo Reset
-POST `/api/demo/reset` → resets MedVista to Discovery → resets deal probabilities → deletes all playbook ideas and re-inserts 8 experiments with lifecycle data (evidence imported from `packages/db/src/seed-data/`) → deletes recent observations/queries/activities → marks notifications unread → recalculates cluster metrics → destroys ALL Rivet actors (dealAgent, transcriptPipeline, intelligenceCoordinator)
+Landing page "Enter Demo" button → POST `/api/demo/reset` (maxDuration=300) with animated loading states → auto-navigates to `/pipeline`. Resets: MedVista to Discovery, deal probabilities, all playbook ideas (re-inserts 8 experiments with lifecycle data from `packages/db/src/seed-data/`), pipeline-created observations (matched by `source_context` trigger), `meddpicc_fields` (full reset to seeds), `deal_stage_history` (full delete), expanded activity pattern matching, orphaned observation clusters, notifications → destroys ALL Rivet actors (dealAgent, transcriptPipeline, intelligenceCoordinator)
 
 ## Demo Data
 
@@ -181,6 +181,9 @@ Verticals: Healthcare #3B82F6, Financial Services #10B981, Manufacturing #F59E0B
 - Coordinator `validateSignal` requires field mapping: Signal.signalType → type, Signal.sourceAeName → source_speaker (fixed in S13)
 - Observation deduplication: pipeline observations include `transcriptId` in `sourceContext` to prevent duplicates on re-processing
 - Demo reset destroys all 3 actor types (dealAgent, transcriptPipeline, intelligenceCoordinator) for clean restart
+- Finalize step hangs on production (draft email + auto-call-prep timeout) — core pipeline intelligence completes fine through step 4
+- Cross-deal intelligence section on deal page shows all pattern cards (can be 7+) — may need to limit to top 2-3
+- Intervention card shows raw system labels (e.g. "No customer response date tracked") — needs human-readable timeline risk language
 
 ## Deploy
 ```
@@ -301,8 +304,21 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 
 ### Demo Flow for Cross-Deal Intelligence
 1. Process transcript on MedVista → signals sent to coordinator
-2. Process transcript on HealthFirst → signals sent to coordinator
+2. Process transcript on NordicMed → signals sent to coordinator
 3. Coordinator detects pattern (same competitor/signal in same vertical)
 4. Coordinator synthesizes and pushes to both deal agents
 5. Intelligence dashboard shows agent-detected pattern
 6. Next call prep for either deal includes cross-deal insight
+
+## Session S13: Pipeline Hardening & Demo Polish
+
+### What changed
+- **Enter Demo = Reset**: No separate "Reset Demo Data" button. Landing page "Enter Demo" fires POST `/api/demo/reset` with animated loading states, auto-navigates to `/pipeline`
+- **Demo reset expanded**: now cleans pipeline-created observations (by `source_context` trigger), `meddpicc_fields` (full reset to seeds), `deal_stage_history` (full delete), expanded activity pattern matching, orphaned observation clusters
+- **Pipeline parallelized**: steps 1-3 (Extract Actions, Score MEDDPICC, Detect Signals) run in parallel via `Promise.all` inside single `parallel-analysis` workflow step. Saves ~60-80s vs sequential
+- **Graceful degradation**: Draft Email and auto-call-prep wrapped in error handlers — pipeline shows "Complete" even if these fail
+- **Pipeline run handler fix**: 6 `getDealActor()` calls and 2 `loopCtx.state` reads were outside `step()` callbacks, violating Rivet workflow rules. All wrapped in proper `step()` wrappers. Added outer try/catch with `console.error('[pipeline] FATAL:', error)`
+- **Dense transcripts**: MedVista (~3500 words, 19 min) and NordicMed (~3500 words, 18 min). Both mention Microsoft DAX Copilot and 6-8 week security review (for coordinator cross-deal pattern). Include full tech stack details (Epic, Dragon Medical, Cerner, PowerScribe, PACS). Seed: `packages/db/src/seeds/seed-healthfirst-transcript.ts`
+- **Workflow tracker**: 5 steps: Analyze Transcript → Update Scores → Check Experiments → Synthesize → Finalize. Steps may light up out of order due to parallelization (expected)
+- **Cross-deal intelligence verified on production**: coordinator detects patterns across MedVista + NordicMed (competitive intel, process friction, content gaps, win patterns)
+- **Intervention card fires naturally**: health check triggers on NordicMed with health score 59/100 — next task is rewriting to human-readable timeline risk with one-click close date adjustment
