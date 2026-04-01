@@ -81,6 +81,7 @@ export async function PATCH(
         ...(body.experiment_end ? { experimentEnd: new Date(body.experiment_end) } : {}),
         ...(body.experiment_duration_days ? { experimentDurationDays: body.experiment_duration_days } : {}),
         ...(body.attribution ? { attribution: body.attribution } : {}),
+        ...(body.experiment_evidence ? { experimentEvidence: body.experiment_evidence } : {}),
         // Auto-set fields on transitions
         ...(body.status === "testing" ? {
           approvedAt: now,

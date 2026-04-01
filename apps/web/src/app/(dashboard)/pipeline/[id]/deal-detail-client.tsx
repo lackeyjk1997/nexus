@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -41,6 +41,7 @@ import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared"
 import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
 import { StageChangeModal } from "@/components/stage-change-modal";
 import { AgentMemory } from "@/components/agent-memory";
+import { AgentIntervention } from "@/components/agent-intervention";
 import { WorkflowTracker } from "@/components/workflow-tracker";
 
 import { DealQuestionInput } from "@/components/deal-question-input";
@@ -273,6 +274,9 @@ export function DealDetailClient({
   const [prepContextHighlight, setPrepContextHighlight] = useState(-1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
 
+  // Brief ready state (auto-generated from pipeline)
+  const [briefReady, setBriefReady] = useState<{ brief: unknown; generatedAt: string } | null>(null);
+
   // Email draft state
   const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
@@ -289,6 +293,32 @@ export function DealDetailClient({
     name: "dealAgent",
     key: [deal.id],
   });
+
+  // Check for briefReady on the deal agent and subscribe to events
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!dealActor.connection) return;
+
+    const checkBrief = async () => {
+      try {
+        const brief = await dealActor.connection!.getBriefReady();
+        if (brief && !brief.dismissed) {
+          setBriefReady({ brief: brief.brief, generatedAt: brief.generatedAt });
+        }
+      } catch {}
+    };
+    checkBrief();
+
+    const unsub = dealActor.connection.on("briefReady", async () => {
+      try {
+        const brief = await dealActor.connection!.getBriefReady();
+        if (brief && !brief.dismissed) {
+          setBriefReady({ brief: brief.brief, generatedAt: brief.generatedAt });
+        }
+      } catch {}
+    });
+    return () => { unsub(); };
+  }, [dealActor.connection]);
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
   const health = getHealthColor(daysInStage, deal.stage);
@@ -314,6 +344,22 @@ export function DealDetailClient({
 
   function handlePrepCall() {
     if (!currentUser) return;
+
+    // If we have a prepared brief from the pipeline, show it immediately
+    if (briefReady) {
+      setCallBrief(briefReady.brief as CallBrief);
+      setCallBriefProvenPlays([]);
+      setCallPrepPhase("result");
+      setBriefReady(null);
+      // Dismiss the brief in the deal agent
+      try {
+        if (dealActor.connection) {
+          dealActor.connection.dismissBrief();
+        }
+      } catch {}
+      return;
+    }
+
     // Show context selector — start blank so user explicitly picks
     setPrepContext("");
     setPrepContextHighlight(-1);
@@ -614,9 +660,9 @@ export function DealDetailClient({
               disabled={callPrepPhase === "loading"}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
               style={{
-                background: callPrepPhase === "error" ? "rgba(199,75,59,0.1)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
-                color: callPrepPhase === "error" ? "#C74B3B" : callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
-                border: "1px solid " + (callPrepPhase === "error" ? "rgba(199,75,59,0.3)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+                background: briefReady ? "rgba(224,122,95,0.15)" : callPrepPhase === "error" ? "rgba(199,75,59,0.1)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: briefReady ? "#E07A5F" : callPrepPhase === "error" ? "#C74B3B" : callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (briefReady ? "rgba(224,122,95,0.4)" : callPrepPhase === "error" ? "rgba(199,75,59,0.3)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
               }}
             >
               {callPrepPhase === "loading" ? (
@@ -628,6 +674,11 @@ export function DealDetailClient({
                 <>
                   <AlertTriangle className="h-3.5 w-3.5" />
                   Failed — try again
+                </>
+              ) : briefReady ? (
+                <>
+                  <span style={{ color: "#E07A5F", fontSize: 14 }}>{"\u2726"}</span>
+                  Brief Ready
                 </>
               ) : (
                 <>
@@ -719,6 +770,8 @@ export function DealDetailClient({
           currentStage={deal.stage}
           stageEnteredAt={deal.stageEnteredAt?.toISOString() ?? null}
         />
+
+        <AgentIntervention dealId={deal.id} />
 
         <WorkflowTracker dealId={deal.id} />
       </div>

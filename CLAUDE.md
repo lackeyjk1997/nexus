@@ -242,3 +242,36 @@ apps/web/src/components/workflow-tracker.tsx → Real-time 5-step pipeline progr
 - `RIVET_PUBLIC_ENDPOINT` — Rivet Cloud public endpoint (production only)
 - `NEXT_PUBLIC_SITE_URL` — Absolute URL for server-side Rivet client creation (e.g. `https://nexus-web-plum-iota.vercel.app`)
 - `ANTHROPIC_API_KEY` — Used by transcript pipeline actor for Claude API calls
+
+## Session S11: Proactive Intelligence
+
+### What was added
+- Pipeline extracts ALL 9 signal types from transcripts (not just competitive)
+- Auto-generates call prep after transcript processing ("Brief Ready" on deal page)
+- Experiment attribution: pipeline checks if tested tactics were used in calls
+- Deal agent health checks with scheduling (runs after interactions)
+- Proactive intervention cards when health score drops below threshold
+- Demo reset destroys all Rivet actors for clean restart
+
+### Deal Agent State (expanded)
+- briefReady: auto-generated call prep waiting for rep
+- activeIntervention: proactive risk detection with diagnosis
+- healthScore: 0-100 compound score from multiple signals
+- lastHealthCheck: timestamp of last evaluation
+
+### New Actions
+- setBriefReady / dismissBrief / getBriefReady — manage auto-generated call prep
+- setIntervention / dismissIntervention — manage proactive risk alerts
+- runHealthCheck — evaluates compound risk from accumulated state, creates interventions
+
+### Pipeline Steps (expanded)
+1. Extract Actions (unchanged)
+2. Score MEDDPICC (unchanged)
+3. Detect ALL Signals (expanded from competitive-only to 9 signal types)
+4. Synthesize Learnings (unchanged)
+4b. Check Experiments (NEW — auto-attribute evidence to active experiments)
+5. Draft Email (unchanged)
+6. Finalize (expanded — auto-generates call prep, updates stakeholder engagement, adds risk signals)
+
+### New Files
+- `apps/web/src/components/agent-intervention.tsx` — Proactive intervention card with health score bar

@@ -15,7 +15,7 @@ const STEPS = [
   { key: "extract_actions", label: "Extract Actions" },
   { key: "score_meddpicc", label: "Score MEDDPICC" },
   { key: "detect_signals", label: "Detect Signals" },
-  { key: "synthesize_learnings", label: "Synthesize Learnings" },
+  { key: "synthesize_learnings", label: "Synthesize" },
   { key: "draft_email", label: "Draft Email" },
 ] as const;
 

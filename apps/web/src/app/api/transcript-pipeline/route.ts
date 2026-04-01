@@ -8,8 +8,9 @@ import {
   contacts,
   meddpiccFields,
   agentConfigs,
+  playbookIdeas,
 } from "@nexus/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { createClient } from "rivetkit/client";
 import type { Registry } from "@/actors/registry";
@@ -85,6 +86,23 @@ export async function POST(request: Request) {
       }
     : null;
 
+  // Fetch active experiments where the assigned AE is in the test group
+  let activeExperiments: Array<{ id: string; title: string; hypothesis: string | null; category: string | null; experimentEvidence: unknown }> = [];
+  if (deal.assignedAeId) {
+    activeExperiments = await db
+      .select({
+        id: playbookIdeas.id,
+        title: playbookIdeas.title,
+        hypothesis: playbookIdeas.hypothesis,
+        category: playbookIdeas.category,
+        experimentEvidence: playbookIdeas.experimentEvidence,
+      })
+      .from(playbookIdeas)
+      .where(
+        sql`${playbookIdeas.status} = 'testing' AND ${deal.assignedAeId} = ANY(${playbookIdeas.testGroup})`
+      );
+  }
+
   // Determine app URL for internal API calls from the actor
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -113,6 +131,13 @@ export async function POST(request: Request) {
     agentConfigInstructions: agentInstructions,
     assignedAeId: deal.assignedAeId || "",
     appUrl,
+    activeExperiments: activeExperiments.map((e) => ({
+      id: e.id,
+      title: e.title,
+      hypothesis: e.hypothesis || "",
+      category: e.category || "",
+      existingEvidence: e.experimentEvidence,
+    })),
   });
 
   return NextResponse.json({ status: "processing", dealId });

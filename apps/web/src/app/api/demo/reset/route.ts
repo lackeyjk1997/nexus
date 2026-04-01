@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
-import { playbookIdeas } from "@nexus/db";
+import { playbookIdeas, deals } from "@nexus/db";
 import { MEMBER_IDS, postDiscoveryEvidence, multiThreadedEvidence, twoDiscoEvidence, cisoEngagementEvidence, complianceDiscoveryEvidence, securityDocEvidence } from "@nexus/db/seed-data/playbook-evidence";
 import { getBaseExperiments } from "@nexus/db/seed-data/playbook-experiments";
+import { createClient } from "rivetkit/client";
+import type { Registry } from "@/actors/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +93,28 @@ export async function POST() {
       ) sub
       WHERE observation_clusters.id = sub.cluster_id
     `);
+
+    // 8. Destroy all Rivet actors for a clean demo start
+    try {
+      const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
+      const rivetClient = createClient<Registry>(rivetEndpoint);
+
+      const allDeals = await db
+        .select({ id: deals.id })
+        .from(deals);
+
+      for (const deal of allDeals) {
+        try {
+          const dealActor = rivetClient.dealAgent.getOrCreate([deal.id]);
+          await dealActor.destroyActor();
+        } catch {
+          // Actor might not exist — that's fine
+        }
+      }
+    } catch (e) {
+      console.error("Failed to destroy Rivet actors during demo reset:", e);
+      // Non-fatal — actors will be recreated fresh
+    }
 
     return NextResponse.json({ success: true, message: "Demo data reset to clean state" });
   } catch (error) {

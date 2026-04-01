@@ -16,6 +16,22 @@ export interface InteractionMemory {
   feedback?: { rating?: number; comment?: string };
 }
 
+export interface BriefReady {
+  brief: unknown;
+  generatedAt: string;
+  context: string;
+  dismissed: boolean;
+}
+
+export interface ActiveIntervention {
+  type: 'stall_detected' | 'champion_disengaged' | 'meddpicc_gap' | 'competitive_threat' | 'stage_overdue';
+  title: string;
+  diagnosis: string;
+  recommendation: string;
+  detectedAt: string;
+  dismissed: boolean;
+}
+
 export interface DealAgentState {
   dealId: string;
   dealName: string;
@@ -55,6 +71,16 @@ export interface DealAgentState {
   currentStage: string;
   stageEnteredAt: string | null;
   lastCustomerResponseDate: string | null;
+
+  // Prepared brief (auto-generated after transcript processing)
+  briefReady: BriefReady | null;
+
+  // Proactive interventions
+  activeIntervention: ActiveIntervention | null;
+
+  // Health check tracking
+  lastHealthCheck: string | null;
+  healthScore: number;
 }
 
 // ── Helper: format memory for prompt injection ──
@@ -145,6 +171,10 @@ const DEFAULT_STATE: DealAgentState = {
   currentStage: "",
   stageEnteredAt: null,
   lastCustomerResponseDate: null,
+  briefReady: null,
+  activeIntervention: null,
+  lastHealthCheck: null,
+  healthScore: 100,
 };
 
 export const dealAgent = actor({
@@ -161,9 +191,10 @@ export const dealAgent = actor({
     }>(),
     interventionReady: event<{
       type: string;
-      summary: string;
-      recommendation: string;
+      title: string;
     }>(),
+    briefReady: event<{ generatedAt: string }>(),
+    healthChecked: event<{ score: number; issues: string[] }>(),
   },
 
   actions: {
@@ -186,10 +217,17 @@ export const dealAgent = actor({
       c.state.stageEnteredAt = data.stageEnteredAt;
       c.state.initialized = true;
       c.state.daysSinceCreation = 0;
+
+      // Schedule first health check after 30 seconds (demo timing)
+      c.schedule.after(30000, "runHealthCheck");
     },
 
     getState: (c) => {
       return c.state;
+    },
+
+    destroyActor: (c) => {
+      c.destroy();
     },
 
     recordInteraction: (
@@ -219,6 +257,12 @@ export const dealAgent = actor({
         type: interaction.type,
         summary: interaction.summary,
       });
+
+      // Re-schedule health check if not recently run (10 sec delay for demo)
+      if (!c.state.lastHealthCheck ||
+          Date.now() - new Date(c.state.lastHealthCheck).getTime() > 60000) {
+        c.schedule.after(10000, "runHealthCheck");
+      }
     },
 
     recordFeedback: (c, feedback: { rating: number; comment: string }) => {
@@ -344,6 +388,134 @@ export const dealAgent = actor({
       }
     ) => {
       c.broadcast("workflowProgress", event);
+    },
+
+    // ── Proactive Intelligence Actions ──
+
+    setBriefReady: (c, data: { brief: unknown; generatedAt: string; context: string }) => {
+      c.state.briefReady = { ...data, dismissed: false };
+      c.broadcast("briefReady", { generatedAt: data.generatedAt });
+    },
+
+    dismissBrief: (c) => {
+      if (c.state.briefReady) {
+        c.state.briefReady.dismissed = true;
+      }
+    },
+
+    getBriefReady: (c) => {
+      return c.state.briefReady;
+    },
+
+    setIntervention: (c, intervention: ActiveIntervention | null) => {
+      c.state.activeIntervention = intervention;
+      if (intervention) {
+        c.broadcast("interventionReady", {
+          type: intervention.type,
+          title: intervention.title,
+        });
+      }
+    },
+
+    dismissIntervention: (c) => {
+      if (c.state.activeIntervention) {
+        c.state.activeIntervention.dismissed = true;
+        c.state.interactionMemory.push({
+          date: new Date().toISOString().split("T")[0],
+          type: "feedback",
+          summary: `Dismissed intervention: ${c.state.activeIntervention.type}`,
+        });
+        if (c.state.interactionMemory.length > 50) {
+          c.state.interactionMemory = c.state.interactionMemory.slice(-50);
+        }
+        c.state.totalInteractions++;
+      }
+    },
+
+    runHealthCheck: (c) => {
+      c.state.lastHealthCheck = new Date().toISOString();
+
+      let score = 100;
+      const issues: string[] = [];
+
+      // Check days since last customer interaction
+      if (c.state.lastCustomerResponseDate) {
+        const daysSilent = Math.floor(
+          (Date.now() - new Date(c.state.lastCustomerResponseDate).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (daysSilent > 14) { score -= 30; issues.push(`No customer response in ${daysSilent} days`); }
+        else if (daysSilent > 7) { score -= 15; issues.push(`Customer silent for ${daysSilent} days`); }
+      } else if (c.state.totalInteractions > 2) {
+        score -= 20;
+        issues.push("No customer response date tracked");
+      }
+
+      // Check risk signals
+      score -= c.state.riskSignals.length * 10;
+      for (const signal of c.state.riskSignals) {
+        issues.push(`Risk: ${signal}`);
+      }
+
+      // Check MEDDPICC gaps from learnings
+      const gapLearnings = c.state.learnings.filter(l => {
+        const lower = l.toLowerCase();
+        return lower.includes("gap") || lower.includes("missing") ||
+          lower.includes("needs engagement") || lower.includes("not been engaged");
+      });
+      if (gapLearnings.length > 0) { score -= gapLearnings.length * 5; }
+
+      // Check competitive pressure
+      if (c.state.competitiveContext.competitors.length > 0) {
+        score -= 10;
+        if (c.state.competitiveContext.recentMentions.length >= 3) {
+          score -= 10;
+          issues.push("High competitive pressure — multiple mentions");
+        }
+      }
+
+      // Check stage age
+      if (c.state.stageEnteredAt) {
+        const daysInStage = Math.floor(
+          (Date.now() - new Date(c.state.stageEnteredAt).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const stageThresholds: Record<string, number> = {
+          new_lead: 7, qualified: 14, discovery: 21, technical_validation: 28,
+          proposal: 14, negotiation: 21, closing: 14,
+        };
+        const threshold = stageThresholds[c.state.currentStage] || 21;
+        if (daysInStage > threshold * 1.5) {
+          score -= 15;
+          issues.push(`In ${c.state.currentStage.replace(/_/g, " ")} for ${daysInStage} days (avg: ${threshold})`);
+        }
+      }
+
+      c.state.healthScore = Math.max(0, Math.min(100, score));
+
+      c.broadcast("healthChecked", { score: c.state.healthScore, issues });
+
+      // Create intervention if health is low and no active undismissed intervention
+      if (score < 60 && (!c.state.activeIntervention || c.state.activeIntervention.dismissed)) {
+        const primaryIssue = issues[0] || "Multiple risk factors detected";
+        const interventionType: ActiveIntervention["type"] =
+          c.state.riskSignals.some(s => s.includes("blocker")) ? "competitive_threat"
+          : issues.some(i => i.includes("No customer response") || i.includes("Customer silent")) ? "stall_detected"
+          : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
+          : "meddpicc_gap";
+
+        c.state.activeIntervention = {
+          type: interventionType,
+          title: primaryIssue,
+          diagnosis: issues.join(". "),
+          recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
+          detectedAt: new Date().toISOString(),
+          dismissed: false,
+        };
+
+        c.broadcast("interventionReady", {
+          type: interventionType,
+          title: primaryIssue,
+        });
+      }
     },
   },
 });

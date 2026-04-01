@@ -3,6 +3,14 @@ import { workflow } from "rivetkit/workflow";
 
 // ── Types ──
 
+interface ActiveExperiment {
+  id: string;
+  title: string;
+  hypothesis: string;
+  category: string;
+  existingEvidence: unknown;
+}
+
 interface PipelineInput {
   dealId: string;
   transcriptText: string;
@@ -15,6 +23,7 @@ interface PipelineInput {
   agentConfigInstructions: string;
   assignedAeId: string;
   appUrl: string;
+  activeExperiments?: ActiveExperiment[];
 }
 
 interface ActionItem {
@@ -29,16 +38,32 @@ interface MeddpiccUpdate {
   delta: number;
 }
 
-interface CompetitiveMention {
-  competitor: string;
+interface DetectedSignal {
+  type: string;
+  content: string;
   context: string;
-  sentiment: string;
+  urgency: string;
+  source_speaker: string;
+  quote: string;
 }
 
 interface StakeholderInsight {
   name: string;
+  title?: string;
   sentiment: string;
-  keyQuotes: string[];
+  engagement: string;
+  keyPriorities: string[];
+  concerns: string[];
+  notableQuotes: string[];
+}
+
+interface ExperimentAttribution {
+  experimentId: string;
+  evidenceFound: boolean;
+  tacticUsed: boolean;
+  evidence: string;
+  customerResponse: string;
+  sentiment: string;
 }
 
 export interface TranscriptPipelineState {
@@ -50,10 +75,11 @@ export interface TranscriptPipelineState {
   error: string | null;
   actionItems: ActionItem[];
   meddpiccUpdates: Record<string, MeddpiccUpdate>;
-  competitiveMentions: CompetitiveMention[];
+  detectedSignals: DetectedSignal[];
   stakeholderInsights: StakeholderInsight[];
   newLearnings: string[];
   followUpEmail: { subject: string; body: string } | null;
+  experimentAttributions: ExperimentAttribution[];
 }
 
 // ── Claude API helper ──
@@ -111,10 +137,11 @@ export const transcriptPipeline = actor({
     error: null as string | null,
     actionItems: [] as ActionItem[],
     meddpiccUpdates: {} as Record<string, MeddpiccUpdate>,
-    competitiveMentions: [] as CompetitiveMention[],
+    detectedSignals: [] as DetectedSignal[],
     stakeholderInsights: [] as StakeholderInsight[],
     newLearnings: [] as string[],
     followUpEmail: null as { subject: string; body: string } | null,
+    experimentAttributions: [] as ExperimentAttribution[],
   },
 
   queues: {
@@ -144,10 +171,11 @@ export const transcriptPipeline = actor({
         loopCtx.state.error = null;
         loopCtx.state.actionItems = [];
         loopCtx.state.meddpiccUpdates = {};
-        loopCtx.state.competitiveMentions = [];
+        loopCtx.state.detectedSignals = [];
         loopCtx.state.stakeholderInsights = [];
         loopCtx.state.newLearnings = [];
         loopCtx.state.followUpEmail = null;
+        loopCtx.state.experimentAttributions = [];
       });
 
       try {
@@ -233,7 +261,7 @@ ${input.transcriptText.slice(0, 15000)}`
           });
         }
 
-        // STEP 3: Detect competitive mentions + stakeholder sentiment
+        // STEP 3: Detect ALL signal types + stakeholder sentiment
         const signals = await loopCtx.step("detect-signals", async () => {
           loopCtx.state.currentStep = "detect_signals";
           await getDealActor().workflowProgress({ step: "detect_signals", status: "running" });
@@ -243,57 +271,92 @@ ${input.transcriptText.slice(0, 15000)}`
             .join("; ");
 
           const raw = await callClaude(
-            "You are a sales intelligence analyst. Extract competitive mentions and per-stakeholder sentiment from the call. Return valid JSON only.",
-            `Analyze this transcript for competitive intelligence and stakeholder dynamics.
+            `You are analyzing a sales call transcript for a deal in the ${input.vertical} vertical. Extract every meaningful signal from this conversation.
 
-Known contacts: ${contactsCtx || "None specified"}
-Deal: ${input.dealName} at ${input.companyName} (${input.vertical})
+For each signal found, classify it into exactly one of these types:
+- competitive_intel: Any mention of competitors, competitive positioning, pricing comparisons, feature comparisons
+- process_friction: Customer frustration with timelines, processes, approvals, security reviews, implementation queues, anything slowing the deal
+- deal_blocker: Explicit blockers stated by the customer — budget freezes, org changes, priority shifts, missing requirements
+- content_gap: Customer asks a question the sales rep can't answer, or requests documentation/materials that don't exist
+- win_pattern: Something the rep did that visibly moved the deal forward — a tactic, framing, demo approach that resonated
+- field_intelligence: Market trends, industry shifts, regulatory changes mentioned by the customer
+- process_innovation: Customer suggests or describes a better way to do something in the sales process
+
+Also extract per-stakeholder sentiment:
+For each person who spoke, assess their sentiment (positive/neutral/negative/cautious), engagement level (high/medium/low), and list their key concerns or priorities.
 
 Return JSON:
 {
-  "competitiveMentions": [{ "competitor": "name", "context": "what was said", "sentiment": "positive|neutral|negative" }],
-  "stakeholderInsights": [{ "name": "person name", "sentiment": "champion|supporter|neutral|skeptic|blocker", "keyQuotes": ["quote1"] }]
+  "signals": [
+    {
+      "type": "competitive_intel | process_friction | deal_blocker | content_gap | win_pattern | field_intelligence | process_innovation",
+      "content": "What was said or implied",
+      "context": "The surrounding conversation context",
+      "urgency": "low | medium | high",
+      "source_speaker": "Name of person who said it",
+      "quote": "Direct quote if available (keep under 30 words)"
+    }
+  ],
+  "stakeholderInsights": [
+    {
+      "name": "Person name",
+      "title": "Their role/title if mentioned",
+      "sentiment": "positive | neutral | negative | cautious",
+      "engagement": "high | medium | low",
+      "keyPriorities": ["priority 1", "priority 2"],
+      "concerns": ["concern 1"],
+      "notableQuotes": ["short quote"]
+    }
+  ]
 }
+
+Only include signals where there is clear evidence in the transcript. Do not invent or infer signals that aren't supported by what was said.`,
+            `Analyze this transcript for ${input.dealName} at ${input.companyName} (${input.vertical}).
+
+Known contacts: ${contactsCtx || "None specified"}
 
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 15000)}`
           );
           const parsed = parseJSON<{
-            competitiveMentions: CompetitiveMention[];
+            signals: DetectedSignal[];
             stakeholderInsights: StakeholderInsight[];
-          }>(raw, { competitiveMentions: [], stakeholderInsights: [] });
+          }>(raw, { signals: [], stakeholderInsights: [] });
 
-          loopCtx.state.competitiveMentions = parsed.competitiveMentions;
+          loopCtx.state.detectedSignals = parsed.signals;
           loopCtx.state.stakeholderInsights = parsed.stakeholderInsights;
 
           await getDealActor().workflowProgress({
             step: "detect_signals",
             status: "complete",
-            details: `${parsed.competitiveMentions.length} competitive mentions, ${parsed.stakeholderInsights.length} stakeholders analyzed`,
+            details: `${parsed.signals.length} signals, ${parsed.stakeholderInsights.length} stakeholders`,
           });
           return parsed;
         });
 
-        // Create observations from competitive mentions
-        if (signals.competitiveMentions.length > 0) {
+        // Create observations for ALL detected signals
+        if (signals.signals.length > 0) {
           await loopCtx.step("create-observations", async () => {
-            for (const mention of signals.competitiveMentions) {
+            for (const signal of signals.signals) {
               try {
                 await fetch(`${input.appUrl}/api/observations`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    rawInput: `Competitive mention from transcript: ${mention.competitor} — ${mention.context}`,
+                    rawInput: `[From transcript] ${signal.content}`,
                     context: {
                       page: "pipeline",
                       dealId: input.dealId,
                       trigger: "transcript_pipeline",
+                      signalType: signal.type,
+                      urgency: signal.urgency,
+                      sourceSpeaker: signal.source_speaker,
                     },
                     observerId: input.assignedAeId,
                   }),
                 });
               } catch (e) {
-                console.error("Failed to create observation:", e);
+                console.error(`Failed to create observation for signal: ${signal.type}`, e);
               }
             }
           });
@@ -310,7 +373,7 @@ ${input.transcriptText.slice(0, 15000)}`
 
 Action items found: ${JSON.stringify(actions)}
 MEDDPICC updates: ${JSON.stringify(meddpicc)}
-Competitive mentions: ${JSON.stringify(signals.competitiveMentions)}
+Signals detected: ${JSON.stringify(signals.signals)}
 Stakeholder insights: ${JSON.stringify(signals.stakeholderInsights)}
 
 Return JSON: { "learnings": ["concise actionable learning statement 1", "learning 2", ...] }
@@ -331,8 +394,84 @@ ${input.transcriptText.slice(0, 8000)}`
           return parsed.learnings;
         });
 
+        // STEP 4b: Check active experiments for attribution
+        const experiments = input.activeExperiments || [];
+        if (experiments.length > 0) {
+          await loopCtx.step("check-experiments", async () => {
+            loopCtx.state.currentStep = "check_experiments";
+
+            const raw = await callClaude(
+              `You are checking whether a sales call transcript contains evidence relevant to active A/B experiments.
+
+Active experiments:
+${experiments.map((e) => `- "${e.title}" (ID: ${e.id}): ${e.hypothesis} (Category: ${e.category})`).join("\n")}
+
+Analyze the transcript and determine:
+1. Did the rep use any of the tactics described in the experiment hypotheses?
+2. What specific evidence supports or contradicts the hypothesis?
+3. What was the customer's response to the tactic (if used)?
+
+Return JSON:
+{
+  "attributions": [
+    {
+      "experimentId": "uuid",
+      "evidenceFound": true,
+      "tacticUsed": true,
+      "evidence": "Description of what happened in the call",
+      "customerResponse": "How the customer reacted",
+      "sentiment": "positive | neutral | negative"
+    }
+  ]
+}
+
+Only include experiments where you found clear evidence. Do not guess.`,
+              `Analyze this transcript for experiment evidence.
+
+TRANSCRIPT:
+${input.transcriptText.slice(0, 12000)}`
+            );
+            const parsed = parseJSON<{ attributions: ExperimentAttribution[] }>(raw, { attributions: [] });
+            loopCtx.state.experimentAttributions = parsed.attributions;
+
+            // Update experiments with new evidence
+            for (const attr of parsed.attributions) {
+              if (!attr.evidenceFound) continue;
+              try {
+                const currentExp = experiments.find((e) => e.id === attr.experimentId);
+                if (!currentExp) continue;
+
+                const existingEvidence = (currentExp.existingEvidence as Array<unknown>) || [];
+                const newEvidence = [
+                  ...existingEvidence,
+                  {
+                    dealId: input.dealId,
+                    dealName: input.dealName,
+                    date: new Date().toISOString(),
+                    source: "transcript_analysis",
+                    tacticUsed: attr.tacticUsed,
+                    evidence: attr.evidence,
+                    customerResponse: attr.customerResponse,
+                    sentiment: attr.sentiment,
+                  },
+                ];
+
+                await fetch(`${input.appUrl}/api/playbook/ideas/${attr.experimentId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    experiment_evidence: newEvidence,
+                  }),
+                });
+              } catch (e) {
+                console.error(`Failed to update experiment ${attr.experimentId}:`, e);
+              }
+            }
+          });
+        }
+
         // STEP 5: Draft follow-up email
-        const email = await loopCtx.step("draft-email", async () => {
+        await loopCtx.step("draft-email", async () => {
           loopCtx.state.currentStep = "draft_email";
           await getDealActor().workflowProgress({ step: "draft_email", status: "running" });
 
@@ -358,10 +497,9 @@ Keep it professional, concise, and reference specific commitments from the call.
             status: "complete",
             details: "Email draft ready",
           });
-          return parsed;
         });
 
-        // ALL STEPS COMPLETE — update the deal agent with accumulated intelligence
+        // ALL STEPS COMPLETE — finalize and update the deal agent
         await loopCtx.step("finalize", async () => {
           loopCtx.state.status = "complete";
           loopCtx.state.completedAt = new Date().toISOString();
@@ -369,17 +507,70 @@ Keep it professional, concise, and reference specific commitments from the call.
           const dealActor = getDealActor();
           await dealActor.recordInteraction({
             type: "transcript_analysis",
-            summary: `Analyzed call transcript: ${actions.length} action items, ${updatedFields.length} MEDDPICC updates, ${signals.competitiveMentions.length} competitive mentions`,
+            summary: `Analyzed call transcript: ${actions.length} action items, ${updatedFields.length} MEDDPICC updates, ${signals.signals.length} signals detected`,
             insights: synthesis,
           });
 
           await dealActor.updateLearnings(synthesis);
 
-          for (const mention of signals.competitiveMentions) {
+          // Update competitive intel from all competitive mentions
+          const competitiveMentions = signals.signals.filter((s) => s.type === "competitive_intel");
+          for (const mention of competitiveMentions) {
             await dealActor.addCompetitiveIntel({
-              competitor: mention.competitor,
-              context: mention.context,
+              competitor: mention.source_speaker || "Unknown",
+              context: mention.content,
             });
+          }
+
+          // Add risk signals from deal blockers and high-urgency process friction
+          const riskSignals = signals.signals.filter(
+            (s) => s.type === "deal_blocker" || (s.type === "process_friction" && s.urgency === "high")
+          );
+          for (const risk of riskSignals) {
+            await dealActor.addRiskSignal(
+              risk.type === "deal_blocker" ? "blocker_detected" : "process_friction",
+              risk.content
+            );
+          }
+
+          // Record stakeholder engagement in deal agent
+          for (const stakeholder of signals.stakeholderInsights) {
+            const matchedContact = input.existingContacts.find(
+              (c) =>
+                c.name.toLowerCase().includes(stakeholder.name.toLowerCase()) ||
+                stakeholder.name.toLowerCase().includes(c.name.split(" ")[0].toLowerCase())
+            );
+            if (matchedContact) {
+              await dealActor.recordInteraction({
+                type: "observation",
+                summary: `${stakeholder.name}: sentiment ${stakeholder.sentiment}, engagement ${stakeholder.engagement}. Priorities: ${stakeholder.keyPriorities.join(", ")}`,
+              });
+            }
+          }
+
+          // Auto-generate next call prep
+          try {
+            const prepResponse = await fetch(`${input.appUrl}/api/agent/call-prep`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                dealId: input.dealId,
+                memberId: input.assignedAeId,
+                prepContext: "follow_up",
+                autoGenerated: true,
+              }),
+            });
+
+            if (prepResponse.ok) {
+              const briefData = await prepResponse.json();
+              await dealActor.setBriefReady({
+                brief: briefData.brief,
+                generatedAt: new Date().toISOString(),
+                context: "post_transcript_analysis",
+              });
+            }
+          } catch (e) {
+            console.error("Failed to auto-generate call prep:", e);
           }
         });
       } catch (error) {
