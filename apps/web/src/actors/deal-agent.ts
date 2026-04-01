@@ -28,12 +28,21 @@ export interface BriefReady {
   dismissed: boolean;
 }
 
+export interface InterventionAction {
+  type: 'update_field';
+  field: string;              // Deal field: 'close_date', 'stage', 'win_probability'
+  currentValue: string;
+  suggestedValue: string;
+  displayLabel: string;       // Human label: "Close Date", "Stage", "Win Probability"
+}
+
 export interface ActiveIntervention {
-  type: 'stall_detected' | 'champion_disengaged' | 'meddpicc_gap' | 'competitive_threat' | 'stage_overdue';
+  type: string;               // 'timeline_risk', 'stall_detected', 'stage_advancement', etc.
   title: string;
   diagnosis: string;
-  recommendation: string;
-  detectedAt: string;
+  recommendation?: string;    // Optional — kept for backward compat with old interventions
+  action?: InterventionAction; // Optional — some interventions are informational only
+  detectedAt?: string;
   dismissed: boolean;
 }
 
@@ -91,6 +100,7 @@ export interface DealAgentState {
   currentStage: string;
   stageEnteredAt: string | null;
   lastCustomerResponseDate: string | null;
+  closeDate: string | null;
 
   // Prepared brief (auto-generated after transcript processing)
   briefReady: BriefReady | null;
@@ -210,6 +220,7 @@ const DEFAULT_STATE: DealAgentState = {
   currentStage: "",
   stageEnteredAt: null,
   lastCustomerResponseDate: null,
+  closeDate: null,
   briefReady: null,
   activeIntervention: null,
   lastHealthCheck: null,
@@ -250,6 +261,7 @@ export const dealAgent = actor({
         vertical: string;
         currentStage: string;
         stageEnteredAt: string | null;
+        closeDate?: string | null;
       }
     ) => {
       c.state.dealId = data.dealId;
@@ -258,6 +270,7 @@ export const dealAgent = actor({
       c.state.vertical = data.vertical;
       c.state.currentStage = data.currentStage;
       c.state.stageEnteredAt = data.stageEnteredAt;
+      c.state.closeDate = data.closeDate ?? null;
       c.state.initialized = true;
       c.state.daysSinceCreation = 0;
 
@@ -596,26 +609,73 @@ export const dealAgent = actor({
 
       // Create intervention if health is low and no active undismissed intervention
       if (score < 60 && (!c.state.activeIntervention || c.state.activeIntervention.dismissed)) {
-        const primaryIssue = issues[0] || "Multiple risk factors detected";
-        const interventionType: ActiveIntervention["type"] =
-          c.state.riskSignals.some(s => s.includes("blocker")) ? "competitive_threat"
-          : issues.some(i => i.includes("No customer response") || i.includes("Customer silent")) ? "stall_detected"
-          : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
-          : "meddpicc_gap";
+        // Demo constraint: limit timeline_risk to NordicMed for controlled demo flow. Remove for production.
+        const isNordicMed = c.state.companyName?.toLowerCase().includes('nordicmed') ||
+                            c.state.dealName?.toLowerCase().includes('nordicmed');
 
-        c.state.activeIntervention = {
-          type: interventionType,
-          title: primaryIssue,
-          diagnosis: issues.join(". "),
-          recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
-          detectedAt: new Date().toISOString(),
-          dismissed: false,
-        };
+        if (isNordicMed) {
+          const hasProcessFriction = c.state.riskSignals?.some(s => {
+            const lower = s.toLowerCase();
+            return lower.includes('security') || lower.includes('review') ||
+              lower.includes('process_friction') || lower.includes('friction');
+          });
 
-        c.broadcast("interventionReady", {
-          type: interventionType,
-          title: primaryIssue,
-        });
+          if (hasProcessFriction && c.state.closeDate) {
+            const closeDate = new Date(c.state.closeDate + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const daysUntilClose = Math.round((closeDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+            if (daysUntilClose < 70) { // Less than 10 weeks out
+              // Recommended: today + 12 weeks (8 weeks security + 4 weeks pilot/approval buffer)
+              const recommended = new Date(today);
+              recommended.setDate(recommended.getDate() + 84);
+              const recommendedStr = recommended.toISOString().split('T')[0];
+
+              const closeDateDisplay = closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+              c.state.activeIntervention = {
+                type: 'timeline_risk',
+                title: 'Close Date at Risk',
+                diagnosis: `Dr. Larsson mentioned the security review has been running for 5 weeks with a typical timeline of 6-8 weeks. After security clears, you still need final technical validation and board approval. Your current close date of ${closeDateDisplay} may not leave enough runway.`,
+                action: {
+                  type: 'update_field',
+                  field: 'close_date',
+                  currentValue: c.state.closeDate,
+                  suggestedValue: recommendedStr,
+                  displayLabel: 'Close Date',
+                },
+                dismissed: false,
+              };
+
+              c.broadcast("interventionReady", {
+                type: 'timeline_risk',
+                title: 'Close Date at Risk',
+              });
+            }
+          }
+        } else {
+          // Generic health check intervention for non-NordicMed deals
+          const primaryIssue = issues[0] || "Multiple risk factors detected";
+          const interventionType =
+            c.state.riskSignals.some(s => s.includes("blocker")) ? "competitive_threat"
+            : issues.some(i => i.includes("No customer response") || i.includes("Customer silent")) ? "stall_detected"
+            : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
+            : "meddpicc_gap";
+
+          c.state.activeIntervention = {
+            type: interventionType,
+            title: primaryIssue,
+            diagnosis: issues.join(". "),
+            recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
+            dismissed: false,
+          };
+
+          c.broadcast("interventionReady", {
+            type: interventionType,
+            title: primaryIssue,
+          });
+        }
       }
     },
   },

@@ -13,6 +13,7 @@ interface AgentMemoryProps {
   vertical: string;
   currentStage: string;
   stageEnteredAt: string | null;
+  closeDate?: string | null;
 }
 
 export function AgentMemory({
@@ -22,6 +23,7 @@ export function AgentMemory({
   vertical,
   currentStage,
   stageEnteredAt,
+  closeDate,
 }: AgentMemoryProps) {
   const [expanded, setExpanded] = useState(false);
   const [agentState, setAgentState] = useState<DealAgentState | null>(null);
@@ -45,6 +47,7 @@ export function AgentMemory({
           vertical,
           currentStage,
           stageEnteredAt,
+          closeDate,
         });
         const updatedState = await actor.connection.getState();
         setAgentState(updatedState);
@@ -55,7 +58,7 @@ export function AgentMemory({
       console.log("Agent memory unavailable:", e);
       setError(true);
     }
-  }, [actor.connection, dealId, dealName, companyName, vertical, currentStage, stageEnteredAt]);
+  }, [actor.connection, dealId, dealName, companyName, vertical, currentStage, stageEnteredAt, closeDate]);
 
   useEffect(() => {
     initializeAgent();

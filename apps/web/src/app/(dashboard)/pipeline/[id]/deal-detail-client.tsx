@@ -281,6 +281,13 @@ export function DealDetailClient({
   const [meddpiccData, setMeddpiccData] = useState<Meddpicc>(meddpicc);
   const [meddpiccUpdatedFromPipeline, setMeddpiccUpdatedFromPipeline] = useState(false);
 
+  // Close date state (editable)
+  const [closeDate, setCloseDate] = useState<string>(
+    deal.closeDate ? new Date(deal.closeDate).toISOString().split("T")[0] : ""
+  );
+  const [isEditingCloseDate, setIsEditingCloseDate] = useState(false);
+  const [closeDateError, setCloseDateError] = useState("");
+
   // Email draft state
   const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
   const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
@@ -656,18 +663,68 @@ export function DealDetailClient({
                 </div>
               )}
 
-              {/* Close Date */}
-              {deal.closeDate && (
-                <div className="flex items-center gap-1.5">
+              {/* Close Date (editable) */}
+              {closeDate && (
+                <div className="flex items-center gap-1.5 group/close-date">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    Close{" "}
-                    {new Date(deal.closeDate).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
+                  {isEditingCloseDate ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        autoFocus
+                        defaultValue={closeDate}
+                        className="text-xs border-none outline-none bg-transparent p-0"
+                        style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif", width: 130 }}
+                        onBlur={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal && newVal !== closeDate) {
+                            setCloseDateError("");
+                            fetch(`/api/deals/${deal.id}/update`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ close_date: newVal }),
+                            }).then(res => {
+                              if (res.ok) {
+                                setCloseDate(newVal);
+                              } else {
+                                setCloseDateError("Failed to save");
+                                setTimeout(() => setCloseDateError(""), 3000);
+                              }
+                            }).catch(() => {
+                              setCloseDateError("Failed to save");
+                              setTimeout(() => setCloseDateError(""), 3000);
+                            });
+                          }
+                          setIsEditingCloseDate(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            setIsEditingCloseDate(false);
+                          } else if (e.key === "Enter") {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <span
+                      className="text-xs text-muted-foreground cursor-pointer rounded px-1 -mx-1 transition-colors hover:bg-[#F3EDE7] flex items-center gap-1"
+                      onClick={() => setIsEditingCloseDate(true)}
+                    >
+                      Close{" "}
+                      {new Date(closeDate + "T00:00:00").toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                      <svg className="h-2.5 w-2.5 opacity-0 group-hover/close-date:opacity-60 transition-opacity" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8.5 1.5L10.5 3.5M1 11L1.5 8.5L9.5 0.5L11.5 2.5L3.5 10.5L1 11Z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                  )}
+                  {closeDateError && (
+                    <span className="text-[10px] text-red-500">{closeDateError}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -790,9 +847,13 @@ export function DealDetailClient({
           vertical={deal.vertical}
           currentStage={deal.stage}
           stageEnteredAt={deal.stageEnteredAt?.toISOString() ?? null}
+          closeDate={closeDate || null}
         />
 
-        <AgentIntervention dealId={deal.id} />
+        <AgentIntervention
+          dealId={deal.id}
+          onCloseDateChange={(newDate) => setCloseDate(newDate)}
+        />
 
         <WorkflowTracker dealId={deal.id} />
       </div>
