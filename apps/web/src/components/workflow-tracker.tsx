@@ -117,6 +117,8 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
     return (
       <button
         onClick={() => setCollapsed(false)}
+        data-workflow-tracker
+        {...(allComplete ? { "data-workflow-complete": "" } : {})}
         className="w-full mt-3 flex items-center gap-2 px-3 py-2 rounded-lg transition-colors hover:bg-[#F3EDE7] text-left"
       >
         <span style={{ color: allComplete ? "#0C7489" : "#E07A5F", fontSize: 14 }}>
@@ -136,6 +138,8 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
   return (
     <div
       className="mt-3 bg-white rounded-xl overflow-hidden"
+      data-workflow-tracker
+      {...(allComplete ? { "data-workflow-complete": "" } : {})}
       style={{
         border: `1px solid ${allComplete ? "rgba(12,116,137,0.2)" : hasError ? "rgba(220,38,38,0.2)" : "rgba(224,122,95,0.2)"}`,
         boxShadow: "0 4px 24px rgba(107,79,57,0.08)",

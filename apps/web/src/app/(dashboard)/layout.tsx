@@ -2,6 +2,7 @@ import { PersonaProvider, type TeamMemberInfo } from "@/components/providers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { LayoutAgentBar } from "@/components/layout-agent-bar";
+import { DemoGuide } from "@/components/demo-guide";
 import { db } from "@/lib/db";
 import { teamMembers, supportFunctionMembers } from "@nexus/db";
 import type { Role } from "@nexus/shared";
@@ -63,6 +64,7 @@ export default async function DashboardLayout({
           </main>
         </div>
       </div>
+      <DemoGuide />
     </PersonaProvider>
   );
 }

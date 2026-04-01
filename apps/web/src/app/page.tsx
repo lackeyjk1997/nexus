@@ -25,6 +25,8 @@ export default function LandingPage() {
     setResetState("done");
     setTimeout(() => {
       localStorage.clear();
+      localStorage.setItem("demoGuideActive", "true");
+      localStorage.setItem("demoGuideStep", "0");
       router.push("/pipeline");
     }, DONE_DISPLAY);
   }, [router]);
@@ -35,7 +37,6 @@ export default function LandingPage() {
     setStepIndex(0);
     apiDoneRef.current = false;
 
-    // Fire API call
     fetch("/api/demo/reset", { method: "POST" })
       .then(() => {
         apiDoneRef.current = true;
@@ -44,14 +45,12 @@ export default function LandingPage() {
         apiDoneRef.current = true;
       });
 
-    // Step cycling — runs on timers independent of API
     let current = 0;
     const advanceStep = () => {
       current++;
       if (current < LOADING_STEPS.length) {
         setStepIndex(current);
         stepTimerRef.current = setTimeout(() => {
-          // After showing this step for STEP_DURATION, check if API is done
           if (apiDoneRef.current) {
             finishAndNavigate();
           } else {
@@ -59,7 +58,6 @@ export default function LandingPage() {
           }
         }, STEP_DURATION);
       } else {
-        // All steps shown — wait for API if not done yet
         const poll = () => {
           if (apiDoneRef.current) {
             finishAndNavigate();
@@ -67,15 +65,12 @@ export default function LandingPage() {
             stepTimerRef.current = setTimeout(poll, 200);
           }
         };
-        // Show last step for at least 500ms before checking
         stepTimerRef.current = setTimeout(poll, 500);
       }
     };
 
-    // Show first step for STEP_DURATION then advance
     stepTimerRef.current = setTimeout(() => {
       if (apiDoneRef.current) {
-        // API finished during first step — show it for a bit then finish
         setTimeout(finishAndNavigate, 500);
       } else {
         advanceStep();
@@ -83,22 +78,18 @@ export default function LandingPage() {
     }, STEP_DURATION);
   }, [resetState, finishAndNavigate]);
 
-  // Handle ?reset=true query param
   const autoResetRef = useRef(false);
   useEffect(() => {
     if (typeof window !== "undefined" && !autoResetRef.current) {
       const params = new URLSearchParams(window.location.search);
       if (params.get("reset") === "true") {
         autoResetRef.current = true;
-        // Clear URL without triggering Next.js navigation
         window.history.replaceState({}, document.title, "/");
-        // Delay runReset to next tick so replaceState settles
         setTimeout(() => runReset(), 50);
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
@@ -112,40 +103,31 @@ export default function LandingPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         background: "#FDFAF7",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "24px",
         fontFamily: "'DM Sans', sans-serif",
+        overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          background: "#FFFFFF",
-          maxWidth: 640,
-          width: "100%",
-          borderRadius: 16,
-          boxShadow: "0 8px 32px rgba(107,79,57,0.12)",
-          padding: "48px",
-        }}
-      >
+      <div style={{ maxWidth: 1200, width: "100%", padding: "0 32px" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 10,
-              marginBottom: 8,
+              marginBottom: 4,
             }}
           >
-            <span style={{ color: "#E07A5F", fontSize: 24 }}>✦</span>
+            <span style={{ color: "#E07A5F", fontSize: 22 }}>&#10022;</span>
             <h1
               style={{
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: 700,
                 color: "#3D3833",
                 margin: 0,
@@ -156,113 +138,286 @@ export default function LandingPage() {
           </div>
           <p
             style={{
-              fontSize: 14,
+              fontSize: 11,
               color: "#8A8078",
-              letterSpacing: "0.05em",
-              margin: 0,
+              letterSpacing: "0.08em",
+              margin: "0 0 2px 0",
+              textTransform: "uppercase",
             }}
           >
-            AI SALES ORCHESTRATION
+            AI Sales Orchestration
+          </p>
+          <p style={{ fontSize: 12, color: "#8A8078", margin: 0 }}>
+            Designed by an enterprise AE. Built entirely with Claude.
           </p>
         </div>
 
-        {/* Divider */}
+        {/* Release cards */}
         <div
           style={{
-            height: 1,
-            background: "rgba(0,0,0,0.06)",
-            marginBottom: 28,
-          }}
-        />
-
-        {/* What's New Banner */}
-        <div
-          style={{
-            background: "#F3EDE7",
-            borderTop: "2px solid #E07A5F",
-            borderRadius: 10,
-            padding: "16px 20px",
-            marginBottom: 28,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 16,
+            marginBottom: 22,
           }}
         >
-          <p
+          <div
             style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "#E07A5F",
-              margin: "0 0 8px 0",
+              background: "#FFFFFF",
+              border: "1px solid rgba(0,0,0,0.06)",
+              borderRadius: 12,
+              padding: "14px 18px",
+              boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
             }}
           >
-            What&apos;s New in Nexus
-          </p>
-          <p style={{ fontSize: 13.5, lineHeight: 1.65, color: "#3D3833", margin: 0 }}>
-            <strong>Playbook Intelligence</strong> — AEs propose process improvements from the field. Leadership approves A/B experiments with test and control groups. The system measures velocity, sentiment, and close rate with deal-level evidence. Proven methodologies graduate and automatically influence call prep across the org. The team gets smarter every quarter without anyone filling out a form.
-          </p>
+            <span
+              style={{
+                display: "inline-block",
+                background: "#E07A5F",
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: 10,
+                marginBottom: 8,
+                letterSpacing: "0.03em",
+              }}
+            >
+              New
+            </span>
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#3D3833",
+                margin: "0 0 6px 0",
+              }}
+            >
+              Persistent Deal Agents
+            </h3>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#8A8078",
+                margin: 0,
+              }}
+            >
+              Every deal gets its own AI agent that learns from every transcript,
+              remembers every interaction, and coordinates intelligence across
+              deals. Your 7th call prep knows everything from the first
+              6&nbsp;&mdash; without a single data point re-entered.
+            </p>
+          </div>
+          <div
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid rgba(0,0,0,0.06)",
+              borderRadius: 12,
+              padding: "14px 18px",
+              boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                background: "#E07A5F",
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: 10,
+                marginBottom: 8,
+                letterSpacing: "0.03em",
+              }}
+            >
+              New
+            </span>
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#3D3833",
+                margin: "0 0 6px 0",
+              }}
+            >
+              Smart Interventions
+            </h3>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#8A8078",
+                margin: 0,
+              }}
+            >
+              The agent caught a close date that doesn&apos;t match the
+              procurement timeline discussed on the last call. One click to fix
+              it. The agent prepares, the human decides.
+            </p>
+          </div>
         </div>
 
         {/* Thesis */}
-        <div style={{ fontSize: 15, lineHeight: 1.75, color: "#3D3833" }}>
-          <p style={{ marginBottom: 16 }}>
-            <strong>Your AEs don&apos;t have an information problem. They have a leverage problem.</strong>
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <h2
+            style={{
+              fontSize: 21,
+              fontWeight: 700,
+              color: "#3D3833",
+              margin: "0 0 10px 0",
+              lineHeight: 1.3,
+            }}
+          >
+            Your AEs don&apos;t have an information problem&nbsp;&mdash; they
+            have a time problem.
+          </h2>
+          <p
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.6,
+              color: "#3D3833",
+              margin: "0 auto 8px auto",
+              maxWidth: 900,
+            }}
+          >
+            Nexus puts AI agents alongside every deal to handle the repeatable
+            work&nbsp;&mdash; transcript analysis, MEDDPICC scoring, competitive
+            tracking, call prep&nbsp;&mdash; so your reps spend time selling,
+            not updating Salesforce.
           </p>
-          <p style={{ marginBottom: 16 }}>
-            They&apos;re doing the same discovery call 200 times a year, and the difference between a rep who closes at 35% and one who closes at 20% is usually one insight they picked up three deals ago — an objection they learned to preempt, a stakeholder they learned to engage earlier, a demo format that landed better.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            That insight lives in their head. It helps them. It doesn&apos;t help anyone else.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            Meanwhile, leadership knows the playbook needs to evolve, but the feedback loop is broken. Reps share what&apos;s working in Slack. It gets a few emoji reactions. Nobody measures it. Nobody scales it. Next quarter, new hires make the same mistakes the team already solved.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            <strong>Nexus closes the loop.</strong>
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            When Sarah preps for a call, the brief doesn&apos;t just pull deal context — it pulls the team&apos;s proven playbook. If an experiment showed that building a prototype live during discovery accelerated deals by 40% across nine tested deals, Sarah&apos;s brief tells her to do exactly that, with specific guidance for this prospect&apos;s pain points. She didn&apos;t go searching. The org&apos;s best thinking found her.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            When she notices something on a call — a competitor offering free pilots, a procurement process that&apos;s changed — she types one sentence. It gets classified, tied to active deals, grouped with similar signals from other reps, sized against pipeline impact, and routed to the team that can act on it. What used to evaporate now compounds.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            When a rep notices something working — building a prototype live during discovery calls instead of just talking about capabilities — she types one sentence. Leadership doesn&apos;t just take her word for it. They turn it into an experiment: two AEs test the new approach for 30 days while the rest run standard discovery. The system tracks velocity, sentiment, and close rate with deal-level evidence. Transcript excerpts show the prospect saying &ldquo;this is the first vendor who actually showed us what it would look like.&rdquo; When it proves out across nine deals, leadership scales it to the whole team with one click. When it doesn&apos;t, they archive it with learnings and move on. The playbook evolves because reps are selling, not because someone updated a wiki.
-          </p>
-          <p style={{ marginBottom: 16 }}>
-            <strong>The system improves because your team is doing their job — not because you asked them to do more.</strong>
-          </p>
-          <p style={{ marginBottom: 24, fontSize: 15.5 }}>
-            Every observation feeds Intelligence. Every experiment feeds the Playbook. Every proven play feeds Call Prep. The SA sharpens the AE. The AE gives leadership real signal. Leadership tests and scales what works. It&apos;s a flywheel, not a dashboard.
+          <p
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.6,
+              color: "#3D3833",
+              margin: "0 auto",
+              maxWidth: 900,
+            }}
+          >
+            AEs get time back. Leadership gets visibility into what&apos;s
+            actually happening in the field&nbsp;&mdash; without asking.
           </p>
         </div>
 
-        {/* Divider */}
+        {/* Pillars */}
         <div
           style={{
-            height: 1,
-            background: "rgba(0,0,0,0.06)",
-            margin: "28px 0",
-          }}
-        />
-
-        {/* Demo context */}
-        <p
-          style={{
-            fontSize: 13.5,
-            color: "#8A8078",
-            lineHeight: 1.6,
-            textAlign: "center",
-            marginBottom: 28,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 24,
+            marginBottom: 22,
+            borderTop: "1px solid rgba(0,0,0,0.06)",
+            paddingTop: 20,
           }}
         >
-          You&apos;ll enter as{" "}
-          <strong style={{ color: "#3D3833" }}>Sarah Chen</strong>, Account
-          Executive selling Claude to Healthcare and Financial Services
-          accounts. The guided tour walks you through the core loop: field ideas → experiments → evidence → scaling → deal prep. Use the user switcher (top right) to experience the system as a VP of Sales.
+          <div>
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#3D3833",
+                margin: "0 0 6px 0",
+              }}
+            >
+              One Conversation. Zero Updates.
+            </h3>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#8A8078",
+                margin: 0,
+              }}
+            >
+              One call. The pipeline extracts action items, scores MEDDPICC,
+              detects competitive signals, synthesizes learnings, and drafts a
+              follow-up&nbsp;&mdash; all in parallel. No forms. No CRM tabs. No
+              data entry.
+            </p>
+          </div>
+          <div>
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#3D3833",
+                margin: "0 0 6px 0",
+              }}
+            >
+              Capture What Evaporates.
+            </h3>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#8A8078",
+                margin: 0,
+              }}
+            >
+              Competitive intel, process friction, product gaps&nbsp;&mdash; the
+              signal buried in customer conversations and team threads that never
+              reaches the people who can act on it. Nexus captures it, clusters
+              it by ARR impact, routes it to Enablement or Product, and tracks it
+              to resolution.
+            </p>
+          </div>
+          <div>
+            <h3
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#3D3833",
+                margin: "0 0 6px 0",
+              }}
+            >
+              Agents That Anticipate.
+            </h3>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#8A8078",
+                margin: 0,
+              }}
+            >
+              Deal agents don&apos;t wait. They flag timeline risks, surface
+              cross-deal patterns, and prepare call briefs before the rep opens
+              the app. One click to act on what they find.
+            </p>
+          </div>
+        </div>
+
+        {/* Context line */}
+        <p
+          style={{
+            fontSize: 12,
+            color: "#8A8078",
+            fontStyle: "italic",
+            textAlign: "center",
+            margin: "0 0 8px 0",
+          }}
+        >
+          You&apos;ll trigger each step during this demo to see the system in
+          real time. In deployment, these processes run automatically as calls
+          end.
+        </p>
+
+        {/* Footer line */}
+        <p
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#8A8078",
+            textAlign: "center",
+            margin: "0 0 16px 0",
+          }}
+        >
+          Built for the enterprise sales motion Anthropic is scaling right now.
         </p>
 
         {/* Enter button */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ textAlign: "center" }}>
           <button
             onClick={runReset}
             disabled={isActive}
@@ -274,9 +429,9 @@ export default function LandingPage() {
               minWidth: 240,
               background: isActive ? "#F5F3EF" : "#E07A5F",
               color: isDone ? "#4A9E6B" : isLoading ? "#8A8078" : "#FFFFFF",
-              padding: "14px 36px",
+              padding: "12px 36px",
               borderRadius: 8,
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
               cursor: isActive ? "not-allowed" : "pointer",
@@ -292,7 +447,7 @@ export default function LandingPage() {
           >
             {isDone ? (
               <>
-                <span style={{ color: "#4A9E6B", fontSize: 18 }}>✓</span>
+                <span style={{ color: "#4A9E6B", fontSize: 18 }}>&#10003;</span>
                 <span style={{ color: "#3D3833" }}>Demo Ready</span>
               </>
             ) : isLoading ? (
@@ -311,41 +466,10 @@ export default function LandingPage() {
                 {LOADING_STEPS[stepIndex]}
               </>
             ) : (
-              "Enter Demo →"
+              "Enter Demo \u2192"
             )}
           </button>
           <style>{`@keyframes nexus-spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-
-        {/* Footer */}
-        <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: 13, color: "#8A8078", margin: "0 0 4px 0" }}>
-            Built by Jeff Lackey
-          </p>
-          <p style={{ fontSize: 12, color: "#8A8078", margin: 0 }}>
-            <a
-              href="mailto:jeff.lackey97@gmail.com"
-              style={{ color: "#8A8078", textDecoration: "none" }}
-            >
-              jeff.lackey97@gmail.com
-            </a>
-            {" · "}
-            <a
-              href="tel:6028450394"
-              style={{ color: "#8A8078", textDecoration: "none" }}
-            >
-              (602) 845-0394
-            </a>
-            {" · "}
-            <a
-              href="https://linkedin.com/in/jeffreylackey"
-              target="_blank"
-              rel="noopener"
-              style={{ color: "#8A8078", textDecoration: "none" }}
-            >
-              LinkedIn
-            </a>
-          </p>
         </div>
       </div>
     </div>
