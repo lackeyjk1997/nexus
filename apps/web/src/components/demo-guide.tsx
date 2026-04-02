@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { X, Check, Compass } from "lucide-react";
+import { X, Check, Compass, Copy } from "lucide-react";
 
 const NORDICMED_DEAL_ID = "3848a398-1850-4a8c-a44e-46aec01b6a24";
 const MEDVISTA_DEAL_ID = "c0069b95-02dc-46db-bd04-aac69099ecfb";
@@ -15,6 +15,8 @@ type StepDef = {
   urlMatch?: string;
   /** For element detection: CSS selector to poll for */
   selector?: string;
+  /** Copyable example text (for step 9) */
+  exampleText?: string;
 };
 
 const STEPS: StepDef[] = [
@@ -43,15 +45,15 @@ const STEPS: StepDef[] = [
     detection: "manual",
   },
   {
-    title: "Handle the intervention",
-    instruction:
-      "The agent detected a timeline risk. Review and update the close date",
-    detection: "manual",
-  },
-  {
     title: "Prep for the next call",
     instruction:
       "Click Prep Call, select a meeting type, choose stakeholders, and generate a brief",
+    detection: "manual",
+  },
+  {
+    title: "Handle the intervention",
+    instruction:
+      "The agent detected a timeline risk \u2014 review and update the close date",
     detection: "manual",
   },
   {
@@ -67,9 +69,48 @@ const STEPS: StepDef[] = [
     selector: "[data-workflow-tracker]",
   },
   {
-    title: "Watch cross-deal intelligence",
+    title: "Submit a process improvement",
     instruction:
-      "The agent is connecting signals across both deals \u2014 check Agent Memory for cross-deal patterns",
+      "While the pipeline processes, type a process improvement in the agent bar:",
+    detection: "manual",
+    exampleText:
+      "Send technical leaders a working product built by Claude Code within 3 hours of the meeting ending",
+  },
+  {
+    title: "Review cross-deal intelligence",
+    instruction:
+      "Click the Agent Memory bar to see cross-deal patterns pulled from NordicMed",
+    detection: "manual",
+  },
+  {
+    title: "Explore the Playbook",
+    instruction:
+      "Click Playbook in the sidebar to see experiments and proven plays",
+    detection: "url",
+    urlMatch: "/playbook",
+  },
+  {
+    title: "Approve new experiments",
+    instruction:
+      "Switch to Marcus Thompson (VP), scroll to the bottom to find the proposed process improvements, click Approve & Start Testing, select the test group, and click Start Experiment",
+    detection: "manual",
+  },
+  {
+    title: "Graduate a proven play",
+    instruction:
+      "Find the completed experiment, click Graduate & Scale, and confirm graduation",
+    detection: "manual",
+  },
+  {
+    title: "See what\u2019s working",
+    instruction:
+      "Navigate to the What\u2019s Working tab to see the promoted play being scaled across the org",
+    detection: "manual",
+  },
+  {
+    title: "Measure influence",
+    instruction:
+      "Click the Influence tab to see team influence and market signals",
     detection: "manual",
   },
   {
@@ -78,6 +119,24 @@ const STEPS: StepDef[] = [
     detection: "url",
     urlMatch: "/intelligence",
   },
+  {
+    title: "Review signal patterns",
+    instruction:
+      "See different signals from emails, calls, and field observations with the compound ARR associated with each grouped signal",
+    detection: "manual",
+  },
+  {
+    title: "Switch back to Sarah Chen",
+    instruction: "Change user back to Sarah Chen\u2019s view",
+    detection: "manual",
+  },
+  {
+    title: "Customize your agent",
+    instruction:
+      "Navigate to Agent Config to review how you can customize your agent\u2019s persona, guardrails, and evolution",
+    detection: "url",
+    urlMatch: "/agent-config",
+  },
 ];
 
 export function DemoGuide() {
@@ -85,6 +144,9 @@ export function DemoGuide() {
   const [active, setActive] = useState(false);
   const [visible, setVisible] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const activeStepRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Initialize from localStorage
   useEffect(() => {
@@ -102,11 +164,25 @@ export function DemoGuide() {
     }
   }, [currentStep, active]);
 
+  // Scroll active step into view
+  useEffect(() => {
+    if (activeStepRef.current && scrollContainerRef.current) {
+      activeStepRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+  }, [currentStep, visible]);
+
   // URL-based detection
   useEffect(() => {
     if (!active || currentStep >= STEPS.length) return;
     const step = STEPS[currentStep];
-    if (step.detection === "url" && step.urlMatch && pathname.includes(step.urlMatch)) {
+    if (
+      step.detection === "url" &&
+      step.urlMatch &&
+      pathname.includes(step.urlMatch)
+    ) {
       setCurrentStep((s) => s + 1);
     }
   }, [pathname, currentStep, active]);
@@ -135,6 +211,29 @@ export function DemoGuide() {
 
   const close = useCallback(() => {
     setVisible(false);
+  }, []);
+
+  const restartGuide = useCallback(() => {
+    setCurrentStep(0);
+    localStorage.setItem("demoGuideStep", "0");
+  }, []);
+
+  const copyExample = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }, []);
 
   if (!active) return null;
@@ -184,160 +283,261 @@ export function DemoGuide() {
         border: "1px solid rgba(0,0,0,0.06)",
         borderRadius: 12,
         boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
-        padding: 16,
         zIndex: 9998,
         maxHeight: "80vh",
-        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 4,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: "#E07A5F", fontSize: 14 }}>&#10022;</span>
-          <span
-            style={{ fontSize: 14, fontWeight: 600, color: "#3D3833" }}
-          >
-            Demo Guide
-          </span>
-        </div>
-        <button
-          onClick={close}
+      {/* Header (fixed) */}
+      <div style={{ padding: "16px 16px 0 16px", flexShrink: 0 }}>
+        <div
           style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: 2,
-            color: "#8A8078",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 4,
           }}
         >
-          <X size={14} />
-        </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "#E07A5F", fontSize: 14 }}>&#10022;</span>
+            <span
+              style={{ fontSize: 14, fontWeight: 600, color: "#3D3833" }}
+            >
+              Demo Guide
+            </span>
+          </div>
+          <button
+            onClick={close}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 2,
+              color: "#8A8078",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <p
+          style={{
+            fontSize: 11,
+            color: "#8A8078",
+            margin: "0 0 12px 0",
+          }}
+        >
+          {allDone
+            ? "All steps complete!"
+            : `Step ${currentStep + 1} of ${STEPS.length}`}
+        </p>
       </div>
-      <p
+
+      {/* Steps (scrollable) */}
+      <div
+        ref={scrollContainerRef}
         style={{
-          fontSize: 11,
-          color: "#8A8078",
-          margin: "0 0 12px 0",
+          flex: 1,
+          overflowY: "auto",
+          padding: "0 16px 16px 16px",
         }}
       >
-        {allDone
-          ? "All steps complete!"
-          : `Step ${currentStep + 1} of ${STEPS.length}`}
-      </p>
-
-      {/* Steps */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        {STEPS.map((step, i) => {
-          const isComplete = i < currentStep;
-          const isCurrent = i === currentStep;
-
-          return (
-            <div
-              key={i}
+        {allDone ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <p
               style={{
-                display: "flex",
-                gap: 10,
-                padding: "6px 0",
-                borderLeft: isCurrent
-                  ? "3px solid #E07A5F"
-                  : "3px solid transparent",
-                paddingLeft: 10,
+                fontSize: 16,
+                fontWeight: 700,
+                color: "#3D3833",
+                margin: "0 0 8px 0",
               }}
             >
-              {/* Indicator */}
-              <div
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: "50%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  marginTop: 1,
-                  ...(isComplete
-                    ? { background: "#4A9E6B" }
-                    : isCurrent
-                      ? {
-                          background: "#E07A5F",
-                          animation: "guide-pulse 2s ease-in-out infinite",
-                        }
-                      : {
-                          background: "transparent",
-                          border: "1.5px solid #D0CBC5",
-                        }),
-                }}
-              >
-                {isComplete && <Check size={10} color="#FFFFFF" strokeWidth={3} />}
-                {isCurrent && (
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "#FFFFFF",
-                    }}
-                  />
-                )}
-              </div>
+              &#10022; Demo Complete
+            </p>
+            <p
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "#8A8078",
+                margin: "0 0 16px 0",
+              }}
+            >
+              You&apos;ve seen how Nexus turns one conversation into
+              organizational intelligence.
+            </p>
+            <button
+              onClick={restartGuide}
+              style={{
+                background: "none",
+                border: "1px solid rgba(0,0,0,0.1)",
+                borderRadius: 8,
+                padding: "8px 16px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#3D3833",
+                cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Restart Guide
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {STEPS.map((step, i) => {
+              const isComplete = i < currentStep;
+              const isCurrent = i === currentStep;
 
-              {/* Content */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p
+              return (
+                <div
+                  key={i}
+                  ref={isCurrent ? activeStepRef : undefined}
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: isCurrent ? 600 : 400,
-                    color: isCurrent ? "#3D3833" : "#8A8078",
-                    margin: 0,
-                    lineHeight: 1.3,
+                    display: "flex",
+                    gap: 10,
+                    padding: "6px 0",
+                    borderLeft: isCurrent
+                      ? "3px solid #E07A5F"
+                      : "3px solid transparent",
+                    paddingLeft: 10,
                   }}
                 >
-                  {step.title}
-                </p>
-                {isCurrent && (
-                  <>
+                  {/* Indicator */}
+                  <div
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      marginTop: 1,
+                      ...(isComplete
+                        ? { background: "#4A9E6B" }
+                        : isCurrent
+                          ? {
+                              background: "#E07A5F",
+                              animation:
+                                "guide-pulse 2s ease-in-out infinite",
+                            }
+                          : {
+                              background: "transparent",
+                              border: "1.5px solid #D0CBC5",
+                            }),
+                    }}
+                  >
+                    {isComplete && (
+                      <Check size={10} color="#FFFFFF" strokeWidth={3} />
+                    )}
+                    {isCurrent && (
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: "#FFFFFF",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <p
                       style={{
-                        fontSize: 11.5,
-                        color: "#8A8078",
-                        margin: "4px 0 0 0",
-                        lineHeight: 1.45,
+                        fontSize: 12.5,
+                        fontWeight: isCurrent ? 600 : 400,
+                        color: isCurrent ? "#3D3833" : "#8A8078",
+                        margin: 0,
+                        lineHeight: 1.3,
                       }}
                     >
-                      {step.instruction}
+                      {step.title}
                     </p>
-                    {step.detection === "manual" && (
-                      <button
-                        onClick={advanceManual}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: 0,
-                          marginTop: 6,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "#E07A5F",
-                          fontFamily: "'DM Sans', sans-serif",
-                        }}
-                      >
-                        Done &#10003;
-                      </button>
+                    {isCurrent && (
+                      <>
+                        <p
+                          style={{
+                            fontSize: 11.5,
+                            color: "#8A8078",
+                            margin: "4px 0 0 0",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          {step.instruction}
+                        </p>
+                        {step.exampleText && (
+                          <div
+                            style={{
+                              marginTop: 6,
+                              background: "#F5F3EF",
+                              borderRadius: 6,
+                              padding: "8px 10px",
+                              position: "relative",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontSize: 11,
+                                lineHeight: 1.45,
+                                color: "#3D3833",
+                                margin: 0,
+                                paddingRight: 24,
+                                fontStyle: "italic",
+                              }}
+                            >
+                              &ldquo;{step.exampleText}&rdquo;
+                            </p>
+                            <button
+                              onClick={() => copyExample(step.exampleText!)}
+                              style={{
+                                position: "absolute",
+                                top: 6,
+                                right: 6,
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 2,
+                                color: copied ? "#4A9E6B" : "#8A8078",
+                              }}
+                              title="Copy to clipboard"
+                            >
+                              {copied ? (
+                                <Check size={12} strokeWidth={3} />
+                              ) : (
+                                <Copy size={12} />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                        {step.detection === "manual" && (
+                          <button
+                            onClick={advanceManual}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              marginTop: 6,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#E07A5F",
+                              fontFamily: "'DM Sans', sans-serif",
+                            }}
+                          >
+                            Done &#10003;
+                          </button>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <style>{`

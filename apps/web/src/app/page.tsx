@@ -114,7 +114,7 @@ export default function LandingPage() {
     >
       <div style={{ maxWidth: 1200, width: "100%", padding: "0 32px" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
           <div
             style={{
               display: "flex",
@@ -141,13 +141,20 @@ export default function LandingPage() {
               fontSize: 11,
               color: "#8A8078",
               letterSpacing: "0.08em",
-              margin: "0 0 2px 0",
+              margin: "0 0 6px 0",
               textTransform: "uppercase",
             }}
           >
             AI Sales Orchestration
           </p>
-          <p style={{ fontSize: 12, color: "#8A8078", margin: 0 }}>
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#3D3833",
+              margin: 0,
+            }}
+          >
             Designed by an enterprise AE. Built entirely with Claude.
           </p>
         </div>
@@ -158,7 +165,8 @@ export default function LandingPage() {
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: 16,
-            marginBottom: 22,
+            marginBottom: 18,
+            alignItems: "stretch",
           }}
         >
           <div
@@ -168,6 +176,8 @@ export default function LandingPage() {
               borderRadius: 12,
               padding: "14px 18px",
               boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <span
@@ -181,6 +191,7 @@ export default function LandingPage() {
                 borderRadius: 10,
                 marginBottom: 8,
                 letterSpacing: "0.03em",
+                alignSelf: "flex-start",
               }}
             >
               New
@@ -201,6 +212,7 @@ export default function LandingPage() {
                 lineHeight: 1.55,
                 color: "#8A8078",
                 margin: 0,
+                flex: 1,
               }}
             >
               Every deal gets its own AI agent that learns from every transcript,
@@ -216,6 +228,8 @@ export default function LandingPage() {
               borderRadius: 12,
               padding: "14px 18px",
               boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <span
@@ -229,6 +243,7 @@ export default function LandingPage() {
                 borderRadius: 10,
                 marginBottom: 8,
                 letterSpacing: "0.03em",
+                alignSelf: "flex-start",
               }}
             >
               New
@@ -249,6 +264,7 @@ export default function LandingPage() {
                 lineHeight: 1.55,
                 color: "#8A8078",
                 margin: 0,
+                flex: 1,
               }}
             >
               The agent caught a close date that doesn&apos;t match the
@@ -259,13 +275,13 @@ export default function LandingPage() {
         </div>
 
         {/* Thesis */}
-        <div style={{ textAlign: "center", marginBottom: 22 }}>
+        <div style={{ textAlign: "center", marginBottom: 18 }}>
           <h2
             style={{
               fontSize: 21,
               fontWeight: 700,
               color: "#3D3833",
-              margin: "0 0 10px 0",
+              margin: "0 0 8px 0",
               lineHeight: 1.3,
             }}
           >
@@ -274,10 +290,10 @@ export default function LandingPage() {
           </h2>
           <p
             style={{
-              fontSize: 13.5,
-              lineHeight: 1.6,
+              fontSize: 13,
+              lineHeight: 1.55,
               color: "#3D3833",
-              margin: "0 auto 8px auto",
+              margin: "0 auto 6px auto",
               maxWidth: 900,
             }}
           >
@@ -288,8 +304,8 @@ export default function LandingPage() {
           </p>
           <p
             style={{
-              fontSize: 13.5,
-              lineHeight: 1.6,
+              fontSize: 13,
+              lineHeight: 1.55,
               color: "#3D3833",
               margin: "0 auto",
               maxWidth: 900,
@@ -305,87 +321,80 @@ export default function LandingPage() {
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 24,
-            marginBottom: 22,
-            borderTop: "1px solid rgba(0,0,0,0.06)",
-            paddingTop: 20,
+            gap: 20,
+            marginBottom: 18,
           }}
         >
-          <div>
-            <h3
+          {[
+            {
+              title: "One Conversation. Zero Updates.",
+              body: (
+                <>
+                  One call. The pipeline extracts action items, scores MEDDPICC,
+                  detects competitive signals, synthesizes learnings, and drafts
+                  a follow-up&nbsp;&mdash; all in parallel. No forms. No CRM
+                  tabs. No data entry.
+                </>
+              ),
+            },
+            {
+              title: "Capture What Evaporates.",
+              body: (
+                <>
+                  Competitive intel, process friction, product
+                  gaps&nbsp;&mdash; the signal buried in customer conversations
+                  and team threads that never reaches the people who can act on
+                  it. Nexus captures it, clusters it by ARR impact, routes it to
+                  Enablement or Product, and tracks it to resolution. When reps
+                  discover what works, the playbook engine tests it as an A/B
+                  experiment and scales proven plays across the org.
+                </>
+              ),
+            },
+            {
+              title: "Agents That Anticipate.",
+              body: (
+                <>
+                  Deal agents don&apos;t wait. They flag timeline risks, surface
+                  cross-deal patterns, and prepare call briefs before the rep
+                  opens the app. One click to act on what they find.
+                </>
+              ),
+            },
+          ].map((pillar, i) => (
+            <div
+              key={i}
               style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#3D3833",
-                margin: "0 0 6px 0",
+                background: "#FFFFFF",
+                border: "1px solid rgba(0,0,0,0.06)",
+                borderTop: "3px solid #E07A5F",
+                borderRadius: 12,
+                padding: "20px 20px",
+                boxShadow: "0 4px 24px rgba(107,79,57,0.08)",
               }}
             >
-              One Conversation. Zero Updates.
-            </h3>
-            <p
-              style={{
-                fontSize: 12.5,
-                lineHeight: 1.55,
-                color: "#8A8078",
-                margin: 0,
-              }}
-            >
-              One call. The pipeline extracts action items, scores MEDDPICC,
-              detects competitive signals, synthesizes learnings, and drafts a
-              follow-up&nbsp;&mdash; all in parallel. No forms. No CRM tabs. No
-              data entry.
-            </p>
-          </div>
-          <div>
-            <h3
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#3D3833",
-                margin: "0 0 6px 0",
-              }}
-            >
-              Capture What Evaporates.
-            </h3>
-            <p
-              style={{
-                fontSize: 12.5,
-                lineHeight: 1.55,
-                color: "#8A8078",
-                margin: 0,
-              }}
-            >
-              Competitive intel, process friction, product gaps&nbsp;&mdash; the
-              signal buried in customer conversations and team threads that never
-              reaches the people who can act on it. Nexus captures it, clusters
-              it by ARR impact, routes it to Enablement or Product, and tracks it
-              to resolution.
-            </p>
-          </div>
-          <div>
-            <h3
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#3D3833",
-                margin: "0 0 6px 0",
-              }}
-            >
-              Agents That Anticipate.
-            </h3>
-            <p
-              style={{
-                fontSize: 12.5,
-                lineHeight: 1.55,
-                color: "#8A8078",
-                margin: 0,
-              }}
-            >
-              Deal agents don&apos;t wait. They flag timeline risks, surface
-              cross-deal patterns, and prepare call briefs before the rep opens
-              the app. One click to act on what they find.
-            </p>
-          </div>
+              <h3
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: "#3D3833",
+                  margin: "0 0 6px 0",
+                }}
+              >
+                {pillar.title}
+              </h3>
+              <p
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  color: "#8A8078",
+                  margin: 0,
+                }}
+              >
+                {pillar.body}
+              </p>
+            </div>
+          ))}
         </div>
 
         {/* Context line */}
@@ -395,7 +404,7 @@ export default function LandingPage() {
             color: "#8A8078",
             fontStyle: "italic",
             textAlign: "center",
-            margin: "0 0 8px 0",
+            margin: "0 0 10px 0",
           }}
         >
           You&apos;ll trigger each step during this demo to see the system in
@@ -406,11 +415,11 @@ export default function LandingPage() {
         {/* Footer line */}
         <p
           style={{
-            fontSize: 12,
+            fontSize: 13.5,
             fontWeight: 600,
-            color: "#8A8078",
+            color: "#3D3833",
             textAlign: "center",
-            margin: "0 0 16px 0",
+            margin: "0 0 14px 0",
           }}
         >
           Built for the enterprise sales motion Anthropic is scaling right now.
