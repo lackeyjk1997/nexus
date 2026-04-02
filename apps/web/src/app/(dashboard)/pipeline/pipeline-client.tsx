@@ -174,10 +174,15 @@ function SelectFilter({
 }
 
 function KanbanView({ deals }: { deals: Deal[] }) {
+  const kanbanDeals = deals.filter((d) => !d.companyName?.includes("NordicCare"));
+  const visibleStages = ACTIVE_STAGES.filter((stage) =>
+    kanbanDeals.some((d) => d.stage === stage)
+  );
+
   return (
     <div className="flex gap-3 overflow-x-auto pb-4">
-      {ACTIVE_STAGES.map((stage) => {
-        const stageDeals = deals.filter((d) => d.stage === stage);
+      {visibleStages.map((stage) => {
+        const stageDeals = kanbanDeals.filter((d) => d.stage === stage);
         const stageTotal = stageDeals.reduce(
           (sum, d) => sum + Number(d.dealValue || 0),
           0
@@ -207,11 +212,6 @@ function KanbanView({ deals }: { deals: Deal[] }) {
               {stageDeals.map((deal) => (
                 <DealCard key={deal.id} deal={deal} />
               ))}
-              {stageDeals.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-8">
-                  No deals
-                </p>
-              )}
             </div>
           </div>
         );
