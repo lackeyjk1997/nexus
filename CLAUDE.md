@@ -51,7 +51,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `playbookIdeas` | originatorId, title, hypothesis, status, testGroupDeals[], results (jsonb) | Process experiments |
 | `influenceScores` | memberId, dimension, vertical, score (0-100), tier, attributions (jsonb) | Per-member influence |
 
-## API Routes (28)
+## API Routes (29)
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -83,6 +83,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/transcript-pipeline` | POST | Trigger transcript pipeline (enqueues to Rivet actor) |
 | `/api/deals/[id]/meddpicc` | GET | Fetch MEDDPICC data for a deal (used for live refresh) |
 | `/api/deals/[id]/meddpicc-update` | PATCH | Persist MEDDPICC scores from pipeline |
+| `/api/deals/[id]/update` | PATCH | Generic deal field update (close_date, stage, win_probability) |
 
 ## Dashboard Pages
 
@@ -118,6 +119,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `components/layout/sidebar.tsx` | 6-item navigation sidebar |
 | `components/layout/top-bar.tsx` | Header with GuideLink, user switcher, notifications |
 | `components/layout-agent-bar.tsx` | Layout wrapper for agent bar placement |
+| `components/demo-guide.tsx` | Floating guided demo checklist (10 steps, hybrid detection, localStorage state) |
 
 ## Data Flows
 
@@ -131,7 +133,7 @@ Deal page "Prep Call" → POST `/api/agent/call-prep` → queries: (1) rep's age
 AE submits idea → proposed → manager approves (selects AEs, sets thresholds) → testing with A/B groups → measures velocity/sentiment/close rate with deal-level evidence → graduation when thresholds met → proven play injected into call prep as DIRECTIVE
 
 ### Demo Reset
-Landing page "Enter Demo" button → POST `/api/demo/reset` (maxDuration=300) with animated loading states → auto-navigates to `/pipeline`. Resets: MedVista to Discovery, deal probabilities, all playbook ideas (re-inserts 8 experiments with lifecycle data from `packages/db/src/seed-data/`), pipeline-created observations (matched by `source_context` trigger), `meddpicc_fields` (full reset to seeds), `deal_stage_history` (full delete), expanded activity pattern matching, orphaned observation clusters, notifications → destroys ALL Rivet actors (dealAgent, transcriptPipeline, intelligenceCoordinator)
+Landing page "Enter Demo" button → POST `/api/demo/reset` (maxDuration=300) with animated loading states → auto-navigates to `/pipeline`. Also activates guided demo checklist via localStorage. Resets: MedVista to Discovery, deal probabilities, relative close dates (MedVista today+55d, NordicMed today+42d, TrustBank today+60d, PharmaBridge today+90d, NordicCare today+45d, Atlas today+30d), all playbook ideas (re-inserts 8 experiments with lifecycle data from `packages/db/src/seed-data/`), pipeline-created observations (matched by `source_context` trigger), `meddpicc_fields` (full reset to seeds), `deal_stage_history` (full delete), expanded activity pattern matching, orphaned observation clusters, notifications → destroys ALL Rivet actors (dealAgent, transcriptPipeline, intelligenceCoordinator)
 
 ## Demo Data
 
@@ -183,7 +185,8 @@ Verticals: Healthcare #3B82F6, Financial Services #10B981, Manufacturing #F59E0B
 - Demo reset destroys all 3 actor types (dealAgent, transcriptPipeline, intelligenceCoordinator) for clean restart
 - Finalize step hangs on production (draft email + auto-call-prep timeout) — core pipeline intelligence completes fine through step 4
 - Cross-deal intelligence section on deal page shows all pattern cards (can be 7+) — may need to limit to top 2-3
-- Intervention card shows raw system labels (e.g. "No customer response date tracked") — needs human-readable timeline risk language
+- Intervention timeline risk only fires for NordicMed Group (demo constraint, company name check) — remove for production
+- Guided demo checklist uses localStorage only — no server persistence, clears on demo reset
 
 ## Deploy
 ```
@@ -207,6 +210,7 @@ apps/web/src/app/api/rivet/[...all]/route.ts → Rivet handler via @rivetkit/nex
 apps/web/src/app/api/transcript-pipeline/route.ts → Pipeline trigger (fetches deal context, enqueues work)
 apps/web/src/app/api/deals/[id]/meddpicc/route.ts → GET MEDDPICC data for live refresh after pipeline
 apps/web/src/app/api/deals/[id]/meddpicc-update/route.ts → MEDDPICC persistence (called by pipeline actor)
+apps/web/src/app/api/deals/[id]/update/route.ts → Generic deal field update (close_date, stage, win_probability)
 apps/web/src/lib/rivet.ts                  → Client-side useActor hook (createRivetKit)
 apps/web/src/components/agent-memory.tsx    → Deal agent memory display (expandable on deal page)
 apps/web/src/components/workflow-tracker.tsx → Real-time pipeline progress tracker (subscribes to workflowProgress events)
@@ -216,7 +220,7 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 
 ### Deal Agent (`dealAgent`)
 - One per deal, created lazily via `getOrCreate([dealId])`
-- Persistent state: interactionMemory, learnings, competitiveContext, riskSignals, briefReady, activeIntervention, healthScore, lastHealthCheck
+- Persistent state: interactionMemory, learnings, competitiveContext, riskSignals, briefReady, activeIntervention, healthScore, lastHealthCheck, closeDate, companyName
 - Actions:
   - **Core**: initialize, getState, destroyActor, recordInteraction, updateLearnings, addCompetitiveIntel, addRiskSignal, removeRiskSignal, recordFeedback, updateStage, getMemoryForPrompt, workflowProgress
   - **Brief Ready**: setBriefReady, dismissBrief, getBriefReady — manage auto-generated call prep from pipeline
@@ -322,3 +326,48 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 - **Workflow tracker**: 5 steps: Analyze Transcript → Update Scores → Check Experiments → Synthesize → Finalize. Steps may light up out of order due to parallelization (expected)
 - **Cross-deal intelligence verified on production**: coordinator detects patterns across MedVista + NordicMed (competitive intel, process friction, content gaps, win patterns)
 - **Intervention card fires naturally**: health check triggers on NordicMed with health score 59/100 — next task is rewriting to human-readable timeline risk with one-click close date adjustment
+
+### Session S13 continued: Interventions, Landing Page, Demo Guide
+
+**Smart Interventions:**
+- Generic `InterventionAction` infrastructure supporting any deal field update (close_date, stage, win_probability)
+- First implementation: timeline risk detection on NordicMed. Health check detects process_friction risk signal + close date < 70 days out → generates human-readable intervention with one-click close date adjustment
+- User can modify suggested date before confirming. Card shows confirmation then auto-dismisses
+- Intervention timing: fires AFTER pipeline Finalize + call prep generation. Sequence: pipeline completes → call prep generates → health check fires → intervention appears
+- Demo constraint: timeline risk intervention ONLY fires for NordicMed Group (company name check in deal-agent.ts). Remove for production
+
+**Editable close date:**
+- Close date in deal header is now clickable → native date picker
+- PATCH `/api/deals/[id]/update` saves to Supabase, React state updates inline without page refresh
+- Generic endpoint accepts close_date, stage, win_probability
+
+**Relative close dates in demo reset:**
+- Demo reset now sets close dates relative to current date: MedVista today+55d, NordicMed today+42d, TrustBank today+60d, PharmaBridge today+90d, NordicCare today+45d, Atlas today+30d
+- Ensures intervention always triggers regardless of when the demo runs
+
+**Landing page rebuild:**
+- New thesis copy: "Your AEs don't have an information problem — they have a time problem"
+- Two release cards (Persistent Deal Agents, Smart Interventions) side by side at top
+- Three pillars: One Conversation Zero Updates, Capture What Evaporates, Agents That Anticipate
+- Attribution: "Designed by an enterprise AE. Built entirely with Claude."
+- Context note about manual triggers in demo vs automatic in production
+- Footer: "Built for the enterprise sales motion Anthropic is scaling right now."
+- Enter Demo button with existing reset + loading states preserved
+- All content fits on 1440x900 viewport without scrolling
+
+**Guided demo checklist:**
+- `DemoGuide` component: floating panel on right side of dashboard (position: fixed, 280px wide)
+- 10 steps guiding through NordicMed pipeline → intervention → call prep → MedVista pipeline → cross-deal intelligence → Intelligence dashboard
+- Hybrid detection: URL-based auto-advance (steps 1, 7, 10), element-based via `data-workflow-tracker`/`data-workflow-complete` attributes (steps 2, 3, 8), manual "Done ✓" buttons (steps 4, 5, 6, 9)
+- Activated on Enter Demo (localStorage flags set in landing page), toggle via floating "Guide" button
+- localStorage only — no server persistence. Cleared on demo reset (localStorage.clear())
+- Added to dashboard layout.tsx, visible on all dashboard pages
+
+**Key files added/modified:**
+- `apps/web/src/app/api/deals/[id]/update/route.ts` — new PATCH endpoint
+- `apps/web/src/components/agent-intervention.tsx` — redesigned with action buttons
+- `apps/web/src/actors/deal-agent.ts` — closeDate/companyName in state, timeline risk check, NordicMed constraint
+- `apps/web/src/app/page.tsx` — full landing page rebuild
+- `apps/web/src/components/demo-guide.tsx` — new guided demo checklist
+- `apps/web/src/components/workflow-tracker.tsx` — added data-workflow-tracker/data-workflow-complete attributes
+- `apps/web/src/app/(dashboard)/layout.tsx` — added DemoGuide component
