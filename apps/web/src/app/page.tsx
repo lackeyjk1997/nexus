@@ -422,7 +422,7 @@ export default function LandingPage() {
             margin: "0 0 14px 0",
           }}
         >
-          Built for the enterprise sales motion Anthropic is scaling right now.
+          Built for the enterprise sales motion you're scaling right now.
         </p>
 
         {/* Enter button */}
