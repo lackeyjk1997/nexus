@@ -91,7 +91,7 @@ export async function GET(request: Request) {
       lastName: string | null;
       title: string | null;
       email: string | null;
-    };
+    } | null;
   }> = [];
 
   if (companyIds.length > 0) {

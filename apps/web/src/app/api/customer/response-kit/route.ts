@@ -191,10 +191,10 @@ export async function POST(request: Request) {
   });
 
   // ── Build the prompt ──
-  const contactName = messageRow.contact.firstName
+  const contactName = messageRow.contact?.firstName
     ? `${messageRow.contact.firstName} ${messageRow.contact.lastName}`
     : "Unknown Contact";
-  const contactTitle = messageRow.contact.title || "Unknown Title";
+  const contactTitle = messageRow.contact?.title || "Unknown Title";
 
   const usageMetricsStr = health?.usageMetrics
     ? JSON.stringify(health.usageMetrics, null, 2)
