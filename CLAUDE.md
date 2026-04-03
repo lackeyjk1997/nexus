@@ -7,16 +7,16 @@ Nexus is a full-cycle AI sales orchestration platform where AEs direct AI agents
 ```
 apps/web/src/app/                    → Next.js pages + API routes
 apps/web/src/app/(dashboard)/        → Dashboard pages (13 routes)
-apps/web/src/app/api/                → API routes (25 endpoints)
+apps/web/src/app/api/                → API routes (27 endpoints)
 apps/web/src/components/             → Shared components
 apps/web/src/lib/                    → DB connection, utils
-packages/db/src/schema.ts            → 30 tables, all enums and relations
-packages/db/src/seed-*.ts            → 16 seed scripts
+packages/db/src/schema.ts            → 33 tables, all enums and relations
+packages/db/src/seed-*.ts            → 17 seed scripts (includes seed-book.ts for post-sale data)
 packages/db/src/seed-data/           → Extracted seed data (playbook evidence, experiments)
 packages/shared/src/types.ts         → Shared types, stage labels
 ```
 
-## Database Tables (30)
+## Database Tables (33)
 
 | Table | Key Columns | Purpose |
 |-------|-------------|---------|
@@ -50,8 +50,11 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `resources` | title, type, verticals[], description | Knowledge base docs |
 | `playbookIdeas` | originatorId, title, hypothesis, status, testGroupDeals[], results (jsonb) | Process experiments |
 | `influenceScores` | memberId, dimension, vertical, score (0-100), tier, attributions (jsonb) | Per-member influence |
+| `knowledgeArticles` | title, articleType, content, summary, products[], verticals[], tags[], resolutionSteps (jsonb) | Internal knowledge base for AI response generation |
+| `customerMessages` | companyId (FK), contactId (FK), dealId (FK), subject, body, channel, status, responseKit (jsonb), aiCategory | Inbound customer communications |
+| `accountHealth` | companyId (FK), dealId (FK), healthScore, healthTrend, contractStatus, arr, usageMetrics (jsonb), riskSignals (jsonb) | Post-close account state tracking |
 
-## API Routes (29)
+## API Routes (31)
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -84,6 +87,8 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/deals/[id]/meddpicc` | GET | Fetch MEDDPICC data for a deal (used for live refresh) |
 | `/api/deals/[id]/meddpicc-update` | PATCH | Persist MEDDPICC scores from pipeline |
 | `/api/deals/[id]/update` | PATCH | Generic deal field update (close_date, stage, win_probability) |
+| `/api/book` | GET | AE's full book of post-close accounts with health, messages, priority scores |
+| `/api/customer/response-kit` | POST | Generate AI response kit for customer message via Claude (or return cached) |
 
 ## Dashboard Pages
 
@@ -145,6 +150,13 @@ Sales: Sarah Chen (AE), David Park (AE), Ryan Foster (AE) | Leadership: Marcus T
 
 ### 8 Playbook Experiments
 3 promoted (compliance-led discovery, CISO engagement, security doc pre-delivery), 3 testing (post-disco prototype, two-disco minimum, multi-threaded engagement), 1 proposed (competitive battlecard), 1 retired (ROI-first messaging)
+
+### 18 Post-Sale Accounts (Sarah Chen's Book)
+Healthcare: Meridian Health (85, active, $420K), Pacific Coast Medical (62, renewal, $280K), BrightPath Diagnostics (78, active, $195K), Cascadia Life Sciences (72, onboarding, $340K), Summit Genomics (90, active, $150K)
+Financial Services: Redwood Capital (75, active, $380K), Harbor Compliance (45, at_risk, $520K), Lighthouse Insurance (68, renewal, $290K), Apex Financial (82, active, $180K), Cornerstone Banking (88, active, $440K)
+Technology/Life Sciences: Vertex Pharma R&D (80, active, $310K), Pinnacle Biotech (55, onboarding, $240K), GenePath Analytics (73, active, $175K)
+Retail: Atlas Retail (77, active, $350K), Brightside Commerce (70, renewal, $260K), Metro Market (85, active, $190K), Cascade Supply Chain (65, active, $420K), Evolve Retail Tech (48, at_risk, $280K)
+Total ARR: $5.42M | 12 healthy | 3 at-risk | 3 upcoming renewals
 
 ### Tour
 Removed in Session S10. Will be rebuilt later to tell the agent story.
@@ -371,3 +383,69 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 - `apps/web/src/components/demo-guide.tsx` — new guided demo checklist
 - `apps/web/src/components/workflow-tracker.tsx` — added data-workflow-tracker/data-workflow-complete attributes
 - `apps/web/src/app/(dashboard)/layout.tsx` — added DemoGuide component
+
+## Session S14: Post-Sale Account Management
+
+### Schema Changes (Migration 0005)
+- **`knowledgeArticles`** — Internal knowledge base articles (implementation guides, case studies, resolution histories, best practices). No FKs. Fields: title, articleType (text), content (full body), summary, products[], verticals[], tags[], resolutionSteps (jsonb), relatedCompanyIds (uuid array, no FK), effectivenessScore, viewCount.
+- **`customerMessages`** — Inbound customer communications. FKs: companyId → companies, contactId → contacts, dealId → deals. Fields: subject, body, channel (text: email/support_ticket/slack/meeting_note), priority (text), status (text: pending/kit_ready/responded/resolved), responseKit (jsonb — AI-generated response kit), aiCategory (text).
+- **`accountHealth`** — Post-close account state tracking. FKs: companyId → companies, dealId → deals. Fields: healthScore (0-100), healthTrend (text), contractStatus (text: onboarding/active/renewal_window/at_risk/churned), arr (decimal 12,2), productsPurchased[], usageMetrics (jsonb), keyStakeholders (jsonb), expansionSignals (jsonb), riskSignals (jsonb), renewalDate, lastTouchDate, daysSinceTouch, nextQbrDate, onboardingComplete.
+- No new pgEnum types — all status-like fields use plain text (same pattern as observationClusters)
+- Relations added for all 3 tables (knowledgeArticlesRelations is empty, customerMessages has company/contact/deal, accountHealth has company/deal)
+
+### Seed Data (`packages/db/src/seed-book.ts`)
+- **18 post-close companies** across 4 verticals: 5 healthcare, 5 financial_services, 3 technology (life sciences), 5 retail
+- **22 contacts** (1-2 per company) with realistic names, titles, emails
+- **18 closed_won deals** all assigned to Sarah Chen, deal values matching ARR
+- **18 account_health records** with full health data:
+  - Healthy (score 70+): Meridian (85), Summit (90), Cornerstone (88), Metro (85), Apex (82), Vertex (80)
+  - At-risk (score <60): Harbor Compliance (45, critical — champion departed), Evolve Retail (48, critical — stakeholder silent), Pinnacle Biotech (55, LIMS integration failing)
+  - Renewal window: Pacific Coast (62, usage declining), Lighthouse (68, mixed signals), Brightside (70, competitor sniffing)
+  - Onboarding: Cascadia (72, slow adoption), Pinnacle (55, integration blocked)
+- **15 knowledge articles** with full 3-5 paragraph content each:
+  - 5 technical/integration guides (healthcare API, FinServ Claude Code, rate limits, GDPR, multi-dept rollout)
+  - 4 adoption/onboarding guides (30-day checklist, driving adoption, prompt workshop, exec sponsor framework)
+  - 3 product-specific guides (healthcare patterns, FinServ compliance, Cowork for non-technical)
+  - 3 resolution histories (Meridian latency, Redwood stakeholder transition, BrightPath LIMS integration)
+- **8 customer messages** (6 with pre-generated response kits, 2 pending):
+  - Harbor Compliance: churn signal — new COO reviewing contracts (kit_ready)
+  - Pinnacle Biotech: LIMS integration failure (kit_ready)
+  - Pacific Coast Medical: renewal usage review (kit_ready)
+  - Cascade Supply Chain: 3rd latency escalation (kit_ready)
+  - Cascadia Life Sciences: adoption help (kit_ready)
+  - Atlas Retail Group: Cowork expansion inquiry (kit_ready)
+  - Vertex Pharmaceuticals: clinical trials expansion (pending)
+  - Lighthouse Insurance: SOC 2 docs request (pending)
+- Response kits cross-reference seeded companies and article titles (e.g., Harbor kit references Redwood Capital resolution, Pinnacle kit references BrightPath LIMS resolution)
+- All UUIDs are deterministic constants (company IDs start with `a0000001-`, contacts `b0000001-`, deals `c0000001-`, articles `d0000001-`)
+
+### API Routes
+
+**GET `/api/book`** (`apps/web/src/app/api/book/route.ts`)
+- Query param: `?aeId=<uuid>`
+- Returns AE's full book of post-close accounts: accountHealth joined with companies and deals where deals.assigned_ae_id = aeId AND stage = closed_won
+- Includes nested customer messages per account with contact info
+- Priority scoring: urgent message (+100), high message (+80), health <50 (+90), at_risk (+70), renewal_window (+60), medium message (+50), health <70 (+40), days_since_touch >20 (+30)
+- Accounts sorted by priorityScore descending
+- Metrics: totalAccounts, totalArr, healthyCount, atRiskCount, pendingMessages, upcomingRenewals
+
+**POST `/api/customer/response-kit`** (`apps/web/src/app/api/customer/response-kit/route.ts`)
+- Body: `{ messageId: string }`, optional query param `?force=true`
+- If message already has kit (status: kit_ready) and !force, returns cached kit with `cached: true`
+- Otherwise gathers context in parallel: message+company+contact+deal, account health, all knowledge articles (filtered by vertical/tags in code), other accounts in same vertical, system intelligence
+- Calls Claude (`claude-sonnet-4-20250514`, max_tokens: 2048) with full account context and knowledge base
+- Returns structured response kit: message_analysis, similar_resolutions, recommended_resources, draft_reply, internal_notes
+- Saves kit to customerMessages.responseKit, updates status to kit_ready
+- maxDuration: 60
+
+### Response Kit Data Flow
+Customer message received → POST `/api/customer/response-kit` → parallel context queries (account health, knowledge base, vertical accounts, system intel) → Claude generates kit with cross-account pattern matching → kit saved to customerMessages.responseKit → status updated to kit_ready → AE sees kit in UI
+
+### Key Files
+```
+packages/db/src/schema.ts                            → 3 new tables + relations (33 total)
+packages/db/drizzle/0005_dashing_the_executioner.sql → Migration for new tables
+packages/db/src/seed-book.ts                         → Full post-sale seed data
+apps/web/src/app/api/book/route.ts                   → GET book of accounts
+apps/web/src/app/api/customer/response-kit/route.ts  → POST generate/return response kit
+```

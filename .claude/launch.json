@@ -3,10 +3,14 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "npx",
+      "runtimeExecutable": "/usr/local/bin/corepack",
       "runtimeArgs": ["pnpm", "--filter", "@nexus/web", "dev"],
       "port": 3001,
-      "autoPort": true
+      "autoPort": true,
+      "env": {
+        "COREPACK_HOME": "/tmp/corepack",
+        "PATH": "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     }
   ]
 }

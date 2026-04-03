@@ -847,3 +847,101 @@ export const influenceScores = pgTable("influence_scores", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ── Post-Sale Tables ──────────────────────────────
+
+export const knowledgeArticles = pgTable("knowledge_articles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  articleType: text("article_type").notNull(), // 'implementation_guide' | 'case_study' | 'resolution_history' | 'best_practice' | 'faq' | 'product_update'
+  content: text("content").notNull(),
+  summary: text("summary"),
+  products: text("products").array(),
+  verticals: text("verticals").array(),
+  tags: text("tags").array(),
+  resolutionSteps: jsonb("resolution_steps"),
+  relatedCompanyIds: uuid("related_company_ids").array(),
+  effectivenessScore: integer("effectiveness_score"),
+  viewCount: integer("view_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const customerMessages = pgTable("customer_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .references(() => companies.id)
+    .notNull(),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  dealId: uuid("deal_id").references(() => deals.id),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  channel: text("channel").notNull(), // 'email' | 'support_ticket' | 'slack' | 'meeting_note'
+  receivedAt: timestamp("received_at").notNull(),
+  priority: text("priority").default("medium"), // 'low' | 'medium' | 'high' | 'urgent'
+  status: text("status").default("pending"), // 'pending' | 'kit_ready' | 'responded' | 'resolved'
+  responseKit: jsonb("response_kit"),
+  respondedAt: timestamp("responded_at"),
+  responseText: text("response_text"),
+  aiCategory: text("ai_category"), // 'technical_issue' | 'adoption_help' | 'billing_question' | 'feature_request' | 'escalation' | 'check_in' | 'renewal_discussion'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const accountHealth = pgTable("account_health", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id")
+    .references(() => companies.id)
+    .notNull(),
+  dealId: uuid("deal_id")
+    .references(() => deals.id)
+    .notNull(),
+  healthScore: integer("health_score").default(80),
+  healthTrend: text("health_trend").default("stable"), // 'improving' | 'stable' | 'declining' | 'critical'
+  healthFactors: jsonb("health_factors"),
+  contractStatus: text("contract_status").notNull(), // 'onboarding' | 'active' | 'renewal_window' | 'at_risk' | 'churned'
+  contractStart: timestamp("contract_start"),
+  renewalDate: timestamp("renewal_date"),
+  arr: decimal("arr", { precision: 12, scale: 2 }),
+  productsPurchased: text("products_purchased").array(),
+  usageMetrics: jsonb("usage_metrics"),
+  lastTouchDate: timestamp("last_touch_date"),
+  daysSinceTouch: integer("days_since_touch"),
+  keyStakeholders: jsonb("key_stakeholders"),
+  expansionSignals: jsonb("expansion_signals"),
+  riskSignals: jsonb("risk_signals"),
+  nextQbrDate: timestamp("next_qbr_date"),
+  onboardingComplete: boolean("onboarding_complete").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ── Post-Sale Relations ───────────────────────────
+
+export const knowledgeArticlesRelations = relations(knowledgeArticles, ({ }) => ({}));
+
+export const customerMessagesRelations = relations(customerMessages, ({ one }) => ({
+  company: one(companies, {
+    fields: [customerMessages.companyId],
+    references: [companies.id],
+  }),
+  contact: one(contacts, {
+    fields: [customerMessages.contactId],
+    references: [contacts.id],
+  }),
+  deal: one(deals, {
+    fields: [customerMessages.dealId],
+    references: [deals.id],
+  }),
+}));
+
+export const accountHealthRelations = relations(accountHealth, ({ one }) => ({
+  company: one(companies, {
+    fields: [accountHealth.companyId],
+    references: [companies.id],
+  }),
+  deal: one(deals, {
+    fields: [accountHealth.dealId],
+    references: [deals.id],
+  }),
+}));

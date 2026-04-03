@@ -14,6 +14,18 @@ const { SARAH, ALEX, RYAN, DAVID, MARCUS, PRIYA, JAMES, ELENA } = MEMBER_IDS;
 
 export async function POST() {
   try {
+    // ── Phase 0: Reset post-sale data ────────────────────────────────
+    // Reset customer message statuses back to seeded state (kit_ready → kit_ready, responded → kit_ready)
+    // Messages with pre-generated kits go back to kit_ready; pending ones stay pending
+    await db.execute(sql`
+      UPDATE customer_messages SET status = 'kit_ready'
+      WHERE status = 'responded' AND response_kit IS NOT NULL
+    `);
+    await db.execute(sql`
+      UPDATE customer_messages SET status = 'pending'
+      WHERE status = 'responded' AND response_kit IS NULL
+    `);
+
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 
     // 1. Delete observation_routing for pipeline-created observations (FK first)

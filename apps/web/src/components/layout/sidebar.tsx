@@ -17,6 +17,7 @@ import {
   AudioWaveform,
   Sparkles,
   FlaskConical,
+  BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -35,11 +36,13 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   AudioWaveform,
   Sparkles,
   FlaskConical,
+  BookOpen,
 };
 
 const NAV_ITEMS = [
   { label: "Command Center", href: "/command-center", icon: "LayoutDashboard", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Pipeline", href: "/pipeline", icon: "Kanban", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
+  { label: "My Book", href: "/book", icon: "BookOpen", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Intelligence", href: "/intelligence", icon: "BarChart3", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Playbook", href: "/playbook", icon: "FlaskConical", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
   { label: "Outreach", href: "/outreach", icon: "Mail", roles: ["AE", "BDR", "SA", "CSM", "MANAGER", "SUPPORT"] },
