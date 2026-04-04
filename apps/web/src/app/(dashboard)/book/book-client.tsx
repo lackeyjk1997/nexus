@@ -1183,6 +1183,13 @@ function AccountDetailDrawer({
   const [qbrError, setQbrError] = useState<string | null>(null);
   const [qbrCopied, setQbrCopied] = useState(false);
 
+  // Email generation state (shared across use case cards and signal cards)
+  const [activeEmailCard, setActiveEmailCard] = useState<string | null>(null);
+  const [emailResult, setEmailResult] = useState<{ subject: string; body: string } | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailPurpose, setEmailPurpose] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
+
   // Reset obs success message
   useEffect(() => {
     if (obsResult === "success") {
@@ -1305,6 +1312,118 @@ function AccountDetailDrawer({
     setTimeout(() => setQbrCopied(false), 2000);
   };
 
+  const getRecipientForTeam = (_teamName: string): { name: string; title: string } => {
+    if (stakeholders.length > 0) {
+      return { name: stakeholders[0].name, title: stakeholders[0].title };
+    }
+    return { name: "Team Lead", title: "" };
+  };
+
+  const buildAccountContext = () => ({
+    healthScore: account.health.healthScore ?? 0,
+    arr: parseFloat(account.health.arr || "0"),
+    productsPurchased: account.health.productsPurchased ?? [],
+    contractStatus: account.health.contractStatus ?? "active",
+    renewalDate: account.health.renewalDate ?? undefined,
+    daysSinceTouch: account.health.daysSinceTouch ?? 0,
+  });
+
+  const handleUseCaseEmail = async (uc: UseCase, ucIndex: number, purpose: string) => {
+    const cardId = `usecase-${ucIndex}`;
+    setActiveEmailCard(cardId);
+    setEmailResult(null);
+    setEmailLoading(true);
+    setEmailPurpose(purpose);
+
+    const recipient = getRecipientForTeam(uc.team);
+
+    try {
+      const res = await fetch("/api/customer/outreach-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "use_case_checkin",
+          companyName: account.company.name,
+          companyId: account.company.id,
+          vertical: VERTICAL_LABELS[account.company.industry] ?? account.company.industry,
+          recipientName: recipient.name,
+          recipientTitle: recipient.title,
+          useCase: uc,
+          purpose,
+          accountContext: buildAccountContext(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.email) {
+        setEmailResult({ subject: data.email.subject, body: data.email.body });
+      } else {
+        setEmailResult(null);
+        setActiveEmailCard(null);
+      }
+    } catch {
+      setEmailResult(null);
+      setActiveEmailCard(null);
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleSignalEmail = async (ps: ProactiveSignal, signalIndex: number) => {
+    const cardId = `signal-${signalIndex}`;
+    setActiveEmailCard(cardId);
+    setEmailResult(null);
+    setEmailLoading(true);
+    setEmailPurpose(null);
+
+    const recipient = stakeholders.length > 0
+      ? { name: stakeholders[0].name, title: stakeholders[0].title }
+      : { name: "Team Lead", title: "" };
+
+    try {
+      const res = await fetch("/api/customer/outreach-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "proactive_signal",
+          companyName: account.company.name,
+          companyId: account.company.id,
+          vertical: VERTICAL_LABELS[account.company.industry] ?? account.company.industry,
+          recipientName: recipient.name,
+          recipientTitle: recipient.title,
+          signal: ps,
+          accountContext: buildAccountContext(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.email) {
+        setEmailResult({ subject: data.email.subject, body: data.email.body });
+      } else {
+        setEmailResult(null);
+        setActiveEmailCard(null);
+      }
+    } catch {
+      setEmailResult(null);
+      setActiveEmailCard(null);
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleDismissEmail = () => {
+    setActiveEmailCard(null);
+    setEmailResult(null);
+    setEmailLoading(false);
+    setEmailPurpose(null);
+    setEmailCopied(false);
+  };
+
+  const handleCopyEmail = () => {
+    if (!emailResult) return;
+    navigator.clipboard.writeText(`Subject: ${emailResult.subject}\n\n${emailResult.body}`);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  };
+
   const totalExpansionArr = expansionMap.reduce(
     (sum, e) => sum + e.opportunityArr,
     0
@@ -1379,7 +1498,6 @@ function AccountDetailDrawer({
                       ["Seat Utilization", "Active vs. purchased seats", healthFactors.adoption],
                       ["Usage Trend", "Month-over-month volume change", healthFactors.engagement],
                       ["Stakeholder Health", "Champion status and contact stability", healthFactors.sentiment],
-                      ["Engagement Recency", "Days since last meaningful interaction", healthFactors.support_health],
                     ] as const
                   ).map(([label, subtitle, val]) => (
                     <div key={label}>
@@ -1404,6 +1522,29 @@ function AccountDetailDrawer({
                       </div>
                     </div>
                   ))}
+                  {/* Engagement Recency — show days instead of percentage */}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-32">
+                        <span className="text-xs text-foreground font-medium">
+                          Engagement Recency
+                        </span>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Days since last meaningful interaction
+                        </p>
+                      </div>
+                      <div className="flex-1" />
+                      <span className={cn(
+                        "text-xs font-semibold",
+                        (account.health.daysSinceTouch ?? 0) <= 7 ? "text-success" :
+                        (account.health.daysSinceTouch ?? 0) <= 14 ? "text-muted-foreground" :
+                        (account.health.daysSinceTouch ?? 0) <= 21 ? "text-warning" :
+                        "text-danger"
+                      )}>
+                        {account.health.daysSinceTouch ?? 0} days
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1416,56 +1557,154 @@ function AccountDetailDrawer({
                 {contractedUseCases.map((uc, i) => {
                   const status = getAdoptionStatusStyle(uc.adoptionStatus);
                   const utilPct = Math.round((uc.activeUsers / uc.seats) * 100);
+                  const cardId = `usecase-${i}`;
+                  const isActiveCard = activeEmailCard === cardId;
+                  const showPurposeChips = isActiveCard && !emailLoading && !emailResult;
+                  const showEmailLoading = isActiveCard && emailLoading;
+                  const showEmailResult = isActiveCard && emailResult;
                   return (
-                    <div
-                      key={i}
-                      className="bg-muted/50 rounded-lg p-3 space-y-2"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            {uc.team} &middot; {uc.seats} seats
-                          </p>
-                          <span
-                            className={cn(
-                              "inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-medium",
-                              getProductPillStyle(uc.product)
-                            )}
-                          >
-                            {uc.product}
+                    <div key={i} className="space-y-2">
+                      <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {uc.team} &middot; {uc.seats} seats
+                            </p>
+                            <span
+                              className={cn(
+                                "inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-medium",
+                                getProductPillStyle(uc.product)
+                              )}
+                            >
+                              {uc.product}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded text-[11px] font-medium",
+                                status.bg,
+                                status.text
+                              )}
+                            >
+                              {status.label}
+                            </span>
+                            <button
+                              onClick={() => {
+                                if (isActiveCard) {
+                                  handleDismissEmail();
+                                } else {
+                                  setActiveEmailCard(cardId);
+                                  setEmailResult(null);
+                                  setEmailLoading(false);
+                                  setEmailPurpose(null);
+                                }
+                              }}
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors"
+                            >
+                              {isActiveCard ? "Cancel" : "\uD83D\uDCE7 Check In"}
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-foreground">{uc.useCase}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Goal: {uc.expectedOutcome}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full",
+                                status.barColor
+                              )}
+                              style={{ width: `${utilPct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {uc.activeUsers}/{uc.seats} active
                           </span>
                         </div>
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded text-[11px] font-medium",
-                            status.bg,
-                            status.text
-                          )}
-                        >
-                          {status.label}
-                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {uc.notes}
+                        </p>
                       </div>
-                      <p className="text-sm text-foreground">{uc.useCase}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Goal: {uc.expectedOutcome}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full",
-                              status.barColor
-                            )}
-                            style={{ width: `${utilPct}%` }}
-                          />
+
+                      {/* Purpose chip selector */}
+                      {showPurposeChips && (
+                        <div className="bg-card border border-border rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            What&apos;s the goal of this outreach?
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {([
+                              ["check_in", "Check in on adoption"],
+                              ["success_stories", "Share success stories"],
+                              ["explore_new", "Explore new use cases"],
+                              ["health_check", "Schedule health check"],
+                            ] as const).map(([key, label]) => (
+                              <button
+                                key={key}
+                                onClick={() => handleUseCaseEmail(uc, i, key)}
+                                className={cn(
+                                  "px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                                  emailPurpose === key
+                                    ? "bg-foreground text-white"
+                                    : "bg-muted hover:bg-border text-foreground"
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {uc.activeUsers}/{uc.seats} active
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {uc.notes}
-                      </p>
+                      )}
+
+                      {/* Loading state */}
+                      {showEmailLoading && (
+                        <div className="bg-card border border-border rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Drafting outreach email...
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Generated email */}
+                      {showEmailResult && emailResult && (
+                        <div className="bg-card border border-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-3.5 w-3.5 text-secondary" />
+                            <p className="text-xs font-semibold text-secondary">
+                              Generated Outreach
+                            </p>
+                          </div>
+                          <p className="text-xs font-medium text-foreground">
+                            Subject: {emailResult.subject}
+                          </p>
+                          <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">
+                            {emailResult.body}
+                          </p>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              onClick={handleDismissEmail}
+                              className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-border transition-colors"
+                            >
+                              Dismiss
+                            </button>
+                            <button
+                              onClick={handleCopyEmail}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-foreground text-white hover:bg-foreground/90 transition-colors"
+                            >
+                              {emailCopied ? (
+                                <Check className="h-3 w-3" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                              {emailCopied ? "Copied" : "Copy Email"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1708,26 +1947,81 @@ function AccountDetailDrawer({
           <DrawerSection title="Proactive Signals">
             {proactiveSignals.length > 0 ? (
               <div className="space-y-3">
-                {proactiveSignals.map((ps, i) => (
-                  <div
-                    key={i}
-                    className="bg-muted/50 rounded-lg p-3 space-y-1.5"
-                  >
-                    <p className="text-sm font-medium text-foreground">
-                      {getSignalIcon(ps.type)} {getSignalTypeLabel(ps.type)} &middot;{" "}
-                      <span className="text-muted-foreground font-normal">
-                        {ps.daysAgo} days ago
-                      </span>
-                    </p>
-                    <p className="text-sm text-foreground">{ps.signal}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Relevance: {ps.relevance}
-                    </p>
-                    <p className="text-xs font-medium text-secondary">
-                      &rarr; {ps.action}
-                    </p>
-                  </div>
-                ))}
+                {proactiveSignals.map((ps, i) => {
+                  const cardId = `signal-${i}`;
+                  const isActiveCard = activeEmailCard === cardId;
+                  const showEmailLoading = isActiveCard && emailLoading;
+                  const showEmailResult = isActiveCard && emailResult;
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                        <p className="text-sm font-medium text-foreground">
+                          {getSignalIcon(ps.type)} {getSignalTypeLabel(ps.type)} &middot;{" "}
+                          <span className="text-muted-foreground font-normal">
+                            {ps.daysAgo} days ago
+                          </span>
+                        </p>
+                        <p className="text-sm text-foreground">{ps.signal}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Relevance: {ps.relevance}
+                        </p>
+                        <button
+                          onClick={() => handleSignalEmail(ps, i)}
+                          className="text-xs font-medium text-secondary hover:underline cursor-pointer transition-colors"
+                        >
+                          &rarr; {ps.action}
+                        </button>
+                      </div>
+
+                      {/* Loading state */}
+                      {showEmailLoading && (
+                        <div className="bg-card border border-border rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Drafting outreach email...
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Generated email */}
+                      {showEmailResult && emailResult && (
+                        <div className="bg-card border border-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-3.5 w-3.5 text-secondary" />
+                            <p className="text-xs font-semibold text-secondary">
+                              Generated Outreach
+                            </p>
+                          </div>
+                          <p className="text-xs font-medium text-foreground">
+                            Subject: {emailResult.subject}
+                          </p>
+                          <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">
+                            {emailResult.body}
+                          </p>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              onClick={handleDismissEmail}
+                              className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-border transition-colors"
+                            >
+                              Dismiss
+                            </button>
+                            <button
+                              onClick={handleCopyEmail}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-foreground text-white hover:bg-foreground/90 transition-colors"
+                            >
+                              {emailCopied ? (
+                                <Check className="h-3 w-3" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                              {emailCopied ? "Copied" : "Copy Email"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
