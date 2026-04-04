@@ -6,8 +6,8 @@ Nexus is a full-cycle AI sales orchestration platform where AEs direct AI agents
 ## File Structure
 ```
 apps/web/src/app/                    → Next.js pages + API routes
-apps/web/src/app/(dashboard)/        → Dashboard pages (13 routes)
-apps/web/src/app/api/                → API routes (27 endpoints)
+apps/web/src/app/(dashboard)/        → Dashboard pages (14 routes)
+apps/web/src/app/api/                → API routes (29 endpoints)
 apps/web/src/components/             → Shared components
 apps/web/src/lib/                    → DB connection, utils
 packages/db/src/schema.ts            → 33 tables, all enums and relations
@@ -52,9 +52,9 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `influenceScores` | memberId, dimension, vertical, score (0-100), tier, attributions (jsonb) | Per-member influence |
 | `knowledgeArticles` | title, articleType, content, summary, products[], verticals[], tags[], resolutionSteps (jsonb) | Internal knowledge base for AI response generation |
 | `customerMessages` | companyId (FK), contactId (FK), dealId (FK), subject, body, channel, status, responseKit (jsonb), aiCategory | Inbound customer communications |
-| `accountHealth` | companyId (FK), dealId (FK), healthScore, healthTrend, contractStatus, arr, usageMetrics (jsonb), riskSignals (jsonb) | Post-close account state tracking |
+| `accountHealth` | companyId (FK), dealId (FK), healthScore, healthTrend, contractStatus, arr, usageMetrics (jsonb), riskSignals (jsonb), contractedUseCases (jsonb), expansionMap (jsonb), proactiveSignals (jsonb) | Post-close account state tracking |
 
-## API Routes (31)
+## API Routes (32)
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -89,6 +89,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/api/deals/[id]/update` | PATCH | Generic deal field update (close_date, stage, win_probability) |
 | `/api/book` | GET | AE's full book of post-close accounts with health, messages, priority scores |
 | `/api/customer/response-kit` | POST | Generate AI response kit for customer message via Claude (or return cached) |
+| `/api/customer/qbr-prep` | POST | Generate structured QBR agenda via Claude from account context (no DB query) |
 
 ## Dashboard Pages
 
@@ -101,6 +102,7 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `/intelligence` | intelligence-client.tsx | 3 tabs: Patterns, Field Feed, Close Intelligence |
 | `/playbook` | playbook-client.tsx | 3 tabs: Active Experiments, What's Working, Influence |
 | `/outreach` | outreach-client.tsx | Email sequences + Intelligence Brief |
+| `/book` | book-client.tsx | My Book: post-close accounts, health, drawer, QBR prep |
 | `/agent-config` | agent-config-client.tsx | Agent configuration with NL instructions |
 | `/observations` | — | Redirects to `/intelligence?tab=feed` |
 | `/prospects` | prospects-client.tsx | Contact database (not in sidebar) |
@@ -121,7 +123,8 @@ packages/shared/src/types.ts         → Shared types, stage labels
 | `components/activity-feed.tsx` | Timeline activity list with type icons |
 | `components/quick-questions.tsx` | AE quick check responses |
 | `components/providers.tsx` | PersonaContext provider, persists to localStorage |
-| `components/layout/sidebar.tsx` | 6-item navigation sidebar |
+| `components/response-kit-modal.tsx` | Reusable Response Kit modal for customer messages |
+| `components/layout/sidebar.tsx` | 7-item navigation sidebar (includes My Book) |
 | `components/layout/top-bar.tsx` | Header with GuideLink, user switcher, notifications |
 | `components/layout-agent-bar.tsx` | Layout wrapper for agent bar placement |
 | `components/demo-guide.tsx` | Floating guided demo checklist (10 steps, hybrid detection, localStorage state) |
@@ -389,7 +392,7 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 ### Schema Changes (Migration 0005)
 - **`knowledgeArticles`** — Internal knowledge base articles (implementation guides, case studies, resolution histories, best practices). No FKs. Fields: title, articleType (text), content (full body), summary, products[], verticals[], tags[], resolutionSteps (jsonb), relatedCompanyIds (uuid array, no FK), effectivenessScore, viewCount.
 - **`customerMessages`** — Inbound customer communications. FKs: companyId → companies, contactId → contacts, dealId → deals. Fields: subject, body, channel (text: email/support_ticket/slack/meeting_note), priority (text), status (text: pending/kit_ready/responded/resolved), responseKit (jsonb — AI-generated response kit), aiCategory (text).
-- **`accountHealth`** — Post-close account state tracking. FKs: companyId → companies, dealId → deals. Fields: healthScore (0-100), healthTrend (text), contractStatus (text: onboarding/active/renewal_window/at_risk/churned), arr (decimal 12,2), productsPurchased[], usageMetrics (jsonb), keyStakeholders (jsonb), expansionSignals (jsonb), riskSignals (jsonb), renewalDate, lastTouchDate, daysSinceTouch, nextQbrDate, onboardingComplete.
+- **`accountHealth`** — Post-close account state tracking. FKs: companyId → companies, dealId → deals. Fields: healthScore (0-100), healthTrend (text), contractStatus (text: onboarding/active/renewal_window/at_risk/churned), arr (decimal 12,2), productsPurchased[], usageMetrics (jsonb), keyStakeholders (jsonb), expansionSignals (jsonb), riskSignals (jsonb), contractedUseCases (jsonb), expansionMap (jsonb), proactiveSignals (jsonb), renewalDate, lastTouchDate, daysSinceTouch, nextQbrDate, onboardingComplete.
 - No new pgEnum types — all status-like fields use plain text (same pattern as observationClusters)
 - Relations added for all 3 tables (knowledgeArticlesRelations is empty, customerMessages has company/contact/deal, accountHealth has company/deal)
 
@@ -441,11 +444,49 @@ apps/web/src/app/api/intelligence/agent-patterns/route.ts → GET agent-detected
 ### Response Kit Data Flow
 Customer message received → POST `/api/customer/response-kit` → parallel context queries (account health, knowledge base, vertical accounts, system intel) → Claude generates kit with cross-account pattern matching → kit saved to customerMessages.responseKit → status updated to kit_ready → AE sees kit in UI
 
+**POST `/api/customer/qbr-prep`** (`apps/web/src/app/api/customer/qbr-prep/route.ts`)
+- Body: `{ companyId, companyName, qbrType, accountContext }` — client sends all data from state, no DB query
+- QBR types: Renewal Defense, Expansion Pitch, Usage Review, Executive Re-engagement
+- Calls Claude (`claude-sonnet-4-20250514`, max_tokens: 2048) with account context including use cases, expansion map, stakeholders
+- Returns structured QBR brief: executive_summary, agenda_items (topic, duration, talking_points, data_to_prepare, desired_outcome), stakeholder_strategy, risk_to_address, success_metric
+- maxDuration: 60
+
+### Schema Changes (Migration 0006)
+- Added 3 jsonb columns to `accountHealth`: `contractedUseCases`, `expansionMap`, `proactiveSignals`
+- **contractedUseCases**: array of `{ team, seats, product, useCase, expectedOutcome, adoptionStatus (on_track/needs_attention/at_risk), activeUsers, notes }`
+- **expansionMap**: array of `{ department, headcount, currentProduct, recommendedProduct, opportunityArr, rationale }`
+- **proactiveSignals**: array of `{ type (product_release/industry_news/customer_news), signal, relevance, action, daysAgo }`
+- Populated for 8 key accounts: Harbor Compliance, Pinnacle Biotech, Summit Genomics, Pacific Coast Medical, Atlas Retail, Cornerstone Banking, Evolve Retail Tech, Cascadia Life Sciences
+
+### My Book Page (`apps/web/src/app/(dashboard)/book/book-client.tsx`)
+- Morning Brief (seeded, collapsible) — portfolio summary with urgent accounts, renewal wave, expansion opportunities
+- Cross-Book Intelligence — 4 pattern cards: Renewal Wave, Integration Pattern, Expansion Cluster, Onboarding Risk (hardcoded)
+- Priority queue — top 5 accounts by priority score with risk signals and response kit buttons
+- All Accounts table — sortable by health score, vertical filter chips, click-to-open drawer
+- Response Kit modal — reusable component, works from priority cards and drawer
+- **Account Detail Drawer** (12 sections):
+  1. Header (name, vertical, ARR)
+  2. Health Overview — relabeled factors: Seat Utilization, Usage Trend, Stakeholder Health, Engagement Recency (with subtitles)
+  3. Contracted Use Cases — cards with product pills, adoption status badges, seat utilization bars
+  4. Contract — status, renewal date, products
+  5. Usage Metrics — API calls, trend, active seats
+  6. Key Stakeholders — status dots (engaged/silent/new/departed)
+  7. Expansion Map — total whitespace ARR, department cards with recommended products
+  8. Risk Signals — warning icons with signal text
+  9. Expansion Signals — existing signals with product badges
+  10. Proactive Signals — typed icons, relevance, actionable next steps in coral
+  11. Recent Messages — pending/kit_ready with response kit links
+  12. Actions: Log Observation (functional POST to /api/observations), Prep for QBR (4-type selector → Claude API → inline brief with copy), Draft Check-in Email (hardcoded per account)
+
 ### Key Files
 ```
-packages/db/src/schema.ts                            → 3 new tables + relations (33 total)
+packages/db/src/schema.ts                            → 3 new tables + relations (33 total), 3 new jsonb columns on accountHealth
 packages/db/drizzle/0005_dashing_the_executioner.sql → Migration for new tables
-packages/db/src/seed-book.ts                         → Full post-sale seed data
+packages/db/drizzle/0006_abnormal_betty_brant.sql    → Migration for accountHealth jsonb columns
+packages/db/src/seed-book.ts                         → Full post-sale seed data (18 companies, 22 contacts, 18 deals, 18 health records, 15 articles, 8 messages)
 apps/web/src/app/api/book/route.ts                   → GET book of accounts
 apps/web/src/app/api/customer/response-kit/route.ts  → POST generate/return response kit
+apps/web/src/app/api/customer/qbr-prep/route.ts      → POST generate QBR agenda via Claude
+apps/web/src/app/(dashboard)/book/book-client.tsx     → My Book page with drawer, all sections
+apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit modal
 ```
