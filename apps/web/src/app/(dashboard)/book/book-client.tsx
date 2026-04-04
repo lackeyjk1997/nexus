@@ -1187,7 +1187,8 @@ function AccountDetailDrawer({
   const [activeEmailCard, setActiveEmailCard] = useState<string | null>(null);
   const [emailResult, setEmailResult] = useState<{ subject: string; body: string } | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailPurpose, setEmailPurpose] = useState<string | null>(null);
+  const [emailPurposes, setEmailPurposes] = useState<Set<string>>(new Set());
+  const [emailFreeText, setEmailFreeText] = useState("");
   const [emailCopied, setEmailCopied] = useState(false);
 
   // Reset obs success message
@@ -1328,14 +1329,15 @@ function AccountDetailDrawer({
     daysSinceTouch: account.health.daysSinceTouch ?? 0,
   });
 
-  const handleUseCaseEmail = async (uc: UseCase, ucIndex: number, purpose: string) => {
+  const handleUseCaseEmail = async (uc: UseCase, ucIndex: number) => {
     const cardId = `usecase-${ucIndex}`;
     setActiveEmailCard(cardId);
     setEmailResult(null);
     setEmailLoading(true);
-    setEmailPurpose(purpose);
 
     const recipient = getRecipientForTeam(uc.team);
+    const purpose = Array.from(emailPurposes).join(", ");
+    const additionalContext = emailFreeText.trim() || null;
 
     try {
       const res = await fetch("/api/customer/outreach-email", {
@@ -1350,6 +1352,7 @@ function AccountDetailDrawer({
           recipientTitle: recipient.title,
           useCase: uc,
           purpose,
+          additionalContext,
           accountContext: buildAccountContext(),
         }),
       });
@@ -1373,7 +1376,8 @@ function AccountDetailDrawer({
     setActiveEmailCard(cardId);
     setEmailResult(null);
     setEmailLoading(true);
-    setEmailPurpose(null);
+    setEmailPurposes(new Set());
+    setEmailFreeText("");
 
     const recipient = stakeholders.length > 0
       ? { name: stakeholders[0].name, title: stakeholders[0].title }
@@ -1413,7 +1417,8 @@ function AccountDetailDrawer({
     setActiveEmailCard(null);
     setEmailResult(null);
     setEmailLoading(false);
-    setEmailPurpose(null);
+    setEmailPurposes(new Set());
+    setEmailFreeText("");
     setEmailCopied(false);
   };
 
@@ -1597,7 +1602,8 @@ function AccountDetailDrawer({
                                   setActiveEmailCard(cardId);
                                   setEmailResult(null);
                                   setEmailLoading(false);
-                                  setEmailPurpose(null);
+                                  setEmailPurposes(new Set());
+                                  setEmailFreeText("");
                                 }
                               }}
                               className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors"
@@ -1629,9 +1635,9 @@ function AccountDetailDrawer({
                         </p>
                       </div>
 
-                      {/* Purpose chip selector */}
+                      {/* Purpose chip selector (multi-select) */}
                       {showPurposeChips && (
-                        <div className="bg-card border border-border rounded-lg p-3 space-y-2">
+                        <div className="bg-card border border-border rounded-lg p-3 space-y-3">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                             What&apos;s the goal of this outreach?
                           </p>
@@ -1644,17 +1650,40 @@ function AccountDetailDrawer({
                             ] as const).map(([key, label]) => (
                               <button
                                 key={key}
-                                onClick={() => handleUseCaseEmail(uc, i, key)}
+                                onClick={() => {
+                                  setEmailPurposes((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(key)) next.delete(key);
+                                    else next.add(key);
+                                    return next;
+                                  });
+                                }}
                                 className={cn(
                                   "px-3 py-2 rounded-md text-xs font-medium transition-colors",
-                                  emailPurpose === key
-                                    ? "bg-foreground text-white"
+                                  emailPurposes.has(key)
+                                    ? "bg-[#3D3833] text-white"
                                     : "bg-muted hover:bg-border text-foreground"
                                 )}
                               >
                                 {label}
                               </button>
                             ))}
+                          </div>
+                          <textarea
+                            value={emailFreeText}
+                            onChange={(e) => setEmailFreeText(e.target.value)}
+                            placeholder="Anything specific to mention? e.g., they mentioned opening a new office..."
+                            rows={2}
+                            className="w-full rounded-md border border-border bg-card px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => handleUseCaseEmail(uc, i)}
+                              disabled={emailPurposes.size === 0}
+                              className="px-3 py-1.5 rounded-md text-xs font-medium bg-foreground text-white hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Generate Email
+                            </button>
                           </div>
                         </div>
                       )}

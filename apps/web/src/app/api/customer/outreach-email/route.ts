@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     recipientTitle,
     useCase,
     purpose,
+    additionalContext,
     signal,
     accountContext,
   } = body;
@@ -49,7 +50,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const purposeGuide = PURPOSE_GUIDANCE[purpose] ?? PURPOSE_GUIDANCE.check_in;
+    // Support multiple comma-separated purposes
+    const purposes = (purpose as string).split(",").map((p: string) => p.trim());
+    const purposeGuides = purposes
+      .map((p: string) => PURPOSE_GUIDANCE[p])
+      .filter(Boolean)
+      .join("\n- ");
 
     systemPrompt = `You are an AI assistant drafting a proactive outreach email for an Account Executive who manages 100+ enterprise AI accounts. The AE is checking in with a specific team about their use case adoption.
 
@@ -57,12 +63,13 @@ Rules:
 - Be warm, specific, and value-focused — never generic
 - Reference the team's specific use case and current adoption numbers
 - Share insights about similar success patterns in the same industry WITHOUT naming other customers (say 'similar organizations in ${vertical}' or 'teams in your industry')
-- Based on the selected purpose, adjust the email tone and call-to-action
+- The AE may have selected multiple outreach goals — weave them together naturally into a single coherent email. If additional context was provided, incorporate it naturally — it's insider knowledge the AE has from their relationship with this customer.
 - Keep the email concise — 3-4 paragraphs max
 - Sign off as Sarah
 
-Purpose: ${purpose}
-Guidance: ${purposeGuide}
+Purpose(s): ${purposes.join(", ")}
+Guidance:
+- ${purposeGuides || PURPOSE_GUIDANCE.check_in}
 
 Respond with ONLY a JSON object (no markdown, no preamble):
 {
@@ -71,7 +78,8 @@ Respond with ONLY a JSON object (no markdown, no preamble):
   "purpose_notes": "brief explanation of the approach taken"
 }`;
 
-    userMessage = `Draft a ${purpose.replace(/_/g, " ")} email to ${recipientName}${recipientTitle ? ` (${recipientTitle})` : ""} at ${companyName} (${vertical}).
+    const purposeLabel = purposes.map((p: string) => p.replace(/_/g, " ")).join(" + ");
+    userMessage = `Draft a ${purposeLabel} email to ${recipientName}${recipientTitle ? ` (${recipientTitle})` : ""} at ${companyName} (${vertical}).
 
 Use case details:
 - Team: ${useCase.team}
@@ -87,7 +95,7 @@ Account context:
 - ARR: $${accountContext.arr}
 - Products: ${accountContext.productsPurchased?.join(", ") ?? "N/A"}
 - Contract status: ${accountContext.contractStatus}
-- Days since last touch: ${accountContext.daysSinceTouch}${accountContext.renewalDate ? `\n- Renewal date: ${accountContext.renewalDate}` : ""}`;
+- Days since last touch: ${accountContext.daysSinceTouch}${accountContext.renewalDate ? `\n- Renewal date: ${accountContext.renewalDate}` : ""}${additionalContext ? `\n\nAdditional context from the AE: ${additionalContext}` : ""}`;
   } else if (type === "proactive_signal") {
     if (!signal) {
       return NextResponse.json(
