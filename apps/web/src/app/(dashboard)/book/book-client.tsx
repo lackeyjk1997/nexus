@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Copy,
   Check,
+  Loader2,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -62,6 +63,50 @@ type UsageMetrics = {
   seats_total: number;
 };
 
+type UseCase = {
+  team: string;
+  seats: number;
+  product: string;
+  useCase: string;
+  expectedOutcome: string;
+  adoptionStatus: "on_track" | "needs_attention" | "at_risk";
+  activeUsers: number;
+  notes: string;
+};
+
+type ExpansionOpportunity = {
+  department: string;
+  headcount: number;
+  currentProduct: string | null;
+  recommendedProduct: string;
+  opportunityArr: number;
+  rationale: string;
+};
+
+type ProactiveSignal = {
+  type: "product_release" | "industry_news" | "customer_news";
+  signal: string;
+  relevance: string;
+  action: string;
+  daysAgo: number;
+};
+
+type QbrBrief = {
+  qbr_type: string;
+  title: string;
+  executive_summary: string;
+  agenda_items: Array<{
+    topic: string;
+    duration_minutes: number;
+    talking_points: string[];
+    data_to_prepare: string;
+    desired_outcome: string;
+  }>;
+  stakeholder_strategy: string;
+  risk_to_address: string;
+  success_metric: string;
+};
+
 type Account = {
   company: {
     id: string;
@@ -101,6 +146,9 @@ type Account = {
     riskSignals:
       | Array<{ signal: string; severity: string; detected_at?: string }>
       | null;
+    contractedUseCases: UseCase[] | null;
+    expansionMap: ExpansionOpportunity[] | null;
+    proactiveSignals: ProactiveSignal[] | null;
     healthFactors: unknown;
     onboardingComplete: boolean | null;
   };
@@ -366,6 +414,51 @@ function getStakeholderDotColor(status: string): string {
       return "bg-danger";
     default:
       return "bg-muted-foreground";
+  }
+}
+
+function getProductPillStyle(product: string): string {
+  const p = product.toLowerCase();
+  if (p.includes("enterprise")) return "bg-purple-100 text-purple-700";
+  if (p.includes("code")) return "bg-emerald-100 text-emerald-700";
+  if (p.includes("cowork")) return "bg-amber-100 text-amber-700";
+  if (p.includes("team")) return "bg-teal-100 text-teal-700";
+  return "bg-blue-100 text-blue-700"; // Claude API default
+}
+
+function getAdoptionStatusStyle(status: string): {
+  bg: string;
+  text: string;
+  label: string;
+  barColor: string;
+} {
+  switch (status) {
+    case "on_track":
+      return { bg: "bg-success/10", text: "text-success", label: "On Track", barColor: "bg-success" };
+    case "needs_attention":
+      return { bg: "bg-warning/10", text: "text-warning", label: "Needs Attention", barColor: "bg-warning" };
+    case "at_risk":
+      return { bg: "bg-danger/10", text: "text-danger", label: "At Risk", barColor: "bg-danger" };
+    default:
+      return { bg: "bg-muted", text: "text-muted-foreground", label: status, barColor: "bg-muted-foreground" };
+  }
+}
+
+function getSignalIcon(type: string): string {
+  switch (type) {
+    case "product_release": return "\uD83D\uDE80";
+    case "industry_news": return "\uD83D\uDCF0";
+    case "customer_news": return "\uD83C\uDFE2";
+    default: return "\uD83D\uDD14";
+  }
+}
+
+function getSignalTypeLabel(type: string): string {
+  switch (type) {
+    case "product_release": return "Product Release";
+    case "industry_news": return "Industry News";
+    case "customer_news": return "Customer News";
+    default: return type;
   }
 }
 
@@ -1056,6 +1149,7 @@ function AccountDetailDrawer({
   onViewKit: (msg: Message) => void;
   onDraftEmail: () => void;
 }) {
+  const { currentUser } = usePersona();
   const score = account.health.healthScore ?? 100;
   const healthFactors = account.health.healthFactors as
     | HealthFactors
@@ -1066,19 +1160,39 @@ function AccountDetailDrawer({
   const stakeholders = account.health.keyStakeholders ?? [];
   const riskSignals = account.health.riskSignals ?? [];
   const expansionSignals = account.health.expansionSignals ?? [];
+  const contractedUseCases = account.health.contractedUseCases ?? [];
+  const expansionMap = account.health.expansionMap ?? [];
+  const proactiveSignals = account.health.proactiveSignals ?? [];
   const products = account.health.productsPurchased ?? [];
   const messages = account.messages.filter(
     (m) => m.status === "pending" || m.status === "kit_ready"
   );
   const renewalDays = daysUntil(account.health.renewalDate);
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+  // Observation state
+  const [obsExpanded, setObsExpanded] = useState(false);
+  const [obsText, setObsText] = useState("");
+  const [obsLoading, setObsLoading] = useState(false);
+  const [obsResult, setObsResult] = useState<"success" | "error" | null>(null);
+
+  // QBR state
+  const [qbrExpanded, setQbrExpanded] = useState(false);
+  const [qbrType, setQbrType] = useState<string | null>(null);
+  const [qbrLoading, setQbrLoading] = useState(false);
+  const [qbrBrief, setQbrBrief] = useState<QbrBrief | null>(null);
+  const [qbrError, setQbrError] = useState<string | null>(null);
+  const [qbrCopied, setQbrCopied] = useState(false);
+
+  // Reset obs success message
   useEffect(() => {
-    if (actionMsg) {
-      const t = setTimeout(() => setActionMsg(null), 2500);
+    if (obsResult === "success") {
+      const t = setTimeout(() => {
+        setObsResult(null);
+        setObsExpanded(false);
+      }, 3000);
       return () => clearTimeout(t);
     }
-  }, [actionMsg]);
+  }, [obsResult]);
 
   // Close on Escape
   useEffect(() => {
@@ -1088,6 +1202,113 @@ function AccountDetailDrawer({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  const handleObsSubmit = async () => {
+    if (!obsText.trim()) return;
+    setObsLoading(true);
+    setObsResult(null);
+    try {
+      const res = await fetch("/api/observations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          observerId: currentUser?.id,
+          rawInput: obsText.trim(),
+          context: {
+            source: "book_drawer",
+            companyId: account.company.id,
+            companyName: account.company.name,
+            dealId: account.deal.id,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setObsText("");
+      setObsResult("success");
+    } catch {
+      setObsResult("error");
+    } finally {
+      setObsLoading(false);
+    }
+  };
+
+  const handleQbrGenerate = async (type: string) => {
+    setQbrType(type);
+    setQbrLoading(true);
+    setQbrBrief(null);
+    setQbrError(null);
+    try {
+      const accountContext = {
+        healthScore: account.health.healthScore,
+        healthTrend: account.health.healthTrend,
+        contractStatus: account.health.contractStatus,
+        renewalDate: account.health.renewalDate,
+        arr: account.health.arr,
+        productsPurchased: account.health.productsPurchased,
+        usageMetrics: account.health.usageMetrics,
+        keyStakeholders: account.health.keyStakeholders,
+        contractedUseCases: account.health.contractedUseCases,
+        expansionMap: account.health.expansionMap,
+        riskSignals: account.health.riskSignals,
+        expansionSignals: account.health.expansionSignals,
+        recentMessages: account.messages
+          .filter((m) => m.status === "pending" || m.status === "kit_ready")
+          .map((m) => m.subject),
+      };
+
+      const res = await fetch("/api/customer/qbr-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: account.company.id,
+          companyName: account.company.name,
+          qbrType: type,
+          accountContext,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "QBR generation failed");
+      }
+      setQbrBrief(data.qbrBrief);
+    } catch (err) {
+      setQbrError(err instanceof Error ? err.message : "QBR generation failed");
+    } finally {
+      setQbrLoading(false);
+    }
+  };
+
+  const handleCopyQbr = () => {
+    if (!qbrBrief) return;
+    const lines = [
+      qbrBrief.title,
+      "",
+      qbrBrief.executive_summary,
+      "",
+      "AGENDA",
+      ...qbrBrief.agenda_items.flatMap((item, i) => [
+        "",
+        `${i + 1}. ${item.topic} (${item.duration_minutes} min)`,
+        ...item.talking_points.map((tp) => `   - ${tp}`),
+        `   Prepare: ${item.data_to_prepare}`,
+        `   Goal: ${item.desired_outcome}`,
+      ]),
+      "",
+      `Invite: ${qbrBrief.stakeholder_strategy}`,
+      "",
+      `Risk: ${qbrBrief.risk_to_address}`,
+      "",
+      `Success: ${qbrBrief.success_metric}`,
+    ];
+    navigator.clipboard.writeText(lines.join("\n"));
+    setQbrCopied(true);
+    setTimeout(() => setQbrCopied(false), 2000);
+  };
+
+  const totalExpansionArr = expansionMap.reduce(
+    (sum, e) => sum + e.opportunityArr,
+    0
+  );
 
   return (
     <>
@@ -1100,7 +1321,7 @@ function AccountDetailDrawer({
       {/* Drawer */}
       <div className="fixed top-0 right-0 h-full w-[480px] bg-card border-l border-border shadow-xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
         <div className="p-6 space-y-5">
-          {/* Header */}
+          {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-semibold text-foreground">
@@ -1121,10 +1342,9 @@ function AccountDetailDrawer({
             </button>
           </div>
 
-          {/* Health Overview */}
+          {/* 2. Health Overview */}
           <DrawerSection title="Health Overview">
             <div className="space-y-3">
-              {/* Main health bar */}
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
                   <div
@@ -1152,30 +1372,36 @@ function AccountDetailDrawer({
                 </span>
               </div>
 
-              {/* Health factor bars */}
               {healthFactors && (
-                <div className="space-y-2 pt-1">
+                <div className="space-y-3 pt-1">
                   {(
                     [
-                      ["Adoption", healthFactors.adoption],
-                      ["Engagement", healthFactors.engagement],
-                      ["Sentiment", healthFactors.sentiment],
-                      ["Support", healthFactors.support_health],
+                      ["Seat Utilization", "Active vs. purchased seats", healthFactors.adoption],
+                      ["Usage Trend", "Month-over-month volume change", healthFactors.engagement],
+                      ["Stakeholder Health", "Champion status and contact stability", healthFactors.sentiment],
+                      ["Engagement Recency", "Days since last meaningful interaction", healthFactors.support_health],
                     ] as const
-                  ).map(([label, val]) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-20">
-                        {label}
-                      </span>
-                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-foreground/40"
-                          style={{ width: `${val}%` }}
-                        />
+                  ).map(([label, subtitle, val]) => (
+                    <div key={label}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-32">
+                          <span className="text-xs text-foreground font-medium">
+                            {label}
+                          </span>
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            {subtitle}
+                          </p>
+                        </div>
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-foreground/40"
+                            style={{ width: `${val}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-8 text-right">
+                          {val}%
+                        </span>
                       </div>
-                      <span className="text-xs text-muted-foreground w-8 text-right">
-                        {val}%
-                      </span>
                     </div>
                   ))}
                 </div>
@@ -1183,7 +1409,75 @@ function AccountDetailDrawer({
             </div>
           </DrawerSection>
 
-          {/* Contract */}
+          {/* 3. Contracted Use Cases */}
+          <DrawerSection title="Contracted Use Cases">
+            {contractedUseCases.length > 0 ? (
+              <div className="space-y-3">
+                {contractedUseCases.map((uc, i) => {
+                  const status = getAdoptionStatusStyle(uc.adoptionStatus);
+                  const utilPct = Math.round((uc.activeUsers / uc.seats) * 100);
+                  return (
+                    <div
+                      key={i}
+                      className="bg-muted/50 rounded-lg p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {uc.team} &middot; {uc.seats} seats
+                          </p>
+                          <span
+                            className={cn(
+                              "inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-medium",
+                              getProductPillStyle(uc.product)
+                            )}
+                          >
+                            {uc.product}
+                          </span>
+                        </div>
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded text-[11px] font-medium",
+                            status.bg,
+                            status.text
+                          )}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground">{uc.useCase}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Goal: {uc.expectedOutcome}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              status.barColor
+                            )}
+                            style={{ width: `${utilPct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {uc.activeUsers}/{uc.seats} active
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {uc.notes}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">
+                No use cases documented &mdash; schedule discovery check-in
+              </p>
+            )}
+          </DrawerSection>
+
+          {/* 4. Contract */}
           <DrawerSection title="Contract">
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
@@ -1231,7 +1525,7 @@ function AccountDetailDrawer({
             </div>
           </DrawerSection>
 
-          {/* Usage Metrics */}
+          {/* 5. Usage Metrics */}
           {usageMetrics && (
             <DrawerSection title="Usage Metrics">
               <div className="space-y-1.5 text-sm">
@@ -1285,7 +1579,7 @@ function AccountDetailDrawer({
             </DrawerSection>
           )}
 
-          {/* Key Stakeholders */}
+          {/* 6. Key Stakeholders */}
           {stakeholders.length > 0 && (
             <DrawerSection title="Key Stakeholders">
               <div className="space-y-2">
@@ -1315,7 +1609,51 @@ function AccountDetailDrawer({
             </DrawerSection>
           )}
 
-          {/* Risk Signals */}
+          {/* 7. Expansion Map */}
+          <DrawerSection title="Expansion Map">
+            {expansionMap.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-success">
+                  Total whitespace: {formatCurrency(totalExpansionArr)} additional ARR
+                </p>
+                {expansionMap.map((e, i) => (
+                  <div
+                    key={i}
+                    className="bg-muted/50 rounded-lg p-3 space-y-1"
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      {e.department} &middot; {e.headcount} people
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        No Claude today &rarr;
+                      </span>
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded text-[11px] font-medium",
+                          getProductPillStyle(e.recommendedProduct)
+                        )}
+                      >
+                        {e.recommendedProduct}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      {formatCurrency(e.opportunityArr)}/yr potential
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {e.rationale}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No expansion opportunities mapped
+              </p>
+            )}
+          </DrawerSection>
+
+          {/* 8. Risk Signals */}
           <DrawerSection title="Risk Signals">
             {riskSignals.length > 0 ? (
               <div className="space-y-2">
@@ -1338,7 +1676,7 @@ function AccountDetailDrawer({
             )}
           </DrawerSection>
 
-          {/* Expansion Signals */}
+          {/* 9. Expansion Signals */}
           <DrawerSection title="Expansion Signals">
             {expansionSignals.length > 0 ? (
               <div className="space-y-2">
@@ -1366,7 +1704,39 @@ function AccountDetailDrawer({
             )}
           </DrawerSection>
 
-          {/* Recent Messages */}
+          {/* 10. Proactive Signals */}
+          <DrawerSection title="Proactive Signals">
+            {proactiveSignals.length > 0 ? (
+              <div className="space-y-3">
+                {proactiveSignals.map((ps, i) => (
+                  <div
+                    key={i}
+                    className="bg-muted/50 rounded-lg p-3 space-y-1.5"
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      {getSignalIcon(ps.type)} {getSignalTypeLabel(ps.type)} &middot;{" "}
+                      <span className="text-muted-foreground font-normal">
+                        {ps.daysAgo} days ago
+                      </span>
+                    </p>
+                    <p className="text-sm text-foreground">{ps.signal}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Relevance: {ps.relevance}
+                    </p>
+                    <p className="text-xs font-medium text-secondary">
+                      &rarr; {ps.action}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No proactive signals detected
+              </p>
+            )}
+          </DrawerSection>
+
+          {/* 11. Recent Messages */}
           {messages.length > 0 && (
             <DrawerSection title="Recent Messages">
               <div className="space-y-3">
@@ -1410,9 +1780,232 @@ function AccountDetailDrawer({
             </DrawerSection>
           )}
 
-          {/* Actions */}
+          {/* 12. Actions */}
           <DrawerSection title="Actions">
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Log Observation */}
+              {!obsExpanded ? (
+                <button
+                  onClick={() => setObsExpanded(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted hover:bg-border text-sm font-medium text-foreground transition-colors"
+                >
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Log Observation
+                </button>
+              ) : (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Log Observation
+                  </p>
+                  <textarea
+                    value={obsText}
+                    onChange={(e) => setObsText(e.target.value)}
+                    placeholder="What are you noticing about this account?"
+                    rows={3}
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                    disabled={obsLoading}
+                  />
+                  {obsResult === "success" && (
+                    <p className="text-xs text-success font-medium">
+                      &#10003; Observation captured and classified
+                    </p>
+                  )}
+                  {obsResult === "error" && (
+                    <p className="text-xs text-danger font-medium">
+                      Couldn&apos;t save observation. Try again.
+                    </p>
+                  )}
+                  {obsLoading && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Capturing observation...
+                    </p>
+                  )}
+                  {!obsResult && !obsLoading && (
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setObsExpanded(false);
+                          setObsText("");
+                          setObsResult(null);
+                        }}
+                        className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-border transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleObsSubmit}
+                        disabled={!obsText.trim()}
+                        className="px-3 py-1.5 rounded-md text-xs font-medium bg-foreground text-white hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                      >
+                        Submit
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* QBR Prep */}
+              {!qbrExpanded ? (
+                <button
+                  onClick={() => setQbrExpanded(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted hover:bg-border text-sm font-medium text-foreground transition-colors"
+                >
+                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                  Prep for QBR
+                </button>
+              ) : qbrBrief ? (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-secondary" />
+                    <p className="text-sm font-semibold text-secondary">
+                      QBR Brief: {qbrBrief.qbr_type}
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium text-foreground">
+                    {account.company.name}
+                  </p>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {qbrBrief.executive_summary}
+                  </p>
+
+                  <div>
+                    <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase mb-2">
+                      Agenda
+                    </p>
+                    <div className="space-y-3">
+                      {qbrBrief.agenda_items.map((item, i) => (
+                        <div key={i} className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">
+                            {i + 1}. {item.topic}{" "}
+                            <span className="text-muted-foreground font-normal">
+                              ({item.duration_minutes} min)
+                            </span>
+                          </p>
+                          <ul className="space-y-0.5 ml-4">
+                            {item.talking_points.map((tp, j) => (
+                              <li
+                                key={j}
+                                className="text-xs text-foreground list-disc"
+                              >
+                                {tp}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="text-[11px] text-muted-foreground ml-4">
+                            Prepare: {item.data_to_prepare}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground ml-4">
+                            Goal: {item.desired_outcome}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-foreground">
+                    <span className="font-medium">Invite:</span>{" "}
+                    {qbrBrief.stakeholder_strategy}
+                  </p>
+
+                  {qbrBrief.risk_to_address && (
+                    <div className="bg-warning/10 rounded-md p-2">
+                      <p className="text-xs text-foreground">
+                        <span className="font-medium">&#9888; Risk:</span>{" "}
+                        {qbrBrief.risk_to_address}
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Success:</span>{" "}
+                    {qbrBrief.success_metric}
+                  </p>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setQbrBrief(null);
+                        setQbrType(null);
+                      }}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-border transition-colors"
+                    >
+                      New QBR Type
+                    </button>
+                    <button
+                      onClick={handleCopyQbr}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-foreground text-white hover:bg-foreground/90 transition-colors"
+                    >
+                      {qbrCopied ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      {qbrCopied ? "Copied" : "Copy Brief"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    What&apos;s the focus for this QBR?
+                  </p>
+                  {qbrLoading ? (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 py-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Generating QBR agenda...
+                    </p>
+                  ) : qbrError ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-danger">{qbrError}</p>
+                      <button
+                        onClick={() => {
+                          setQbrError(null);
+                          setQbrType(null);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          "Renewal Defense",
+                          "Expansion Pitch",
+                          "Usage Review",
+                          "Executive Re-engagement",
+                        ].map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => handleQbrGenerate(type)}
+                            className={cn(
+                              "px-3 py-2 rounded-md text-xs font-medium transition-colors",
+                              qbrType === type
+                                ? "bg-foreground text-white"
+                                : "bg-muted hover:bg-border text-foreground"
+                            )}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setQbrExpanded(false);
+                          setQbrType(null);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Draft Check-in Email */}
               <button
                 onClick={onDraftEmail}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted hover:bg-border text-sm font-medium text-foreground transition-colors"
@@ -1420,27 +2013,6 @@ function AccountDetailDrawer({
                 <Mail className="h-4 w-4 text-muted-foreground" />
                 Draft Check-in Email
               </button>
-              <button
-                onClick={() => setActionMsg("Opens observation input")}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted hover:bg-border text-sm font-medium text-foreground transition-colors"
-              >
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                Log Observation
-              </button>
-              <button
-                onClick={() =>
-                  setActionMsg("QBR prep available for renewal accounts")
-                }
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-muted hover:bg-border text-sm font-medium text-foreground transition-colors"
-              >
-                <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                Prep for QBR
-              </button>
-              {actionMsg && (
-                <p className="text-xs text-muted-foreground text-center py-1">
-                  {actionMsg}
-                </p>
-              )}
             </div>
           </DrawerSection>
         </div>

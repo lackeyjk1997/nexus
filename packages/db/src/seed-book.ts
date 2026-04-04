@@ -256,6 +256,7 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "API usage growing 5% MoM", confidence: 0.7, product: "claude_code", details: "Engineering team expressing interest in Claude Code for internal tools" }],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -274,6 +275,17 @@ async function seedBook() {
         { signal: "API usage declined 23% in last 30 days", severity: "high", detected_at: daysAgo(7).toISOString() },
         { signal: "Renewal in 45 days with declining engagement", severity: "high", detected_at: daysAgo(3).toISOString() },
       ],
+      contractedUseCases: [
+        { team: "Clinical Documentation", seats: 20, product: "Claude API", useCase: "Medical note summarization and coding", expectedOutcome: "40% reduction in documentation time per encounter", adoptionStatus: "needs_attention", activeUsers: 11, notes: "Adoption plateaued at 55%. Physicians prefer existing EHR workflows." },
+        { team: "Quality & Compliance", seats: 8, product: "Claude API", useCase: "Audit preparation and compliance checking", expectedOutcome: "Automated pre-audit compliance reports", adoptionStatus: "on_track", activeUsers: 7, notes: "Strong champion in quality director. Planning to present ROI at board meeting." },
+      ],
+      expansionMap: [
+        { department: "Administration", headcount: 60, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 18000, rationale: "Scheduling, patient communications, insurance verification workflows." },
+        { department: "Research", headcount: 15, currentProduct: null, recommendedProduct: "Claude Code", opportunityArr: 22500, rationale: "Clinical research data analysis, literature reviews, grant application drafting." },
+      ],
+      proactiveSignals: [
+        { type: "industry_news", signal: "CMS announced expanded documentation requirements for Medicare reimbursement", relevance: "Pacific Coast's clinical documentation team will face increased workload", action: "Position Claude as scaling solution — schedule check-in with CMIO", daysAgo: 15 },
+      ],
       nextQbrDate: daysFromNow(14), onboardingComplete: true,
     },
     {
@@ -289,6 +301,7 @@ async function seedBook() {
       ],
       expansionSignals: [],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(3), onboardingComplete: true,
     },
     {
@@ -305,6 +318,16 @@ async function seedBook() {
       expansionSignals: [],
       riskSignals: [
         { signal: "Only 2 of 8 seats active after 3 weeks", severity: "medium", detected_at: daysAgo(5).toISOString() },
+      ],
+      contractedUseCases: [
+        { team: "Data Science", seats: 12, product: "Claude API", useCase: "Experimental data analysis and visualization", expectedOutcome: "Automated statistical analysis of lab results", adoptionStatus: "needs_attention", activeUsers: 4, notes: "Only 2 of 8 data scientists using regularly. Team lead Kevin Wu asking for help." },
+        { team: "Research", seats: 8, product: "Claude Code", useCase: "Lab automation scripts and data pipelines", expectedOutcome: "Reduce manual data entry by 80%", adoptionStatus: "needs_attention", activeUsers: 2, notes: "Early days. Team needs hands-on training before adoption will grow." },
+      ],
+      expansionMap: [
+        { department: "Quality Assurance", headcount: 20, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 6000, rationale: "QA documentation, test protocol management, compliance tracking." },
+      ],
+      proactiveSignals: [
+        { type: "product_release", signal: "Claude Code added Jupyter notebook integration", relevance: "Directly relevant for Cascadia's data science team — could accelerate adoption", action: "Share with Kevin Wu as a reason to re-engage his team", daysAgo: 11 },
       ],
       nextQbrDate: monthsFromNow(1), onboardingComplete: false,
     },
@@ -324,6 +347,17 @@ async function seedBook() {
         { signal: "Asking about Claude Code for pipeline automation", confidence: 0.7, product: "claude_code", details: "Bioinformatics team building custom analysis pipelines" },
       ],
       riskSignals: [],
+      contractedUseCases: [
+        { team: "Bioinformatics", seats: 8, product: "Claude API", useCase: "Genomic data analysis and variant interpretation", expectedOutcome: "Reduce analysis time from days to hours", adoptionStatus: "on_track", activeUsers: 7, notes: "Power users. Team lead presenting results at upcoming genomics conference." },
+        { team: "Clinical Operations", seats: 5, product: "Claude API", useCase: "Patient report generation", expectedOutcome: "Standardized reporting across all clinicians", adoptionStatus: "on_track", activeUsers: 5, notes: "Full adoption. Requesting additional seats for new hires." },
+      ],
+      expansionMap: [
+        { department: "Lab Technicians", headcount: 25, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 7500, rationale: "Non-technical lab staff managing sample tracking and scheduling." },
+        { department: "IT/DevOps", headcount: 8, currentProduct: null, recommendedProduct: "Claude Code", opportunityArr: 12000, rationale: "Infrastructure automation, CI/CD pipeline management, monitoring scripts." },
+      ],
+      proactiveSignals: [
+        { type: "customer_news", signal: "Summit's lead bioinformatician presenting Claude results at Genomics Conference", relevance: "External validation strengthens internal champion — expansion readiness", action: "Offer to help prepare presentation materials — deepens relationship", daysAgo: 7 },
+      ],
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -339,6 +373,7 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "Exploring Claude Code for analyst workflows", confidence: 0.6, product: "claude_code", details: "Research team testing Code for due diligence reports" }],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -359,6 +394,19 @@ async function seedBook() {
         { signal: "New COO reviewing all vendor contracts", severity: "critical", detected_at: daysAgo(5).toISOString() },
         { signal: "No executive engagement in 22 days", severity: "high", detected_at: daysAgo(1).toISOString() },
       ],
+      contractedUseCases: [
+        { team: "Compliance Analysts", seats: 25, product: "Claude Enterprise", useCase: "Regulatory review automation", expectedOutcome: "50% reduction in review cycle time", adoptionStatus: "on_track", activeUsers: 18, notes: "Strong adoption among senior analysts. Junior team still using manual process." },
+        { team: "Legal", seats: 10, product: "Claude Enterprise", useCase: "Contract analysis and clause extraction", expectedOutcome: "Eliminate external counsel for standard reviews", adoptionStatus: "at_risk", activeUsers: 3, notes: "Legal team skeptical after champion departure. New COO hasn't advocated internally." },
+        { team: "Risk Assessment", seats: 10, product: "Claude Enterprise", useCase: "Risk report generation", expectedOutcome: "3x throughput on quarterly risk assessments", adoptionStatus: "needs_attention", activeUsers: 5, notes: "Pilot team engaged but haven't expanded to full risk team." },
+      ],
+      expansionMap: [
+        { department: "Operations", headcount: 120, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 36000, rationale: "Non-technical team doing manual process coordination. Cowork automates task management and document workflows." },
+        { department: "Finance", headcount: 45, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 13500, rationale: "Financial reporting and audit prep. Cowork can automate recurring report generation." },
+      ],
+      proactiveSignals: [
+        { type: "product_release", signal: "Anthropic launched enhanced compliance workflow templates in Cowork", relevance: "Directly applicable to Harbor's 120-person ops team — new expansion angle", action: "Share Cowork compliance demo with Amanda Chen", daysAgo: 5 },
+        { type: "industry_news", signal: "New SEC reporting requirements effective Q3 2026", relevance: "Harbor's compliance team will need to process 40% more regulatory reviews", action: "Position increased Claude usage as scaling solution vs. hiring", daysAgo: 12 },
+      ],
       nextQbrDate: daysFromNow(21), onboardingComplete: true,
     },
     {
@@ -376,6 +424,7 @@ async function seedBook() {
       riskSignals: [
         { signal: "Usage declining 8% with renewal in 60 days", severity: "medium", detected_at: daysAgo(10).toISOString() },
       ],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: daysFromNow(14), onboardingComplete: true,
     },
     {
@@ -391,6 +440,7 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "Asking about batch processing for quarterly reports", confidence: 0.5, product: "claude_api", details: "May need higher API tier for quarterly spikes" }],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(3), onboardingComplete: true,
     },
     {
@@ -409,6 +459,17 @@ async function seedBook() {
         { signal: "Commercial lending team requesting access", confidence: 0.85, product: "claude_api", details: "Second department expansion — commercial lending wants to automate loan document review" },
       ],
       riskSignals: [],
+      contractedUseCases: [
+        { team: "Credit Analysis", seats: 20, product: "Claude API", useCase: "Loan application review and risk scoring", expectedOutcome: "60% faster credit decisions on standard applications", adoptionStatus: "on_track", activeUsers: 17, notes: "Highest adoption in portfolio. Team built custom workflows." },
+        { team: "Branch Operations", seats: 15, product: "Claude Code", useCase: "Internal tool development for branch staff", expectedOutcome: "Self-service reporting and customer lookup tools", adoptionStatus: "on_track", activeUsers: 12, notes: "Second department expansion. Dev team building branch tools with Code." },
+      ],
+      expansionMap: [
+        { department: "Compliance", headcount: 30, currentProduct: null, recommendedProduct: "Claude Enterprise", opportunityArr: 45000, rationale: "Regulatory compliance workflows. Natural extension from credit analysis success." },
+        { department: "Customer Service", headcount: 80, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 24000, rationale: "Customer inquiry routing, response drafting, knowledge base search." },
+      ],
+      proactiveSignals: [
+        { type: "industry_news", signal: "Federal Reserve proposing new stress testing requirements for regional banks", relevance: "Cornerstone's credit team may need expanded analytical capacity", action: "Position Claude API expansion for stress test modeling", daysAgo: 18 },
+      ],
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -424,6 +485,7 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "Clinical trials team interested in protocol analysis", confidence: 0.65, product: "claude_api", details: "Dr. Patel exploring expansion to clinical operations" }],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -442,6 +504,18 @@ async function seedBook() {
         { signal: "LIMS integration failing — blocking production use", severity: "critical", detected_at: daysAgo(3).toISOString() },
         { signal: "Only 3 of 10 seats active after 4 weeks", severity: "high", detected_at: daysAgo(7).toISOString() },
       ],
+      contractedUseCases: [
+        { team: "Data Engineering", seats: 15, product: "Claude API", useCase: "LIMS data processing pipeline", expectedOutcome: "Automated sample processing with 99%+ accuracy", adoptionStatus: "at_risk", activeUsers: 4, notes: "Integration failures blocking production deployment. Team reverting to manual." },
+        { team: "Research Scientists", seats: 10, product: "Claude API", useCase: "Literature review and protocol analysis", expectedOutcome: "70% faster systematic review process", adoptionStatus: "needs_attention", activeUsers: 6, notes: "Good early adoption but waiting for LIMS integration before deeper commitment." },
+      ],
+      expansionMap: [
+        { department: "Clinical Trials", headcount: 30, currentProduct: null, recommendedProduct: "Claude API", opportunityArr: 45000, rationale: "Protocol analysis, adverse event monitoring, regulatory submission prep." },
+        { department: "Quality Assurance", headcount: 12, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 3600, rationale: "QA documentation, batch record review, deviation tracking." },
+      ],
+      proactiveSignals: [
+        { type: "product_release", signal: "Claude API now supports structured JSON output mode", relevance: "Could resolve LIMS data format incompatibility without middleware", action: "Share with Jake Morrison's engineering team — may simplify integration", daysAgo: 3 },
+        { type: "customer_news", signal: "Pinnacle Biotech announced Series C funding ($45M)", relevance: "Growth capital means hiring and scaling — more seats and deeper integration", action: "Congratulate and position expansion conversation", daysAgo: 8 },
+      ],
       nextQbrDate: monthsFromNow(1), onboardingComplete: false,
     },
     {
@@ -457,6 +531,7 @@ async function seedBook() {
       ],
       expansionSignals: [],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(3), onboardingComplete: true,
     },
     {
@@ -473,6 +548,19 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "Merchandising team asking about Cowork", confidence: 0.75, product: "cowork", details: "Non-technical team wants AI access without coding — strong expansion signal" }],
       riskSignals: [],
+      contractedUseCases: [
+        { team: "Category Management", seats: 12, product: "Claude API", useCase: "Competitive pricing analysis", expectedOutcome: "Daily competitive price monitoring across 5,000 SKUs", adoptionStatus: "on_track", activeUsers: 10, notes: "Seasonal usage — peaks during promotional planning cycles." },
+        { team: "Operations", seats: 8, product: "Claude API", useCase: "Supply chain demand forecasting", expectedOutcome: "Improve forecast accuracy by 25%", adoptionStatus: "needs_attention", activeUsers: 4, notes: "Ops team wants non-technical interface. Potential Cowork expansion." },
+      ],
+      expansionMap: [
+        { department: "Operations (broader)", headcount: 200, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 60000, rationale: "Maria Santos already asked about Cowork for merchandising. 200-person ops team is the largest whitespace opportunity in the portfolio." },
+        { department: "Marketing", headcount: 35, currentProduct: null, recommendedProduct: "Claude Team", opportunityArr: 10500, rationale: "Content creation, campaign analysis, customer communication drafting." },
+        { department: "Finance", headcount: 20, currentProduct: null, recommendedProduct: "Cowork", opportunityArr: 6000, rationale: "Financial modeling, budget tracking, automated reporting." },
+      ],
+      proactiveSignals: [
+        { type: "product_release", signal: "Cowork now available for enterprise deployment", relevance: "Maria Santos specifically asked about Cowork for merchandising team", action: "Schedule Cowork demo — 200-person ops team is the target", daysAgo: 14 },
+        { type: "industry_news", signal: "Retail AI adoption accelerating: 67% of retailers plan AI investment in 2026", relevance: "Executive air cover for expansion budget approval", action: "Share industry report with VP Operations", daysAgo: 20 },
+      ],
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -491,6 +579,7 @@ async function seedBook() {
         { signal: "Competitor (OpenAI) conducting POC with their product team", severity: "high", detected_at: daysAgo(12).toISOString() },
         { signal: "Usage declining 12% ahead of renewal", severity: "medium", detected_at: daysAgo(8).toISOString() },
       ],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: daysFromNow(21), onboardingComplete: true,
     },
     {
@@ -506,6 +595,7 @@ async function seedBook() {
       ],
       expansionSignals: [{ signal: "100% seat utilization, team growing", confidence: 0.6, product: "claude_api", details: "Hiring 2 more data scientists, will need additional seats" }],
       riskSignals: [],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(3), onboardingComplete: true,
     },
     {
@@ -524,6 +614,7 @@ async function seedBook() {
         { signal: "Ongoing API latency issues — 3rd escalation", severity: "high", detected_at: daysAgo(2).toISOString() },
         { signal: "20 days since last touch on high-value account", severity: "medium", detected_at: daysAgo(1).toISOString() },
       ],
+      contractedUseCases: null, expansionMap: null, proactiveSignals: null,
       nextQbrDate: monthsFromNow(1), onboardingComplete: true,
     },
     {
@@ -542,6 +633,16 @@ async function seedBook() {
         { signal: "Key stakeholder Rachel Kim silent for 3 weeks", severity: "critical", detected_at: daysAgo(4).toISOString() },
         { signal: "Usage dropped 35% — lowest engagement in portfolio", severity: "critical", detected_at: daysAgo(2).toISOString() },
         { signal: "25 days since last touch", severity: "high", detected_at: daysAgo(1).toISOString() },
+      ],
+      contractedUseCases: [
+        { team: "Product Engineering", seats: 15, product: "Claude API", useCase: "Code review and documentation generation", expectedOutcome: "30% faster code review cycles", adoptionStatus: "at_risk", activeUsers: 5, notes: "Usage dropped 35% after key stakeholder Rachel Kim went silent." },
+        { team: "Customer Insights", seats: 10, product: "Claude API", useCase: "Customer feedback analysis and trend detection", expectedOutcome: "Weekly automated insight reports from NPS data", adoptionStatus: "at_risk", activeUsers: 2, notes: "Team lost interest after initial pilot. No champion driving adoption." },
+      ],
+      expansionMap: [
+        { department: "Design", headcount: 12, currentProduct: null, recommendedProduct: "Claude Team", opportunityArr: 3600, rationale: "UX research synthesis, design documentation, competitive analysis." },
+      ],
+      proactiveSignals: [
+        { type: "customer_news", signal: "Evolve Retail Tech posted job listing for VP of AI Strategy", relevance: "New AI leadership hire could re-energize the account or reset vendor evaluation", action: "Monitor the hire — prepare re-engagement pitch for new VP", daysAgo: 10 },
       ],
       nextQbrDate: daysFromNow(14), onboardingComplete: true,
     },
