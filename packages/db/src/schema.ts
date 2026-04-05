@@ -913,6 +913,8 @@ export const accountHealth = pgTable("account_health", {
   contractedUseCases: jsonb("contracted_use_cases"),
   expansionMap: jsonb("expansion_map"),
   proactiveSignals: jsonb("proactive_signals"),
+  similarSituations: jsonb("similar_situations"),
+  recommendedResources: jsonb("recommended_resources"),
   nextQbrDate: timestamp("next_qbr_date"),
   onboardingComplete: boolean("onboarding_complete").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),

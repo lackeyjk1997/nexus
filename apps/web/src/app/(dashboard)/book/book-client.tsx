@@ -149,6 +149,24 @@ type Account = {
     contractedUseCases: UseCase[] | null;
     expansionMap: ExpansionOpportunity[] | null;
     proactiveSignals: ProactiveSignal[] | null;
+    similarSituations:
+      | Array<{
+          accountName: string;
+          vertical: string;
+          situation: string;
+          resolution: string;
+          outcome: string;
+          relevance: string;
+        }>
+      | null;
+    recommendedResources:
+      | Array<{
+          title: string;
+          type: string;
+          relevance: string;
+          keySection: string;
+        }>
+      | null;
     healthFactors: unknown;
     onboardingComplete: boolean | null;
   };
@@ -656,7 +674,8 @@ export function BookClient() {
         />
       </div>
 
-      {/* Priority Section */}
+      {/* Priority Section — hidden for demo (entry point is now the account table) */}
+      {false && (
       <div>
         <div className="flex items-center gap-2 mb-3">
           <div className="h-px flex-1 bg-border" />
@@ -677,6 +696,7 @@ export function BookClient() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Cross-Book Intelligence */}
       <div>
@@ -1163,6 +1183,8 @@ function AccountDetailDrawer({
   const contractedUseCases = account.health.contractedUseCases ?? [];
   const expansionMap = account.health.expansionMap ?? [];
   const proactiveSignals = account.health.proactiveSignals ?? [];
+  const similarSituations = account.health.similarSituations ?? [];
+  const recommendedResources = account.health.recommendedResources ?? [];
   const products = account.health.productsPurchased ?? [];
   const messages = account.messages.filter(
     (m) => m.status === "pending" || m.status === "kit_ready"
@@ -2059,7 +2081,72 @@ function AccountDetailDrawer({
             )}
           </DrawerSection>
 
-          {/* 11. Recent Messages */}
+          {/* 11. Similar Situations */}
+          <DrawerSection title="Similar Situations">
+            {similarSituations.length > 0 ? (
+              <div className="space-y-3">
+                {similarSituations.map((sit, i) => (
+                  <div key={i} className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <p className="text-sm font-medium text-foreground">
+                      🔗 {sit.accountName} &middot;{" "}
+                      <span className="font-normal text-muted-foreground">{sit.vertical}</span>
+                    </p>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {sit.situation}
+                    </p>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      <span className="font-medium">Resolution:</span> {sit.resolution}
+                    </p>
+                    <p className="text-sm text-success font-medium">
+                      &#10003; {sit.outcome}
+                    </p>
+                    <p className="text-xs text-muted-foreground italic">
+                      Why this applies: {sit.relevance}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No similar patterns identified
+              </p>
+            )}
+          </DrawerSection>
+
+          {/* 12. Recommended Resources */}
+          <DrawerSection title="Recommended Resources">
+            {recommendedResources.length > 0 ? (
+              <div className="space-y-3">
+                {recommendedResources.map((res, i) => (
+                  <div key={i} className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm">📄</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {res.title}
+                        </p>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground">
+                          {res.type.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {res.relevance}
+                    </p>
+                    <p className="text-xs text-muted-foreground italic">
+                      Key section: {res.keySection}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No resources matched
+              </p>
+            )}
+          </DrawerSection>
+
+          {/* 13. Recent Messages */}
           {messages.length > 0 && (
             <DrawerSection title="Recent Messages">
               <div className="space-y-3">
@@ -2103,7 +2190,7 @@ function AccountDetailDrawer({
             </DrawerSection>
           )}
 
-          {/* 12. Actions */}
+          {/* 14. Actions */}
           <DrawerSection title="Actions">
             <div className="space-y-3">
               {/* Log Observation */}

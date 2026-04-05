@@ -55,6 +55,8 @@ export async function GET(request: Request) {
         contractedUseCases: accountHealth.contractedUseCases,
         expansionMap: accountHealth.expansionMap,
         proactiveSignals: accountHealth.proactiveSignals,
+        similarSituations: accountHealth.similarSituations,
+        recommendedResources: accountHealth.recommendedResources,
         healthFactors: accountHealth.healthFactors,
         onboardingComplete: accountHealth.onboardingComplete,
       },

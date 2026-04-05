@@ -286,6 +286,30 @@ async function seedBook() {
       proactiveSignals: [
         { type: "industry_news", signal: "CMS announced expanded documentation requirements for Medicare reimbursement", relevance: "Pacific Coast's clinical documentation team will face increased workload", action: "Position Claude as scaling solution — schedule check-in with CMIO", daysAgo: 15 },
       ],
+      similarSituations: [
+        {
+          accountName: "Meridian Health Network",
+          vertical: "Healthcare",
+          situation: "Clinical documentation adoption plateaued at 50% — physicians were comfortable with existing EHR workflows and saw Claude as extra work rather than a time saver.",
+          resolution: "Identified the 3 highest-volume physicians and ran a timed comparison: documenting with Claude vs. their current EHR-only workflow. Results showed 35% time savings. Shared results in a 10-minute department meeting with video walkthrough.",
+          outcome: "Adoption jumped from 50% to 80% within 3 weeks. Physicians responded to peer proof, not vendor claims.",
+          relevance: "Pacific Coast has the same plateau at 55%. Physician adoption requires peer-driven evidence, not top-down mandates.",
+        },
+      ],
+      recommendedResources: [
+        {
+          title: "Claude for Healthcare: Implementation Patterns",
+          type: "implementation_guide",
+          relevance: "Pacific Coast's clinical documentation team needs workflow patterns specific to their medical specialty mix.",
+          keySection: "The specialty-specific documentation templates and EHR integration patterns",
+        },
+        {
+          title: "Driving Adoption Beyond the Initial Team",
+          type: "best_practice",
+          relevance: "The quality & compliance team (7/8 active) is a success story. Use it to drive adoption in the clinical documentation team.",
+          keySection: "Cross-department proof points and internal case study development",
+        },
+      ],
       nextQbrDate: daysFromNow(14), onboardingComplete: true,
     },
     {
@@ -358,6 +382,30 @@ async function seedBook() {
       proactiveSignals: [
         { type: "customer_news", signal: "Summit's lead bioinformatician presenting Claude results at Genomics Conference", relevance: "External validation strengthens internal champion — expansion readiness", action: "Offer to help prepare presentation materials — deepens relationship", daysAgo: 7 },
       ],
+      similarSituations: [
+        {
+          accountName: "GenePath Analytics",
+          vertical: "Life Sciences",
+          situation: "Small bioinformatics team achieved full adoption quickly. Leadership wanted to expand but wasn't sure which department to target next.",
+          resolution: "Mapped the org's data workflows department by department. Identified clinical operations as the highest-value expansion because they had manual reporting processes that mirrored the bioinformatics team's original use case.",
+          outcome: "Expanded from 8 seats to 20 seats within one quarter. Clinical ops became the second power-user team.",
+          relevance: "Summit is in the same position — high adoption, ready to expand. The department mapping approach identifies the right next team.",
+        },
+      ],
+      recommendedResources: [
+        {
+          title: "Multi-Department Rollout Playbook",
+          type: "best_practice",
+          relevance: "Summit is ready for expansion beyond bioinformatics. This playbook covers phased rollout, department-specific use case development, and change management.",
+          keySection: "The 'Proof Point Cascade' — using success in one department to drive adoption in the next",
+        },
+        {
+          title: "Driving Adoption Beyond the Initial Team",
+          type: "best_practice",
+          relevance: "Summit's bioinformatics team lead presenting at a conference is the perfect internal proof point for expansion.",
+          keySection: "Leveraging internal success stories and external validation to drive executive buy-in for expansion",
+        },
+      ],
       nextQbrDate: monthsFromNow(2), onboardingComplete: true,
     },
     {
@@ -406,6 +454,44 @@ async function seedBook() {
       proactiveSignals: [
         { type: "product_release", signal: "Anthropic launched enhanced compliance workflow templates in Cowork", relevance: "Directly applicable to Harbor's 120-person ops team — new expansion angle", action: "Share Cowork compliance demo with Amanda Chen", daysAgo: 5 },
         { type: "industry_news", signal: "New SEC reporting requirements effective Q3 2026", relevance: "Harbor's compliance team will need to process 40% more regulatory reviews", action: "Position increased Claude usage as scaling solution vs. hiring", daysAgo: 12 },
+      ],
+      similarSituations: [
+        {
+          accountName: "Cornerstone Banking",
+          vertical: "Financial Services",
+          situation: "Compliance team was fully adopted but legal team resisted adoption — only 20% utilization after 90 days. Legal team viewed AI-assisted contract review as a risk to their professional judgment.",
+          resolution: "Shifted positioning from 'AI does your job' to 'AI handles the repetitive review so you focus on complex judgment calls.' Ran a pilot where AI flagged standard clauses and attorneys focused on non-standard terms. Framed it as 'augmentation not automation.'",
+          outcome: "Legal adoption went from 20% to 65% in 6 weeks. Attorneys reported spending more time on high-value analysis.",
+          relevance: "Harbor's legal team (3/10 active) has the same resistance pattern. The augmentation framing and pilot approach directly applies.",
+        },
+        {
+          accountName: "Apex Financial Analytics",
+          vertical: "Financial Services",
+          situation: "New CFO questioned all technology spend during budget review. Existing champion couldn't articulate ROI in financial terms the CFO cared about.",
+          resolution: "Built a one-page ROI summary translating usage metrics into business outcomes: hours saved × analyst hourly cost = dollar value. Coached the internal champion to present it in the CFO's language — cost avoidance, not productivity gains.",
+          outcome: "CFO approved renewal and expanded budget by 15% after seeing the cost avoidance framing.",
+          relevance: "Amanda Chen needs to see value in financial terms. The cost avoidance framing resonates with executives reviewing vendor spend.",
+        },
+      ],
+      recommendedResources: [
+        {
+          title: "Executive Sponsor Engagement Framework",
+          type: "best_practice",
+          relevance: "Amanda Chen is new to the COO role and doesn't have context on the original purchase. The 'New Executive Brief' format is designed for exactly this situation.",
+          keySection: "The 'New Executive Brief' — a one-page value summary for incoming leadership",
+        },
+        {
+          title: "Resolution: Stakeholder Transition During Contract Renewal",
+          type: "resolution_history",
+          relevance: "Directly applicable case study on navigating leadership changes during renewal conversations.",
+          keySection: "The 3-step re-engagement sequence: introduce, demonstrate value, propose forward plan",
+        },
+        {
+          title: "Claude for Financial Services: Compliance Workflows",
+          type: "implementation_guide",
+          relevance: "Harbor's legal team needs to see compliance-specific use cases that match their workflow, not generic AI capabilities.",
+          keySection: "Contract review automation patterns and regulatory document analysis",
+        },
       ],
       nextQbrDate: daysFromNow(21), onboardingComplete: true,
     },
@@ -515,6 +601,44 @@ async function seedBook() {
       proactiveSignals: [
         { type: "product_release", signal: "Claude API now supports structured JSON output mode", relevance: "Could resolve LIMS data format incompatibility without middleware", action: "Share with Jake Morrison's engineering team — may simplify integration", daysAgo: 3 },
         { type: "customer_news", signal: "Pinnacle Biotech announced Series C funding ($45M)", relevance: "Growth capital means hiring and scaling — more seats and deeper integration", action: "Congratulate and position expansion conversation", daysAgo: 8 },
+      ],
+      similarSituations: [
+        {
+          accountName: "Cascadia Life Sciences",
+          vertical: "Life Sciences",
+          situation: "Data science team struggled with API integration during first 30 days. Only 2 of 8 team members using Claude regularly. Team lead frustrated with lack of progress.",
+          resolution: "Assigned dedicated integration support for 2 weeks. Ran hands-on 'build your first pipeline' workshop. Created starter templates specific to their data formats.",
+          outcome: "Team adoption grew from 25% to 60% within 4 weeks. Integration completed successfully with the hands-on support model.",
+          relevance: "Pinnacle's LIMS integration failure is the same onboarding friction pattern. Dedicated support plus hands-on workshops resolve it.",
+        },
+        {
+          accountName: "BrightPath Diagnostics",
+          vertical: "Healthcare",
+          situation: "LIMS integration failed due to ASTM/LDT data format incompatibility with Claude API's JSON input requirements. Lab processing pipeline blocked for 5 days.",
+          resolution: "Built a lightweight middleware layer (LIMS → data transformer → Claude API) that handles format conversion. Provided the architecture doc and paired their engineer with our integration team for 3 days.",
+          outcome: "Pipeline went live with 99.7% accuracy and 45-second processing times. Processing time dropped from 12 minutes to 45 seconds per sample.",
+          relevance: "Exact same technical root cause. The middleware architecture and data transformer pattern directly resolves Pinnacle's issue.",
+        },
+      ],
+      recommendedResources: [
+        {
+          title: "Resolution: LIMS Integration Failure in Biotech",
+          type: "resolution_history",
+          relevance: "BrightPath case study with the exact middleware approach that resolves Pinnacle's integration failure.",
+          keySection: "The LIMS → transformer → API architecture diagram and implementation steps",
+        },
+        {
+          title: "API Integration Best Practices for Healthcare Systems",
+          type: "implementation_guide",
+          relevance: "Covers data format transformation patterns applicable to lab systems and clinical data pipelines.",
+          keySection: "The 'Data Format Bridge' pattern for legacy system integration",
+        },
+        {
+          title: "First 30 Days: Customer Onboarding Checklist",
+          type: "best_practice",
+          relevance: "Pinnacle is still in onboarding. The week-by-week milestone checklist identifies where they fell behind and what to prioritize.",
+          keySection: "Week 2-3 integration milestones and red flag indicators",
+        },
       ],
       nextQbrDate: monthsFromNow(1), onboardingComplete: false,
     },
@@ -643,6 +767,44 @@ async function seedBook() {
       ],
       proactiveSignals: [
         { type: "customer_news", signal: "Evolve Retail Tech posted job listing for VP of AI Strategy", relevance: "New AI leadership hire could re-energize the account or reset vendor evaluation", action: "Monitor the hire — prepare re-engagement pitch for new VP", daysAgo: 10 },
+      ],
+      similarSituations: [
+        {
+          accountName: "Brightside Commerce",
+          vertical: "Retail",
+          situation: "Product team adoption dropped 40% over 6 weeks after their primary power user transferred to a different department. Remaining team members didn't have established workflows and reverted to manual processes.",
+          resolution: "Identified two mid-level engineers who were still using Claude weekly. Ran a 30-minute workflow workshop with their team showing the specific use cases the power user had built. Created a shared prompt library so institutional knowledge wasn't locked to one person.",
+          outcome: "Adoption recovered to 85% within 3 weeks. The two engineers became department champions and drove adoption in QA team as well.",
+          relevance: "Same pattern — usage concentrated in one stakeholder, when they disengage the whole team stalls. The fix is finding embedded users and elevating them.",
+        },
+        {
+          accountName: "Metro Market Analytics",
+          vertical: "Retail",
+          situation: "Key stakeholder went on extended leave. Usage dropped 50% immediately. No one on the team knew what workflows had been built or how to maintain them.",
+          resolution: "Proactively reached out to the team lead (not the absent stakeholder). Ran an audit of existing Claude workflows and documented them. Set up bi-weekly 15-minute check-ins with the team lead for 6 weeks.",
+          outcome: "Usage stabilized at 70% within 2 weeks, then grew to 110% of baseline as the team lead found new use cases during check-ins.",
+          relevance: "When a stakeholder goes silent, don't wait for them to come back. Find the next person and give them ownership.",
+        },
+      ],
+      recommendedResources: [
+        {
+          title: "Driving Adoption Beyond the Initial Team",
+          type: "best_practice",
+          relevance: "Evolve's usage is concentrated in a few power users. This playbook covers how to identify embedded champions and distribute adoption across the team.",
+          keySection: "The 'Champion Ladder' framework — identifying users at each adoption tier and moving them up",
+        },
+        {
+          title: "Prompt Engineering Workshop Guide",
+          type: "implementation_guide",
+          relevance: "Evolve's Customer Insights team (2/10 active) likely stalled because they don't know how to apply Claude to their specific NPS analysis workflow. A targeted workshop addresses this directly.",
+          keySection: "The 45-minute 'Bring Your Own Workflow' session template",
+        },
+        {
+          title: "Executive Sponsor Engagement Framework",
+          type: "best_practice",
+          relevance: "With Rachel Kim silent and a new VP of AI Strategy being hired, Sarah needs a re-engagement strategy for when the new executive starts.",
+          keySection: "The 'New Executive Brief' format for introducing the platform's value to incoming leadership",
+        },
       ],
       nextQbrDate: daysFromNow(14), onboardingComplete: true,
     },
