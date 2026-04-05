@@ -1465,7 +1465,7 @@ function AccountDetailDrawer({
       />
 
       {/* Drawer */}
-      <div className="fixed top-0 right-0 h-full w-[480px] bg-card border-l border-border shadow-xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
+      <div className="fixed top-0 right-0 h-full w-[480px] bg-card border-l border-border shadow-xl z-40 overflow-y-auto animate-in slide-in-from-right duration-300">
         <div className="p-6 space-y-5">
           {/* 1. Header */}
           <div className="flex items-start justify-between">
