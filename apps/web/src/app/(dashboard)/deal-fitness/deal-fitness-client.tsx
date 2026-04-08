@@ -83,6 +83,92 @@ type Scores = {
     wonDealCount: number;
     insight: string;
   } | null;
+  stakeholderEngagement: StakeholderEngagement | null;
+  buyerMomentum: BuyerMomentum | null;
+  conversationSignals: ConversationSignals | null;
+};
+
+type StakeholderContact = {
+  contactName: string;
+  title: string;
+  role: string;
+  firstActiveWeek: number;
+  weeksActive: number[];
+  callsJoined: number[];
+  emailsInvolved: number;
+  introducedBy: string | null;
+};
+
+type StakeholderEngagement = {
+  totalStakeholders: number;
+  benchmark: { avgAtStage: number; wonDealAvg: number; position: string };
+  departmentsEngaged: number;
+  departmentList: string[];
+  contactTimeline: StakeholderContact[];
+};
+
+type Commitment = {
+  madeBy: string;
+  madeIn: string;
+  week: number;
+  commitment: string;
+  fulfilled: boolean;
+  fulfilledHow: string;
+  fulfilledWeek: number;
+};
+
+type BuyerMomentum = {
+  responseTimeTrend: {
+    dataPoints: { week: number; avgHours: number }[];
+    trend: string;
+    currentAvgHours: number;
+    startingAvgHours: number;
+  };
+  emailDirectionality: {
+    totalEmails: number;
+    buyerInitiated: number;
+    sellerInitiated: number;
+    buyerInitiatedPct: number;
+    benchmark: { wonDealAvg: number; lostDealAvg: number };
+    insight: string;
+  };
+  commitmentFollowThrough: {
+    totalCommitments: number;
+    fulfilled: number;
+    fulfillmentRate: number;
+    commitments: Commitment[];
+  };
+};
+
+type LanguagePoint = {
+  call: number;
+  label: string;
+  week: number;
+  yourProductPct: number;
+  weOurPct: number;
+  sampleQuotes: string[];
+};
+
+type KeyMoment = {
+  call: number;
+  speaker: string;
+  moment: string;
+  signal: string;
+  why: string;
+};
+
+type ConversationSignals = {
+  ownershipLanguage: {
+    trend: string;
+    dataPoints: LanguagePoint[];
+    insight: string;
+  };
+  sentimentProfile: {
+    type: string;
+    description: string;
+    keyMoments: KeyMoment[];
+  };
+  dealInsight: string;
 };
 
 type PortfolioDeal = {
@@ -762,7 +848,7 @@ function DrillSkeleton() {
 }
 
 function DrillContent({ detail }: { detail: DealDetail }) {
-  const { deal, scores, events, timeline } = detail;
+  const { deal, scores, events } = detail;
   if (!scores) return null;
 
   return (
@@ -907,21 +993,25 @@ function DrillContent({ detail }: { detail: DealDetail }) {
         )}
       </Card>
 
-      {/* Velocity Timeline */}
-      <Card>
-        <h3
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            color: PALETTE.text,
-            margin: 0,
-            marginBottom: 16,
-          }}
-        >
-          Event Timeline
-        </h3>
-        <VelocityTimeline timeline={timeline} />
-      </Card>
+      {/* Three analysis cards: Stakeholder Engagement | Buyer Momentum + Conversation Signals */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,
+          alignItems: "stretch",
+        }}
+      >
+        {scores.stakeholderEngagement && (
+          <StakeholderEngagementCard data={scores.stakeholderEngagement} />
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {scores.buyerMomentum && <BuyerMomentumCard data={scores.buyerMomentum} />}
+          {scores.conversationSignals && (
+            <ConversationSignalsCard data={scores.conversationSignals} />
+          )}
+        </div>
+      </div>
 
       {/* 4 Fit Cards */}
       <div
@@ -968,6 +1058,28 @@ function DrillContent({ detail }: { detail: DealDetail }) {
           )
         )}
       </div>
+
+      {/* Bottom Nexus Intelligence insight */}
+      {scores.conversationSignals?.dealInsight && (
+        <Card>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Sparkles size={16} color={PALETTE.coral} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: PALETTE.coral, letterSpacing: 0.3 }}>
+              NEXUS INTELLIGENCE
+            </span>
+          </div>
+          <p
+            style={{
+              fontSize: 14,
+              color: PALETTE.text,
+              lineHeight: 1.7,
+              margin: 0,
+            }}
+          >
+            {scores.conversationSignals.dealInsight}
+          </p>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1127,178 +1239,650 @@ function RadarChart({ scores }: { scores: Scores }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Velocity Timeline (pure SVG)
+// Stakeholder Engagement Card
 // ────────────────────────────────────────────────────────────────────────────
 
-function VelocityTimeline({
-  timeline,
-}: {
-  timeline: DealDetail["timeline"];
-}) {
-  const width = 1100;
-  const height = 200;
-  const left = 110;
-  const right = 30;
-  const top = 16;
-  const bottom = 36;
-  const innerW = width - left - right;
-  const innerH = height - top - bottom;
+const ROLE_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
+  champion: { bg: "rgba(224,122,95,0.15)", fg: "#B5543A", label: "Champion" },
+  economic_buyer: { bg: "rgba(59,130,246,0.12)", fg: "#1E5FB3", label: "Economic Buyer" },
+  technical_evaluator: { bg: "rgba(16,185,129,0.12)", fg: "#0F7A55", label: "Technical" },
+  blocker: { bg: "rgba(212,168,67,0.18)", fg: "#7A5C10", label: "CISO" },
+  end_user: { bg: "rgba(139,92,246,0.12)", fg: "#5B3D9E", label: "Operations" },
+  coach: { bg: "rgba(99,102,241,0.12)", fg: "#3D3D9E", label: "Executive" },
+};
 
-  const rows: FitCategory[] = [
-    "business_fit",
-    "emotional_fit",
-    "technical_fit",
-    "readiness_fit",
-  ];
-  const rowHeight = innerH / rows.length;
-
-  // Time domain: 56 days ago → today
-  const startMs = Date.now() - 56 * 24 * 60 * 60 * 1000;
-  const endMs = Date.now();
-  const xFor = (iso: string) => {
-    const t = new Date(iso).getTime();
-    const pct = (t - startMs) / (endMs - startMs);
-    return left + Math.max(0, Math.min(1, pct)) * innerW;
-  };
-  const yForCat = (cat: FitCategory) => {
-    const idx = rows.indexOf(cat);
-    return top + rowHeight * idx + rowHeight / 2;
-  };
-
-  // Group events by category for gap detection
-  const byCat: Record<FitCategory, DealDetail["timeline"]> = {
-    business_fit: [],
-    emotional_fit: [],
-    technical_fit: [],
-    readiness_fit: [],
-  };
-  timeline.forEach((e) => byCat[e.fitCategory].push(e));
-  for (const c of rows) {
-    byCat[c].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }
-
-  // Week ticks
+function StakeholderEngagementCard({ data }: { data: StakeholderEngagement }) {
+  const sorted = [...data.contactTimeline].sort(
+    (a, b) => a.firstActiveWeek - b.firstActiveWeek
+  );
   const weeks = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+  const above = data.totalStakeholders >= data.benchmark.wonDealAvg;
 
   return (
-    <div style={{ width: "100%", overflowX: "auto" }}>
-      <svg width={width} height={height}>
-        {/* Row backgrounds + labels */}
-        {rows.map((cat, i) => {
-          const meta = FIT_META[cat];
-          return (
-            <g key={cat}>
-              <rect
-                x={left}
-                y={top + rowHeight * i}
-                width={innerW}
-                height={rowHeight}
-                fill={i % 2 === 0 ? "rgba(232,221,211,0.15)" : "transparent"}
-              />
-              <text
-                x={left - 12}
-                y={top + rowHeight * i + rowHeight / 2 + 4}
-                textAnchor="end"
-                fontSize={13}
-                fill={PALETTE.muted}
-                fontFamily="DM Sans, sans-serif"
-              >
-                {meta.label}
-              </text>
-            </g>
-          );
-        })}
+    <Card style={{ height: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
+        <h3
+          style={{
+            fontSize: 16,
+            fontWeight: 600,
+            color: PALETTE.text,
+            margin: 0,
+          }}
+        >
+          Buying Committee
+        </h3>
+        <span
+          style={{
+            background: PALETTE.sandLight,
+            color: PALETTE.text,
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "4px 10px",
+            borderRadius: 999,
+          }}
+        >
+          {data.totalStakeholders} stakeholders · {data.departmentsEngaged} departments
+        </span>
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          color: PALETTE.muted,
+          marginBottom: 14,
+          lineHeight: 1.5,
+        }}
+      >
+        Won Healthcare deals at Negotiation stage average{" "}
+        <strong style={{ color: PALETTE.text }}>{data.benchmark.wonDealAvg}</strong>{" "}
+        stakeholders. This deal:{" "}
+        <strong style={{ color: above ? PALETTE.success : PALETTE.coral }}>
+          {data.totalStakeholders}
+        </strong>
+        .
+      </div>
 
-        {/* Week tick labels */}
-        {weeks.map((w) => {
-          const x =
-            left +
-            ((endMs - (Date.now() - (8 - w) * 7 * 24 * 60 * 60 * 1000) - startMs) /
-              (endMs - startMs)) *
-              innerW;
-          return (
-            <g key={w}>
-              <line
-                x1={x}
-                y1={top}
-                x2={x}
-                y2={top + innerH}
-                stroke="rgba(0,0,0,0.04)"
-                strokeWidth={1}
-              />
-              <text
-                x={x}
-                y={height - 10}
-                textAnchor="middle"
-                fontSize={11}
-                fill={PALETTE.muted}
-                fontFamily="DM Sans, sans-serif"
-              >
-                W{w}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Gap markers */}
-        {rows.flatMap((cat) => {
-          const list = byCat[cat];
-          const segs: React.ReactNode[] = [];
-          for (let i = 1; i < list.length; i++) {
-            const prev = new Date(list[i - 1].date).getTime();
-            const curr = new Date(list[i].date).getTime();
-            const days = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
-            if (days > 10) {
-              const x1 = xFor(list[i - 1].date);
-              const x2 = xFor(list[i].date);
-              const y = yForCat(cat);
-              segs.push(
-                <g key={`${cat}-gap-${i}`}>
-                  <line
-                    x1={x1}
-                    y1={y}
-                    x2={x2}
-                    y2={y}
-                    stroke={PALETTE.warning}
-                    strokeWidth={1.5}
-                    strokeDasharray="3 3"
-                  />
-                  <text
-                    x={(x1 + x2) / 2}
-                    y={y - 8}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fill={PALETTE.muted}
-                    fontFamily="DM Sans, sans-serif"
-                  >
-                    {days}d
-                  </text>
-                </g>
+      {/* Grid */}
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+            fontSize: 12,
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "4px 8px 8px 0", fontWeight: 600, color: PALETTE.muted }}>
+                Stakeholder
+              </th>
+              {weeks.map((w) => (
+                <th
+                  key={w}
+                  style={{
+                    textAlign: "center",
+                    padding: "4px 0 8px",
+                    fontWeight: 600,
+                    color: PALETTE.muted,
+                    width: 22,
+                  }}
+                >
+                  W{w}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((c) => {
+              const badge = ROLE_BADGE[c.role] ?? {
+                bg: PALETTE.sandLight,
+                fg: PALETTE.muted,
+                label: c.role,
+              };
+              const callWeeks = new Set<number>();
+              // weeks where they joined a call: any week in weeksActive that corresponds to a call week
+              // We approximate by saying if weeksActive contains the week AND callsJoined is non-empty
+              // Use a simple rule: a call-week dot is solid; otherwise outlined.
+              const callWeekSet = new Set([1, 3, 4, 6, 8]); // calls 1..5
+              for (const w of c.weeksActive) {
+                if (callWeekSet.has(w) && c.callsJoined.length > 0) {
+                  callWeeks.add(w);
+                }
+              }
+              const activeSet = new Set(c.weeksActive);
+              return (
+                <tr key={c.contactName} style={{ borderTop: `1px solid ${PALETTE.border}` }}>
+                  <td style={{ padding: "10px 12px 10px 0", verticalAlign: "top" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: PALETTE.text }}>
+                      {c.contactName}
+                    </div>
+                    <div style={{ fontSize: 11, color: PALETTE.muted, marginBottom: 4 }}>
+                      {c.title}
+                    </div>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        background: badge.bg,
+                        color: badge.fg,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 999,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.4,
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                  </td>
+                  {weeks.map((w) => {
+                    const isActive = activeSet.has(w);
+                    const isCall = callWeeks.has(w);
+                    return (
+                      <td
+                        key={w}
+                        style={{
+                          textAlign: "center",
+                          padding: "10px 0",
+                          background: isActive ? "transparent" : "rgba(243,237,231,0.4)",
+                        }}
+                      >
+                        {isActive && (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              background: isCall ? PALETTE.coral : "transparent",
+                              border: `2px solid ${PALETTE.coral}`,
+                            }}
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
               );
-            }
-          }
-          return segs;
-        })}
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 12,
+          color: PALETTE.muted,
+          fontStyle: "italic",
+          lineHeight: 1.5,
+        }}
+      >
+        All 7 stakeholders were introduced by Dr. Amanda Chen — strong champion-led expansion.
+      </div>
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 11,
+          color: PALETTE.muted,
+          display: "flex",
+          gap: 14,
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: PALETTE.coral,
+              display: "inline-block",
+            }}
+          />
+          Joined call
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              border: `2px solid ${PALETTE.coral}`,
+              display: "inline-block",
+            }}
+          />
+          Email only
+        </span>
+      </div>
+    </Card>
+  );
+}
 
-        {/* Event dots */}
-        {timeline.map((e, i) => {
-          const x = xFor(e.date);
-          const y = yForCat(e.fitCategory);
-          const color = FIT_META[e.fitCategory].color;
-          return (
-            <g key={i}>
-              <title>
-                {e.eventLabel}
-                {e.contactName ? ` — ${e.contactName}` : ""} · {fmtDate(e.date)}
-              </title>
-              <circle cx={x} cy={y} r={5} fill={color} />
-            </g>
-          );
-        })}
-      </svg>
+// ────────────────────────────────────────────────────────────────────────────
+// Buyer Momentum Card
+// ────────────────────────────────────────────────────────────────────────────
+
+function BuyerMomentumCard({ data }: { data: BuyerMomentum }) {
+  const [showAll, setShowAll] = useState(false);
+  const rt = data.responseTimeTrend;
+  const ed = data.emailDirectionality;
+  const cf = data.commitmentFollowThrough;
+
+  return (
+    <Card>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 16,
+        }}
+      >
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: PALETTE.text, margin: 0 }}>
+          Buyer Momentum
+        </h3>
+        <span
+          style={{
+            background: "rgba(45,138,78,0.12)",
+            color: PALETTE.success,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "4px 10px",
+            borderRadius: 999,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          Strong <TrendingUp size={12} color={PALETTE.success} />
+        </span>
+      </div>
+
+      {/* Row 1: Response Time */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "110px 1fr auto",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        <span style={{ fontSize: 13, color: PALETTE.muted }}>Response Time</span>
+        <Sparkline points={rt.dataPoints.map((p) => p.avgHours)} />
+        <span
+          style={{
+            fontSize: 13,
+            color: PALETTE.text,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            whiteSpace: "nowrap",
+          }}
+        >
+          36h → 45min
+          <TrendingDown size={14} color={PALETTE.success} />
+        </span>
+      </div>
+
+      {/* Row 2: Buyer-Initiated */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "110px 1fr auto",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        <span style={{ fontSize: 13, color: PALETTE.muted }}>Buyer-Initiated</span>
+        <div
+          style={{
+            position: "relative",
+            height: 22,
+            background: PALETTE.sandLight,
+            borderRadius: 6,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${ed.buyerInitiatedPct}%`,
+              height: "100%",
+              background: PALETTE.coral,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "white",
+              textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+            }}
+          >
+            {ed.buyerInitiated} of {ed.totalEmails}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: PALETTE.text, lineHeight: 1 }}>
+            {ed.buyerInitiatedPct}%
+          </div>
+          <div style={{ fontSize: 10, color: PALETTE.muted, marginTop: 2 }}>
+            vs {ed.benchmark.wonDealAvg}% won avg
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Commitments Kept */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "110px 1fr auto",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <span style={{ fontSize: 13, color: PALETTE.muted }}>Promises Kept</span>
+        <span style={{ fontSize: 20, fontWeight: 700, color: PALETTE.success }}>
+          {cf.fulfilled} of {cf.totalCommitments}
+        </span>
+        <button
+          onClick={() => setShowAll(!showAll)}
+          style={{
+            background: "none",
+            border: "none",
+            color: PALETTE.coral,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "DM Sans, sans-serif",
+          }}
+        >
+          {showAll ? "Hide" : "View all →"}
+        </button>
+      </div>
+
+      {showAll && (
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 12,
+            borderTop: `1px solid ${PALETTE.border}`,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {cf.commitments.map((c, i) => (
+            <div
+              key={i}
+              style={{
+                padding: "10px 0",
+                borderTop: i === 0 ? "none" : `1px solid ${PALETTE.border}`,
+                display: "flex",
+                gap: 10,
+                alignItems: "flex-start",
+              }}
+            >
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: PALETTE.success,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: 1,
+                }}
+              >
+                <Check size={10} color="white" strokeWidth={3} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: PALETTE.text, lineHeight: 1.4 }}>
+                  {c.commitment}
+                </div>
+                <div style={{ fontSize: 12, color: PALETTE.muted, marginTop: 2 }}>
+                  Made by {c.madeBy} in {c.madeIn} · Fulfilled {c.fulfilledHow.toLowerCase()} (Week {c.fulfilledWeek})
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Sparkline({ points }: { points: number[] }) {
+  const w = 200;
+  const h = 30;
+  if (points.length === 0) return <svg width={w} height={h} />;
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const range = max - min || 1;
+  const xs = points.map((_, i) => (i / (points.length - 1)) * (w - 4) + 2);
+  const ys = points.map((v) => h - 2 - ((v - min) / range) * (h - 4));
+  const linePath = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ");
+  const areaPath = `${linePath} L${xs[xs.length - 1]},${h} L${xs[0]},${h} Z`;
+  return (
+    <svg width={w} height={h}>
+      <path d={areaPath} fill="rgba(224,122,95,0.12)" />
+      <path d={linePath} fill="none" stroke={PALETTE.coral} strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Conversation Signals Card
+// ────────────────────────────────────────────────────────────────────────────
+
+function ConversationSignalsCard({ data }: { data: ConversationSignals }) {
+  const lang = data.ownershipLanguage;
+  const sent = data.sentimentProfile;
+  return (
+    <Card>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: PALETTE.text, margin: 0 }}>
+          Conversation Signals
+        </h3>
+        <span
+          style={{
+            background: "rgba(45,138,78,0.12)",
+            color: PALETTE.success,
+            fontSize: 12,
+            fontWeight: 700,
+            padding: "4px 10px",
+            borderRadius: 999,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          Ownership Shift <TrendingUp size={12} color={PALETTE.success} />
+        </span>
+      </div>
+
+      {/* Language ownership bars */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {lang.dataPoints.map((p) => (
+          <div
+            key={p.call}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "60px 1fr 36px",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 12, color: PALETTE.muted }}>Call {p.call}</span>
+            <div
+              style={{
+                height: 22,
+                background: PALETTE.sandLight,
+                borderRadius: 4,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${p.weOurPct}%`,
+                  height: "100%",
+                  background: PALETTE.coral,
+                  transition: "width 0.4s",
+                }}
+              />
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: PALETTE.text, textAlign: "right" }}>
+              {p.weOurPct}%
+            </span>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: PALETTE.muted,
+          fontStyle: "italic",
+          lineHeight: 1.5,
+          marginTop: 12,
+        }}
+      >
+        {lang.insight}
+      </div>
+
+      {/* Sentiment profile */}
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 14,
+          borderTop: `1px solid ${PALETTE.border}`,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: PALETTE.text }}>
+            Deal Temperament
+          </span>
+          <span
+            style={{
+              background: "rgba(45,138,78,0.12)",
+              color: PALETTE.success,
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "3px 8px",
+              borderRadius: 999,
+              textTransform: "capitalize",
+            }}
+          >
+            {sent.type.replace(/_/g, " ")}
+          </span>
+        </div>
+        <p
+          style={{
+            fontSize: 13,
+            color: PALETTE.text,
+            lineHeight: 1.6,
+            margin: 0,
+            marginBottom: 12,
+          }}
+        >
+          {sent.description}
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {sent.keyMoments.map((m, i) => (
+            <KeyMomentRow key={i} moment={m} />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function KeyMomentRow({ moment }: { moment: KeyMoment }) {
+  const [open, setOpen] = useState(false);
+  const borderColor =
+    moment.signal === "strong_positive"
+      ? "#1F6638"
+      : moment.signal === "positive"
+      ? PALETTE.success
+      : PALETTE.muted;
+  return (
+    <div
+      style={{
+        borderLeft: `3px solid ${borderColor}`,
+        background: "rgba(45,138,78,0.04)",
+        borderRadius: 4,
+      }}
+    >
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          background: "none",
+          border: "none",
+          width: "100%",
+          padding: "8px 10px",
+          textAlign: "left",
+          cursor: "pointer",
+          fontFamily: "DM Sans, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 700, color: PALETTE.muted }}>
+          Call {moment.call}
+        </span>
+        <span style={{ fontSize: 12, color: PALETTE.text, flex: 1 }}>
+          <strong>{moment.speaker}:</strong> {moment.moment}
+        </span>
+        {open ? (
+          <ChevronDown size={14} color={PALETTE.muted} />
+        ) : (
+          <ChevronRight size={14} color={PALETTE.muted} />
+        )}
+      </button>
+      {open && (
+        <div
+          style={{
+            padding: "0 10px 10px 10px",
+            fontSize: 12,
+            color: PALETTE.muted,
+            lineHeight: 1.5,
+            fontStyle: "italic",
+          }}
+        >
+          Why it matters: {moment.why}
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // Fit Card with expandable events
@@ -1320,6 +1904,47 @@ function FitCard({
   const meta = FIT_META[category];
   const Icon = meta.icon;
   const sc = scoreColor(score);
+
+  // Last event in this category
+  const detectedDates = events
+    .filter((e) => e.detectedAt)
+    .map((e) => new Date(e.detectedAt!).getTime());
+  const lastTs = detectedDates.length ? Math.max(...detectedDates) : null;
+  const daysAgo = lastTs
+    ? Math.max(0, Math.floor((Date.now() - lastTs) / (1000 * 60 * 60 * 24)))
+    : null;
+  const lastBadge = (() => {
+    if (daysAgo == null) return null;
+    let bg: string = "transparent";
+    let fg: string = PALETTE.muted;
+    let border: string = "transparent";
+    if (daysAgo > 14) {
+      bg = "rgba(199,75,59,0.10)";
+      fg = PALETTE.danger;
+      border = "rgba(199,75,59,0.25)";
+    } else if (daysAgo >= 7) {
+      bg = "rgba(212,168,67,0.15)";
+      fg = "#9A7A20";
+      border = "rgba(212,168,67,0.30)";
+    }
+    return (
+      <span
+        style={{
+          background: bg,
+          color: fg,
+          border: `1px solid ${border}`,
+          fontSize: 11,
+          fontWeight: 600,
+          padding: "3px 8px",
+          borderRadius: 999,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {daysAgo}d ago
+      </span>
+    );
+  })();
+
   return (
     <Card>
       <div
@@ -1328,6 +1953,7 @@ function FitCard({
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 14,
+          gap: 8,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1336,18 +1962,21 @@ function FitCard({
             {meta.label}
           </span>
         </div>
-        <span
-          style={{
-            background: `${sc}1A`,
-            color: sc,
-            fontSize: 12,
-            fontWeight: 700,
-            padding: "5px 12px",
-            borderRadius: 999,
-          }}
-        >
-          {detected}/{total} · {score}%
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {lastBadge}
+          <span
+            style={{
+              background: `${sc}1A`,
+              color: sc,
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "5px 12px",
+              borderRadius: 999,
+            }}
+          >
+            {detected}/{total} · {score}%
+          </span>
+        </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {events.map((e) => (

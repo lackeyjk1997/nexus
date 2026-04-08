@@ -1895,8 +1895,304 @@ async function seedDealFitness() {
       insight:
         "This deal's overall fitness (80%) exceeds the average for won Healthcare deals at Negotiation stage (78%). Technical Fit is unusually strong at 100% vs 85% average. Emotional Fit at 67% is below the 72% average — won deals typically show stronger personal relationship signals by this stage.",
     },
+    stakeholderEngagement: {
+      totalStakeholders: 7,
+      benchmark: { avgAtStage: 4.2, wonDealAvg: 5.8, position: "above_average" },
+      departmentsEngaged: 5,
+      departmentList: [
+        "Clinical Innovation",
+        "IT/Engineering",
+        "Finance",
+        "Operations",
+        "Security",
+      ],
+      contactTimeline: [
+        {
+          contactName: "Dr. Amanda Chen",
+          title: "VP Clinical Innovation",
+          role: "champion",
+          firstActiveWeek: 0,
+          weeksActive: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+          callsJoined: [1, 2, 3, 4, 5],
+          emailsInvolved: 7,
+          introducedBy: null,
+        },
+        {
+          contactName: "Priya Mehta",
+          title: "Director of IT & Engineering",
+          role: "technical_evaluator",
+          firstActiveWeek: 2,
+          weeksActive: [2, 3, 6],
+          callsJoined: [2, 4],
+          emailsInvolved: 3,
+          introducedBy: "Dr. Amanda Chen",
+        },
+        {
+          contactName: "Robert Garrison",
+          title: "CFO",
+          role: "economic_buyer",
+          firstActiveWeek: 3,
+          weeksActive: [3, 4, 8],
+          callsJoined: [3, 5],
+          emailsInvolved: 2,
+          introducedBy: "Dr. Amanda Chen",
+        },
+        {
+          contactName: "Lisa Huang",
+          title: "VP Operations",
+          role: "end_user",
+          firstActiveWeek: 4,
+          weeksActive: [4, 7, 8],
+          callsJoined: [3, 5],
+          emailsInvolved: 1,
+          introducedBy: "Dr. Amanda Chen",
+        },
+        {
+          contactName: "James Whitfield",
+          title: "CISO",
+          role: "blocker",
+          firstActiveWeek: 5,
+          weeksActive: [5, 6],
+          callsJoined: [4],
+          emailsInvolved: 3,
+          introducedBy: "Dr. Amanda Chen",
+        },
+        {
+          contactName: "Mark Davidson",
+          title: "Director of Procurement",
+          role: "end_user",
+          firstActiveWeek: 8,
+          weeksActive: [8],
+          callsJoined: [],
+          emailsInvolved: 1,
+          introducedBy: "Dr. Amanda Chen",
+        },
+        {
+          contactName: "Dr. Sarah Kim",
+          title: "CMO",
+          role: "coach",
+          firstActiveWeek: 8,
+          weeksActive: [8],
+          callsJoined: [5],
+          emailsInvolved: 0,
+          introducedBy: "Dr. Amanda Chen",
+        },
+      ],
+    },
+    buyerMomentum: {
+      responseTimeTrend: {
+        dataPoints: [
+          { week: 0, avgHours: 36 },
+          { week: 2, avgHours: 24 },
+          { week: 3, avgHours: 12 },
+          { week: 4, avgHours: 8 },
+          { week: 5, avgHours: 6 },
+          { week: 6, avgHours: 4 },
+          { week: 7, avgHours: 2 },
+          { week: 8, avgHours: 0.75 },
+        ],
+        trend: "accelerating",
+        currentAvgHours: 0.75,
+        startingAvgHours: 36,
+      },
+      emailDirectionality: {
+        totalEmails: 14,
+        buyerInitiated: 10,
+        sellerInitiated: 4,
+        buyerInitiatedPct: 71,
+        benchmark: { wonDealAvg: 55, lostDealAvg: 28 },
+        insight:
+          "Buyer-initiated emails at 71% — significantly above won-deal average of 55%. This buyer is driving the evaluation.",
+      },
+      commitmentFollowThrough: {
+        totalCommitments: 8,
+        fulfilled: 8,
+        fulfillmentRate: 100,
+        commitments: [
+          {
+            madeBy: "Dr. Amanda Chen",
+            madeIn: "Call 1",
+            week: 1,
+            commitment: "Loop in IT director for technical deep dive",
+            fulfilled: true,
+            fulfilledHow: "Introduced Priya Mehta via email in Week 2",
+            fulfilledWeek: 2,
+          },
+          {
+            madeBy: "Priya Mehta",
+            madeIn: "Call 2",
+            week: 3,
+            commitment: "Send architecture overview document",
+            fulfilled: true,
+            fulfilledHow: "Emailed architecture PDF with 8 integration questions",
+            fulfilledWeek: 3,
+          },
+          {
+            madeBy: "Dr. Amanda Chen",
+            madeIn: "Call 2",
+            week: 3,
+            commitment: "Brief Dr. Kim on the evaluation",
+            fulfilled: true,
+            fulfilledHow:
+              "Dr. Kim confirmed briefing in Call 5 and presented to board",
+            fulfilledWeek: 8,
+          },
+          {
+            madeBy: "Robert Garrison",
+            madeIn: "Call 3",
+            week: 4,
+            commitment: "Revise ROI model with retention data",
+            fulfilled: true,
+            fulfilledHow: "Sent revised model via email with own edits",
+            fulfilledWeek: 4,
+          },
+          {
+            madeBy: "Dr. Amanda Chen",
+            madeIn: "Call 3",
+            week: 4,
+            commitment: "Introduce CISO for security review",
+            fulfilled: true,
+            fulfilledHow: "Email introduction to James Whitfield in Week 5",
+            fulfilledWeek: 5,
+          },
+          {
+            madeBy: "James Whitfield",
+            madeIn: "Call 4",
+            week: 6,
+            commitment: "Send security questionnaire",
+            fulfilled: true,
+            fulfilledHow: "Emailed 47-question security assessment same week",
+            fulfilledWeek: 6,
+          },
+          {
+            madeBy: "Priya Mehta",
+            madeIn: "Call 4",
+            week: 6,
+            commitment: "Provision sandbox environment by Friday",
+            fulfilled: true,
+            fulfilledHow:
+              "James confirmed sandbox provisioning in follow-up email",
+            fulfilledWeek: 6,
+          },
+          {
+            madeBy: "Lisa Huang",
+            madeIn: "Call 3",
+            week: 4,
+            commitment: "Draft rollout timeline",
+            fulfilled: true,
+            fulfilledHow:
+              "Built 12-week rollout plan, shared screen in Call 5",
+            fulfilledWeek: 8,
+          },
+        ],
+      },
+    },
+    conversationSignals: {
+      ownershipLanguage: {
+        trend: "strong_shift",
+        dataPoints: [
+          {
+            call: 1,
+            label: "Discovery",
+            week: 1,
+            yourProductPct: 80,
+            weOurPct: 20,
+            sampleQuotes: [
+              "your AI solution",
+              "what your product does",
+              "if we were to consider this",
+            ],
+          },
+          {
+            call: 2,
+            label: "Technical",
+            week: 3,
+            yourProductPct: 55,
+            weOurPct: 45,
+            sampleQuotes: [
+              "how it would integrate with our systems",
+              "our Epic deployment",
+              "your API capabilities",
+            ],
+          },
+          {
+            call: 3,
+            label: "Business Case",
+            week: 4,
+            yourProductPct: 35,
+            weOurPct: 65,
+            sampleQuotes: [
+              "our ROI model",
+              "when we factor in retention",
+              "the business case we'd present",
+            ],
+          },
+          {
+            call: 4,
+            label: "Security",
+            week: 6,
+            yourProductPct: 40,
+            weOurPct: 60,
+            sampleQuotes: [
+              "your data architecture",
+              "our compliance requirements",
+              "how we'd handle PHI",
+            ],
+          },
+          {
+            call: 5,
+            label: "Exec Alignment",
+            week: 8,
+            yourProductPct: 12,
+            weOurPct: 88,
+            sampleQuotes: [
+              "when we implement this",
+              "our go-live target",
+              "our partnership",
+              "the way we see this working",
+            ],
+          },
+        ],
+        insight:
+          "Ownership language shifted from 20% to 88% over 5 calls. By Call 5, Amanda and the team spoke about Claude Enterprise as if they already owned it.",
+      },
+      sentimentProfile: {
+        type: "healthy_skepticism",
+        description:
+          "This deal shows a productive pattern: the buyer challenges assumptions directly (Robert adjusting ROI from 30% to 20%, James testing security rigor) rather than offering empty enthusiasm. Deals with this profile close at higher rates than deals with uniformly positive sentiment, which often masks disengagement.",
+        keyMoments: [
+          {
+            call: 3,
+            speaker: "Robert Garrison",
+            moment: "Challenged productivity assumption from 30% to 20%",
+            signal: "positive",
+            why:
+              "CFO who challenges your model and then edits it with his own data is a CFO who will defend it internally",
+          },
+          {
+            call: 4,
+            speaker: "James Whitfield",
+            moment: "Opened with skepticism about AI vendors",
+            signal: "positive",
+            why:
+              "CISO who tests you hard and ends impressed creates a stronger security gate clearance than one who rubber-stamps",
+          },
+          {
+            call: 5,
+            speaker: "Dr. Amanda Chen",
+            moment:
+              "Proactively resolved legal as the last internal gate",
+            signal: "strong_positive",
+            why:
+              "Champion removing blockers without being asked is the strongest internal advocacy signal",
+          },
+        ],
+      },
+      dealInsight:
+        "This deal exhibits three signals that correlate with 85%+ close probability in enterprise Healthcare deals: (1) 100% buyer commitment follow-through over 8 weeks, (2) ownership language at 88% in the final call, and (3) economic buyer co-creating the business case rather than passively reviewing it. The primary risk is Readiness Fit — no day-to-day program owner has been identified, and the rollout plan lacks measurable success milestones. Recommendation: In the next conversation, ask Amanda directly who will own the program post-launch and what success looks like at 30/60/90 days.",
+    },
   });
-  console.log("  ✓ Fitness scores summary created");
+  console.log("  ✓ Fitness scores summary created (with stakeholder/momentum/signals)");
 
   console.log("\n✅ Horizon Health Partners seed complete!");
   console.log("   Company: 1");

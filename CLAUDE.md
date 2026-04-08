@@ -548,3 +548,20 @@ apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit 
 - All styling uses inline styles with the existing Nexus PALETTE (matches playbook page convention) — no new design tokens introduced
 - Build gotcha re-encountered: running `pnpm build` while the dev preview server is running corrupts `.next` and the dev server returns HTML 500. Always stop preview, `rm -rf apps/web/.next`, build, then restart preview
 
+### Session S15.4: Deep deal intelligence (Stakeholder Map, Buyer Momentum, Conversation Signals)
+- Replaced the SVG Event Timeline card with three richer analysis cards driven by seeded jsonb data
+- New schema columns on `deal_fitness_scores` (migration 0009): `stakeholder_engagement`, `buyer_momentum`, `conversation_signals` (all jsonb)
+- API route `/api/deal-fitness?dealId=…` now returns these three fields inside the `scores` object
+- Seed (`seed-deal-fitness.ts`):
+  - `stakeholderEngagement` — 7 contacts with `weeksActive`, `callsJoined`, `introducedBy`, plus department list and benchmark vs. won deals (5.8 avg vs. this deal's 7)
+  - `buyerMomentum` — 8-point response time trend (36h → 0.75h), 71% buyer-initiated email ratio with won/lost benchmarks, 8 commitments with `madeBy`/`madeIn`/`fulfilledHow`/`fulfilledWeek`
+  - `conversationSignals` — 5-point ownership-language trajectory (20% → 88% "we/our"), `healthy_skepticism` sentiment profile with 3 key moments, and a synthesized `dealInsight` paragraph
+- UI (`deal-fitness-client.tsx`):
+  - **StakeholderEngagementCard** (left, ~50%): table with role badges + a 9-column W0–W8 grid using solid coral dots for call-weeks and outlined coral dots for email-only weeks. Visual triangle expanding from top-left as the committee grows
+  - **BuyerMomentumCard** (right top): 3 metric rows — sparkline (pure SVG path + area fill), buyer-initiated horizontal bar with overlay, "8 of 8" promises with expandable accordion of all commitments
+  - **ConversationSignalsCard** (right bottom): 5 stacked horizontal language bars (styled divs, not SVG) showing the 20% → 88% shift, `lang.insight` italic, sentiment "Deal Temperament" section with description + collapsible key-moment rows (color-coded left border per signal strength)
+  - **FitCard last-event badge**: each fit card header now shows a `Nd ago` pill colored by recency — neutral <7d, amber 7–14d, danger >14d. Computed client-side from the events array
+  - **Bottom Nexus Intelligence card**: full-width card with `✦ NEXUS INTELLIGENCE` header rendering `dealInsight` as a paragraph
+- Removed `VelocityTimeline` component entirely, removed `timeline` from the destructured `DrillContent` props (but the API still returns it for potential future use)
+- TypeScript fix: `let bg/fg/border: string` annotations needed on `lastBadge` in `FitCard` because `PALETTE` is `as const`
+

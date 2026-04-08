@@ -165,6 +165,9 @@ export async function GET(req: NextRequest) {
           eventsThisWeek: scoresRow.eventsThisWeek,
           eventsLastWeek: scoresRow.eventsLastWeek,
           benchmarkVsWon: scoresRow.benchmarkVsWon,
+          stakeholderEngagement: scoresRow.stakeholderEngagement,
+          buyerMomentum: scoresRow.buyerMomentum,
+          conversationSignals: scoresRow.conversationSignals,
         }
       : null,
     events: grouped,
