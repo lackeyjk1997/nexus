@@ -535,3 +535,16 @@ apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit 
   - Timeline = all detected events sorted by detectedAt asc
 - UUID convention extended: `e4` = fitness events, `e5` = fitness scores
 
+### Session S15.3: Deal Fitness UI page
+- New sidebar nav item: "Deal Fitness" (Activity icon), placed between Playbook and Outreach
+- Page route: `/deal-fitness` (server component fetches portfolio via internal `GET /api/deal-fitness`)
+- Client: `apps/web/src/app/(dashboard)/deal-fitness/deal-fitness-client.tsx`
+  - Two views toggled by React state (no URL routing): Portfolio + Drill-Down
+  - Portfolio: 4 summary cards (Portfolio Fitness avg, Deals Tracked, Fit Imbalances, Events This Week) + deal table with B/E/T/R mini progress bars, circular ring gauge for overall fitness, velocity trend, and "Days Quiet" coral when >7
+  - Drill-down: deal header card with 80px circular gauge + benchmark line, radar chart card, event timeline card, 2×2 fit cards grid
+  - Radar chart: pure SVG, four axes (Business/Technical/Readiness/Emotional), grid rings at 25/50/75/100, coral filled polygon for this deal + dotted sand polygon for won-deal benchmark, vertex dots, axis labels with score percentages, `overflow: visible` so labels are not clipped
+  - Velocity timeline: pure SVG, 4 category rows (color-coded blue/coral/green/purple), Week 0-8 ticks, gap markers (dashed amber line + day count) when >10 days between consecutive events in a row, hover tooltips via `<title>`
+  - Fit cards: each shows icon, label, score pill (`detected/total · pct%`), expandable event rows. Detected events show ✓ + week label + source badges (Transcript blue / Email green) + contact name. Not_yet events show gray ring + italic 💡 Coaching text in muted. Click to expand reveals full description, evidence snippets in sand-light cards with coral left border, and confidence bar
+- All styling uses inline styles with the existing Nexus PALETTE (matches playbook page convention) — no new design tokens introduced
+- Build gotcha re-encountered: running `pnpm build` while the dev preview server is running corrupts `.next` and the dev server returns HTML 500. Always stop preview, `rm -rf apps/web/.next`, build, then restart preview
+
