@@ -993,25 +993,27 @@ function DrillContent({ detail }: { detail: DealDetail }) {
         )}
       </Card>
 
-      {/* Three analysis cards: Stakeholder Engagement | Buyer Momentum + Conversation Signals */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-          alignItems: "stretch",
-        }}
-      >
+      {/* Three analysis cards in equal-width columns */}
+      <div className="deal-fitness-three-col">
         {scores.stakeholderEngagement && (
           <StakeholderEngagementCard data={scores.stakeholderEngagement} />
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {scores.buyerMomentum && <BuyerMomentumCard data={scores.buyerMomentum} />}
-          {scores.conversationSignals && (
-            <ConversationSignalsCard data={scores.conversationSignals} />
-          )}
-        </div>
+        {scores.buyerMomentum && <BuyerMomentumCard data={scores.buyerMomentum} />}
+        {scores.conversationSignals && (
+          <ConversationSignalsCard data={scores.conversationSignals} />
+        )}
       </div>
+      <style>{`
+        .deal-fitness-three-col {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 16px;
+          align-items: stretch;
+        }
+        @media (max-width: 1023px) {
+          .deal-fitness-three-col { grid-template-columns: 1fr; }
+        }
+      `}</style>
 
       {/* 4 Fit Cards */}
       <div
@@ -1251,21 +1253,56 @@ const ROLE_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
   coach: { bg: "rgba(99,102,241,0.12)", fg: "#3D3D9E", label: "Executive" },
 };
 
+// All known department slots — render a green pill if covered, sand pill with Minus if missing.
+const ALL_DEPARTMENTS = [
+  "Clinical Innovation",
+  "IT / Engineering",
+  "Finance",
+  "Operations",
+  "Security",
+];
+
+function normalizeDept(d: string) {
+  return d.toLowerCase().replace(/[\s/]+/g, "");
+}
+
 function StakeholderEngagementCard({ data }: { data: StakeholderEngagement }) {
-  const sorted = [...data.contactTimeline].sort(
-    (a, b) => a.firstActiveWeek - b.firstActiveWeek
-  );
-  const weeks = [0, 1, 2, 3, 4, 5, 6, 7, 8];
   const above = data.totalStakeholders >= data.benchmark.wonDealAvg;
 
+  // Find the champion (role === 'champion')
+  const champion = data.contactTimeline.find((c) => c.role === "champion");
+  const championIntroducedAll = data.contactTimeline.every(
+    (c) => c.introducedBy === null || c.introducedBy === champion?.contactName
+  );
+
+  // Latest joiners — group by max firstActiveWeek
+  const maxWeek = Math.max(...data.contactTimeline.map((c) => c.firstActiveWeek));
+  const latest = data.contactTimeline.filter((c) => c.firstActiveWeek === maxWeek);
+  const latestLabel = latest
+    .map((c) => {
+      const badge = ROLE_BADGE[c.role];
+      const dept = badge ? badge.label : c.title;
+      return `${c.contactName} (${dept})`;
+    })
+    .join(" and ");
+
+  // Department coverage — match seeded department list against the canonical slots
+  const seeded = new Set(data.departmentList.map(normalizeDept));
+  const departments = ALL_DEPARTMENTS.map((label) => ({
+    label,
+    covered: seeded.has(normalizeDept(label)),
+  }));
+
   return (
-    <Card style={{ height: "100%" }}>
+    <Card style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      {/* Header */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: 8,
+          marginBottom: 14,
+          gap: 8,
         }}
       >
         <h3
@@ -1286,181 +1323,126 @@ function StakeholderEngagementCard({ data }: { data: StakeholderEngagement }) {
             fontWeight: 600,
             padding: "4px 10px",
             borderRadius: 999,
+            whiteSpace: "nowrap",
           }}
         >
           {data.totalStakeholders} stakeholders · {data.departmentsEngaged} departments
         </span>
       </div>
+
+      {/* Big number */}
       <div
         style={{
-          fontSize: 13,
-          color: PALETTE.muted,
-          marginBottom: 14,
-          lineHeight: 1.5,
+          fontSize: 40,
+          fontWeight: 700,
+          lineHeight: 1,
+          color: above ? PALETTE.success : PALETTE.coral,
+          marginBottom: 4,
         }}
       >
-        Won Healthcare deals at Negotiation stage average{" "}
+        {data.totalStakeholders}
+      </div>
+      <div style={{ fontSize: 13, color: PALETTE.muted }}>
+        stakeholders across {data.departmentsEngaged} departments
+      </div>
+      <div style={{ fontSize: 12, color: PALETTE.muted, marginTop: 2 }}>
+        Won Healthcare deals avg{" "}
         <strong style={{ color: PALETTE.text }}>{data.benchmark.wonDealAvg}</strong>{" "}
-        stakeholders. This deal:{" "}
-        <strong style={{ color: above ? PALETTE.success : PALETTE.coral }}>
-          {data.totalStakeholders}
-        </strong>
-        .
+        at this stage
       </div>
 
-      {/* Grid */}
-      <div style={{ overflowX: "auto" }}>
-        <table
+      {/* Department coverage pills */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          marginTop: 16,
+        }}
+      >
+        {departments.map((d) => (
+          <DepartmentPill key={d.label} label={d.label} covered={d.covered} />
+        ))}
+      </div>
+
+      {/* Champion line */}
+      {champion && (
+        <div
           style={{
-            width: "100%",
-            borderCollapse: "separate",
-            borderSpacing: 0,
-            fontSize: 12,
+            marginTop: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
           }}
         >
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: "4px 8px 8px 0", fontWeight: 600, color: PALETTE.muted }}>
-                Stakeholder
-              </th>
-              {weeks.map((w) => (
-                <th
-                  key={w}
-                  style={{
-                    textAlign: "center",
-                    padding: "4px 0 8px",
-                    fontWeight: 600,
-                    color: PALETTE.muted,
-                    width: 22,
-                  }}
-                >
-                  W{w}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((c) => {
-              const badge = ROLE_BADGE[c.role] ?? {
-                bg: PALETTE.sandLight,
-                fg: PALETTE.muted,
-                label: c.role,
-              };
-              const callWeeks = new Set<number>();
-              // weeks where they joined a call: any week in weeksActive that corresponds to a call week
-              // We approximate by saying if weeksActive contains the week AND callsJoined is non-empty
-              // Use a simple rule: a call-week dot is solid; otherwise outlined.
-              const callWeekSet = new Set([1, 3, 4, 6, 8]); // calls 1..5
-              for (const w of c.weeksActive) {
-                if (callWeekSet.has(w) && c.callsJoined.length > 0) {
-                  callWeeks.add(w);
-                }
-              }
-              const activeSet = new Set(c.weeksActive);
-              return (
-                <tr key={c.contactName} style={{ borderTop: `1px solid ${PALETTE.border}` }}>
-                  <td style={{ padding: "10px 12px 10px 0", verticalAlign: "top" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: PALETTE.text }}>
-                      {c.contactName}
-                    </div>
-                    <div style={{ fontSize: 11, color: PALETTE.muted, marginBottom: 4 }}>
-                      {c.title}
-                    </div>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        background: badge.bg,
-                        color: badge.fg,
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: "2px 7px",
-                        borderRadius: 999,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.4,
-                      }}
-                    >
-                      {badge.label}
-                    </span>
-                  </td>
-                  {weeks.map((w) => {
-                    const isActive = activeSet.has(w);
-                    const isCall = callWeeks.has(w);
-                    return (
-                      <td
-                        key={w}
-                        style={{
-                          textAlign: "center",
-                          padding: "10px 0",
-                          background: isActive ? "transparent" : "rgba(243,237,231,0.4)",
-                        }}
-                      >
-                        {isActive && (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: 10,
-                              height: 10,
-                              borderRadius: "50%",
-                              background: isCall ? PALETTE.coral : "transparent",
-                              border: `2px solid ${PALETTE.coral}`,
-                            }}
-                          />
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div
-        style={{
-          marginTop: 14,
-          fontSize: 12,
-          color: PALETTE.muted,
-          fontStyle: "italic",
-          lineHeight: 1.5,
-        }}
-      >
-        All 7 stakeholders were introduced by Dr. Amanda Chen — strong champion-led expansion.
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 11,
-          color: PALETTE.muted,
-          display: "flex",
-          gap: 14,
-        }}
-      >
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <Sparkles size={14} color={PALETTE.coral} />
+          <span style={{ fontSize: 13, color: PALETTE.text }}>
+            All {data.totalStakeholders} introduced by{" "}
+            <strong>{champion.contactName}</strong>
+          </span>
           <span
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: PALETTE.coral,
-              display: "inline-block",
+              background: ROLE_BADGE.champion.bg,
+              color: ROLE_BADGE.champion.fg,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "2px 7px",
+              borderRadius: 999,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
             }}
-          />
-          Joined call
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              border: `2px solid ${PALETTE.coral}`,
-              display: "inline-block",
-            }}
-          />
-          Email only
-        </span>
-      </div>
+          >
+            Champion
+          </span>
+        </div>
+      )}
+      {!championIntroducedAll && (
+        <div style={{ fontSize: 11, color: PALETTE.muted, marginTop: 4 }}>
+          Some stakeholders were introduced by other contacts.
+        </div>
+      )}
+
+      {/* Expansion pace */}
+      {latest.length > 0 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: PALETTE.muted,
+            marginTop: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Latest: {latestLabel} joined Week {maxWeek}
+        </div>
+      )}
     </Card>
+  );
+}
+
+function DepartmentPill({ label, covered }: { label: string; covered: boolean }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        background: covered ? "rgba(45,138,78,0.08)" : PALETTE.sandLight,
+        color: covered ? PALETTE.success : PALETTE.muted,
+        fontSize: 12,
+        fontWeight: 600,
+        padding: "4px 10px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {covered ? (
+        <Check size={12} color={PALETTE.success} strokeWidth={3} />
+      ) : (
+        <Minus size={12} color={PALETTE.muted} strokeWidth={3} />
+      )}
+      {label}
+    </span>
   );
 }
 
