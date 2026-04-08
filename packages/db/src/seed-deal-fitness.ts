@@ -608,15 +608,18 @@ async function seedDealFitness() {
     }
   }
 
-  // Idempotency: if Horizon Health already exists, exit early.
+  // Idempotency: skip the base account if Horizon Health already exists,
+  // but always re-seed fitness events/scores at the end of this script so we
+  // can extend the dataset over time without wiping the company.
   const existing = await db
     .select()
     .from(schema.companies)
     .where(eq(schema.companies.id, HORIZON_COMPANY_ID));
-  if (existing.length > 0) {
-    console.log("  ⚠️  Horizon Health Partners already seeded — exiting (idempotent).");
-    await client.end();
-    process.exit(0);
+  const baseAlreadySeeded = existing.length > 0;
+  if (baseAlreadySeeded) {
+    console.log(
+      "  ⚠️  Horizon Health Partners already seeded — skipping base records, will re-seed fitness events."
+    );
   }
 
   // Look up Sarah Chen and Alex Kim from the existing team_members table.
@@ -636,6 +639,7 @@ async function seedDealFitness() {
   console.log(`  Found Sarah Chen: ${SARAH_ID}`);
   console.log(`  Found Alex Kim:   ${ALEX_ID}`);
 
+  if (!baseAlreadySeeded) {
   // ── Company ──
   console.log("\n📋 Inserting Horizon Health Partners company...");
   await db.insert(schema.companies).values({
@@ -1209,6 +1213,690 @@ async function seedDealFitness() {
     },
   ]);
   console.log("  ✓ 14 email activities created");
+  } // end if (!baseAlreadySeeded)
+
+  // ══════════════════════════════════════════════════════
+  // Deal Fitness Events + Scores (always re-seeded)
+  // ══════════════════════════════════════════════════════
+  console.log("\n🎯 Re-seeding deal fitness events + scores...");
+
+  // Wipe any prior fitness data for this deal so this script is fully idempotent
+  await db
+    .delete(schema.dealFitnessEvents)
+    .where(eq(schema.dealFitnessEvents.dealId, HORIZON_DEAL_ID));
+  await db
+    .delete(schema.dealFitnessScores)
+    .where(eq(schema.dealFitnessScores.dealId, HORIZON_DEAL_ID));
+
+  // Look up email activity IDs by subject so evidence can reference them concretely
+  const dealActivities = await db
+    .select()
+    .from(schema.activities)
+    .where(eq(schema.activities.dealId, HORIZON_DEAL_ID));
+  const emailBySubject = new Map<string, string>();
+  for (const a of dealActivities) {
+    if (a.subject) emailBySubject.set(a.subject, a.id);
+  }
+  function emailRef(subject: string, label: string) {
+    const id = emailBySubject.get(subject);
+    return id ? { type: "email" as const, id, label } : null;
+  }
+
+  // ── Date helpers tied to the demo timeline (Week N = N*7 days ago) ──
+  const W0 = daysAgo(56);
+  const W1 = daysAgo(49);
+  const W3 = daysAgo(35);
+  const W4 = daysAgo(28);
+  const W6 = daysAgo(14);
+  const W8 = daysAgo(2);
+
+  // Source-reference helpers
+  const refDiscovery   = { type: "transcript" as const, id: T_DISCOVERY_ID,  label: "Call 1: Initial Discovery" };
+  const refTechnical   = { type: "transcript" as const, id: T_TECHNICAL_ID,  label: "Call 2: Technical Deep Dive" };
+  const refBusiness    = { type: "transcript" as const, id: T_BUSINESS_ID,   label: "Call 3: Business Case Review" };
+  const refSecurity    = { type: "transcript" as const, id: T_SECURITY_ID,   label: "Call 4: Security & Compliance" };
+  const refExec        = { type: "transcript" as const, id: T_EXEC_ID,       label: "Call 5: Executive Alignment" };
+
+  // ── 25 deal fitness events ──
+  await db.insert(schema.dealFitnessEvents).values([
+    // ════════ BUSINESS FIT (6 — 5 detected, 1 not_yet) ════════
+    {
+      id: "e4000001-0000-0000-0000-000000000001",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_initiates_contact",
+      eventLabel: "Buyer initiates evaluation",
+      eventDescription:
+        "The buyer reached out first — not responding to outbound. Buyer-initiated evaluations close at 2x the rate of outbound-sourced deals.",
+      status: "detected",
+      detectedAt: W0,
+      detectionSources: ["email"],
+      sourceReferences: [emailRef("Following up from your AI in Healthcare webinar", "Email: Following up from webinar (Week 0)")].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "email",
+          quote: "Reached out after attending Anthropic's webinar. Asked about scheduling an introductory call.",
+          timestamp: W0.toISOString(),
+        },
+      ],
+      confidence: "0.99",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000002",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_shares_kpis",
+      eventLabel: "Buyer volunteers business metrics",
+      eventDescription:
+        "The buyer shared internal KPIs unprompted — 45K encounters/month, 312 physicians, 14 facilities, ~2 hrs/day documentation time. Volunteering specific metrics signals genuine evaluation intent, not just tire-kicking.",
+      status: "detected",
+      detectedAt: W1,
+      detectionSources: ["transcript"],
+      sourceReferences: [refDiscovery],
+      evidenceSnippets: [
+        {
+          source: "transcript_1",
+          quote: "Fourteen facilities. Three hundred and twelve physicians. Forty-five thousand patient encounters per month.",
+          timestamp: W1.toISOString(),
+        },
+        {
+          source: "transcript_1",
+          quote: "Roughly two hours a day per physician spent on clinical notes — we measured it directly.",
+          timestamp: W1.toISOString(),
+        },
+      ],
+      confidence: "0.95",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000003",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_references_competitor",
+      eventLabel: "Buyer shares competitive context",
+      eventDescription:
+        "The buyer named their current solution (Dragon Medical) and articulated specific frustrations. This signals active dissatisfaction, not just curiosity — they're looking to replace, not add.",
+      status: "detected",
+      detectedAt: W1,
+      detectionSources: ["transcript"],
+      sourceReferences: [refDiscovery],
+      evidenceSnippets: [
+        {
+          source: "transcript_1",
+          quote: "Dragon Medical. Our cardiologists have basically given up on it — specialty terminology accuracy is terrible.",
+          timestamp: W1.toISOString(),
+        },
+      ],
+      confidence: "0.92",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000004",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_co_edits_roi",
+      eventLabel: "Buyer revises ROI model with own inputs",
+      eventDescription:
+        "The CFO didn't just review the ROI model — he edited it. Added a physician retention line item ($1.2M), adjusted productivity assumptions from 30% to 20%, and recalculated 3-year ROI to $3.4M. A buyer who co-creates the business case will defend it internally.",
+      status: "detected",
+      detectedAt: W4,
+      detectionSources: ["email", "transcript"],
+      sourceReferences: [
+        refBusiness,
+        emailRef("Revised ROI — see my edits", "Email: Revised ROI from CFO (Week 4)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "transcript_3",
+          quote: "Your 30% productivity assumption is aggressive. I'd be comfortable defending 20% to the board.",
+          timestamp: W4.toISOString(),
+        },
+        {
+          source: "transcript_3",
+          quote: "Add a line for physician retention. We spent $1.2M last year replacing three hospitalists.",
+          timestamp: W4.toISOString(),
+        },
+        {
+          source: "email",
+          quote: "Robert returned the model: productivity 30%→20%, added $1.2M retention line, 3-year ROI now $3.4M.",
+          timestamp: W4.toISOString(),
+        },
+      ],
+      confidence: "0.97",
+      contactId: C_ROBERT_ID,
+      contactName: "Robert Garrison",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000005",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_references_budget",
+      eventLabel: "Buyer references budget cycle or timeline",
+      eventDescription:
+        "The CFO referenced a specific fiscal deadline: 'PO submitted before March 15th — fiscal Q2 cutoff.' Anchoring to a fiscal calendar means this has budget allocation, not just interest.",
+      status: "detected",
+      detectedAt: W4,
+      detectionSources: ["transcript"],
+      sourceReferences: [refBusiness],
+      evidenceSnippets: [
+        {
+          source: "transcript_3",
+          quote: "I need the PO submitted before March 15th. That is our fiscal Q2 cutoff.",
+          timestamp: W4.toISOString(),
+        },
+      ],
+      confidence: "0.94",
+      contactId: C_ROBERT_ID,
+      contactName: "Robert Garrison",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000006",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "business_fit",
+      eventKey: "buyer_shares_competitive_pricing",
+      eventLabel: "Buyer shares competitive pricing received",
+      eventDescription:
+        "The buyer has not disclosed pricing from Dragon Medical/Microsoft or any other vendor. This limits our ability to position value against their alternatives. Coaching: ask Amanda directly what Microsoft is quoting if DAX comes back into play.",
+      status: "not_yet",
+      detectedAt: null,
+      detectionSources: null,
+      sourceReferences: null,
+      evidenceSnippets: null,
+      confidence: null,
+      contactId: null,
+      contactName: null,
+    },
+
+    // ════════ EMOTIONAL FIT (6 — 4 detected, 2 not_yet) ════════
+    {
+      id: "e4000001-0000-0000-0000-000000000007",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "response_time_accelerating",
+      eventLabel: "Response time decreasing over lifecycle",
+      eventDescription:
+        "Email response times dropped from 36 hours (Week 0-2) to under 1 hour (Week 8). Accelerating responsiveness signals increasing priority — this evaluation is moving up the buyer's stack rank.",
+      status: "detected",
+      detectedAt: W8,
+      detectionSources: ["email"],
+      sourceReferences: [
+        emailRef("Board update — Dr. Kim presented AI strategy, clinical docs was #1", "Email: Board update (Week 8, 45-min response)"),
+        emailRef("Looping in Priya Mehta from our IT team", "Email: Intro Priya (Week 2, 36-hr response)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "email",
+          quote: "Response time decreased from ~36h (Week 0-2) to ~6h (Week 5-6) to <1h (Week 8).",
+          timestamp: W8.toISOString(),
+        },
+      ],
+      confidence: "0.88",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000008",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "buyer_gives_coaching",
+      eventLabel: "Buyer coaches seller on internal dynamics",
+      eventDescription:
+        "Amanda explicitly coached Sarah on how to position the business case to the CFO. A buyer who coaches the seller on internal positioning is acting as a true champion — they want you to win.",
+      status: "detected",
+      detectedAt: W3,
+      detectionSources: ["transcript"],
+      sourceReferences: [refTechnical],
+      evidenceSnippets: [
+        {
+          source: "transcript_2",
+          quote: "When you talk to Robert, lead with physician satisfaction and retention. He has been obsessing over turnover costs.",
+          timestamp: W3.toISOString(),
+        },
+      ],
+      confidence: "0.93",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000009",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "buyer_off_channel",
+      eventLabel: "Buyer communicates outside primary channel",
+      eventDescription:
+        "Amanda moved off email after the security review week to share informal updates. Off-channel communication signals personal investment beyond professional obligation.",
+      status: "detected",
+      detectedAt: W6,
+      detectionSources: ["transcript"],
+      sourceReferences: [refSecurity],
+      evidenceSnippets: [
+        {
+          source: "transcript_4",
+          quote: "Amanda told me directly afterwards that she does not see any obvious blockers — informal back-channel update.",
+          timestamp: W6.toISOString(),
+        },
+      ],
+      confidence: "0.85",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000010",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "buyer_uses_we_language",
+      eventLabel: "Buyer shifts to collaborative \"we\" language",
+      eventDescription:
+        "In the final call, Amanda consistently used ownership language: 'When we implement this...' / 'Our go-live target...' / 'The way I see our partnership working...' Language shift from 'you/your product' to 'we/our implementation' signals psychological commitment.",
+      status: "detected",
+      detectedAt: W8,
+      detectionSources: ["transcript"],
+      sourceReferences: [refExec],
+      evidenceSnippets: [
+        {
+          source: "transcript_5",
+          quote: "When we implement this... our go-live target... the way I see our partnership working.",
+          timestamp: W8.toISOString(),
+        },
+      ],
+      confidence: "0.91",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000011",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "buyer_responds_after_hours",
+      eventLabel: "Buyer responds outside business hours",
+      eventDescription:
+        "No after-hours email responses have been detected. All communication has occurred during standard business hours. This is not strictly a negative signal but its absence means the evaluation may be contained within normal work boundaries — the relationship has not yet crossed into personal urgency.",
+      status: "not_yet",
+      detectedAt: null,
+      detectionSources: null,
+      sourceReferences: null,
+      evidenceSnippets: null,
+      confidence: null,
+      contactId: null,
+      contactName: null,
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000012",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "emotional_fit",
+      eventKey: "buyer_shares_personal",
+      eventLabel: "Buyer shares non-business context",
+      eventDescription:
+        "Champion has shared professional background but no personal-life disclosure (family, hobbies, weekend plans). Personal disclosure builds trust reciprocity. Coaching: invest 60 seconds at the start of the next call on something genuinely personal — Amanda is high-trust and will respond in kind.",
+      status: "not_yet",
+      detectedAt: null,
+      detectionSources: null,
+      sourceReferences: null,
+      evidenceSnippets: null,
+      confidence: null,
+      contactId: null,
+      contactName: null,
+    },
+
+    // ════════ TECHNICAL FIT (6 — 6 detected, 0 not_yet) ════════
+    {
+      id: "e4000001-0000-0000-0000-000000000013",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_tech_team_joins",
+      eventLabel: "Buyer's technical team joins evaluation",
+      eventDescription:
+        "Priya Mehta (Director of IT & Engineering) was introduced by Amanda and joined Call 2 for the technical deep dive. The buyer widening access to technical stakeholders signals the evaluation has moved past curiosity into serious assessment.",
+      status: "detected",
+      detectedAt: W3,
+      detectionSources: ["transcript", "email"],
+      sourceReferences: [
+        refTechnical,
+        emailRef("Looping in Priya Mehta from our IT team", "Email: Intro Priya (Week 2)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "email",
+          quote: "Amanda introduced Priya Mehta to lead the technical assessment of Claude Enterprise.",
+          timestamp: W3.toISOString(),
+        },
+        {
+          source: "transcript_2",
+          quote: "Priya joined Call 2 with a structured list of technical questions about HL7, FHIR, latency, and observability.",
+          timestamp: W3.toISOString(),
+        },
+      ],
+      confidence: "0.98",
+      contactId: C_PRIYA_ID,
+      contactName: "Priya Mehta",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000014",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_shares_architecture",
+      eventLabel: "Buyer shares technical stack and architecture",
+      eventDescription:
+        "Priya shared their full architecture: Epic 2024, FHIR R4 APIs, Azure-hosted, 15 custom connectors. She also sent a detailed PDF documenting integration requirements. Sharing proprietary technical details signals trust and serious evaluation intent.",
+      status: "detected",
+      detectedAt: W3,
+      detectionSources: ["transcript", "email"],
+      sourceReferences: [
+        refTechnical,
+        emailRef("Architecture overview & integration questions", "Email: Architecture PDF (Week 3)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "transcript_2",
+          quote: "Epic 2024, FHIR R4 APIs, Azure-hosted integration layer, fifteen custom connectors, Snowflake warehouse.",
+          timestamp: W3.toISOString(),
+        },
+      ],
+      confidence: "0.96",
+      contactId: C_PRIYA_ID,
+      contactName: "Priya Mehta",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000015",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_asks_integration",
+      eventLabel: "Buyer asks specific integration questions",
+      eventDescription:
+        "Priya asked targeted technical questions about HL7 conversion, real-time inference latency, model versioning, and rate limiting. Specificity indicates they're mentally architecting the integration — not just checking boxes.",
+      status: "detected",
+      detectedAt: W3,
+      detectionSources: ["transcript"],
+      sourceReferences: [refTechnical],
+      evidenceSnippets: [
+        {
+          source: "transcript_2",
+          quote: "Can Claude process HL7 messages directly, or do we need a middleware layer that converts HL7 to FHIR?",
+          timestamp: W3.toISOString(),
+        },
+        {
+          source: "transcript_2",
+          quote: "What is the latency on real-time inference for clinical notes? Round-trip time inside the physician workflow.",
+          timestamp: W3.toISOString(),
+        },
+      ],
+      confidence: "0.94",
+      contactId: C_PRIYA_ID,
+      contactName: "Priya Mehta",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000016",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_security_review",
+      eventLabel: "Buyer's security team initiates formal review",
+      eventDescription:
+        "James Whitfield (CISO) joined Call 4 and sent a 47-question security questionnaire. A formal security review means the evaluation has crossed from 'exploring' to 'validating for purchase.' Organizations don't waste their CISO's time on deals they're not serious about.",
+      status: "detected",
+      detectedAt: W6,
+      detectionSources: ["transcript", "email"],
+      sourceReferences: [
+        refSecurity,
+        emailRef("Introducing James Whitfield, our CISO — security review", "Email: Intro CISO (Week 5)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "transcript_4",
+          quote: "I have reviewed fourteen AI vendors this year. Let us see if you are different from the other thirteen.",
+          timestamp: W6.toISOString(),
+        },
+      ],
+      confidence: "0.97",
+      contactId: C_JAMES_ID,
+      contactName: "James Whitfield",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000017",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_shares_compliance",
+      eventLabel: "Buyer sends compliance or security requirements",
+      eventDescription:
+        "James sent the formal 47-question security assessment covering HIPAA, data residency, model training isolation, encryption, and audit logging. Sharing compliance requirements means legal and security are engaged — a prerequisite for procurement in healthcare.",
+      status: "detected",
+      detectedAt: W6,
+      detectionSources: ["email"],
+      sourceReferences: [
+        emailRef("Security questionnaire attached — 47 questions", "Email: 47-question security questionnaire (Week 6)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "email",
+          quote: "47-question security assessment: HIPAA, data residency, training isolation, encryption, audit logging, IR.",
+          timestamp: W6.toISOString(),
+        },
+      ],
+      confidence: "0.95",
+      contactId: C_JAMES_ID,
+      contactName: "James Whitfield",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000018",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "technical_fit",
+      eventKey: "buyer_grants_access",
+      eventLabel: "Buyer grants sandbox or test environment",
+      eventDescription:
+        "After security review passed, James directed Priya to provision a sandbox environment in their Azure dev tenant. Granting infrastructure access is a high-commitment action — it requires IT resources and internal approval.",
+      status: "detected",
+      detectedAt: W6,
+      detectionSources: ["email", "transcript"],
+      sourceReferences: [
+        refSecurity,
+        emailRef("Thorough answers — Priya, please set up the sandbox", "Email: CISO clears security gate (Week 6)"),
+      ].filter(Boolean),
+      evidenceSnippets: [
+        {
+          source: "email",
+          quote: "Priya, please set up the sandbox. Marking the security gate as passed in our vendor tracker.",
+          timestamp: W6.toISOString(),
+        },
+      ],
+      confidence: "0.93",
+      contactId: C_JAMES_ID,
+      contactName: "James Whitfield",
+    },
+
+    // ════════ READINESS FIT (7 — 5 detected, 2 not_yet) ════════
+    {
+      id: "e4000001-0000-0000-0000-000000000019",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_identifies_sponsor",
+      eventLabel: "Buyer identifies executive sponsor",
+      eventDescription:
+        "Amanda mentioned in Call 2 that she briefed Dr. Sarah Kim (CMO) and that the CMO is interested. In Call 5, Dr. Kim joined and confirmed the board approved the AI strategy with clinical docs as #1 priority. Executive sponsorship de-risks budget and organizational resistance.",
+      status: "detected",
+      detectedAt: W3,
+      detectionSources: ["transcript"],
+      sourceReferences: [refTechnical],
+      evidenceSnippets: [
+        {
+          source: "transcript_2",
+          quote: "I briefed Dr. Kim last week. She's interested. She wants to see how this fits into our broader AI governance framework.",
+          timestamp: W3.toISOString(),
+        },
+      ],
+      confidence: "0.92",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000020",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_discusses_rollout",
+      eventLabel: "Buyer discusses change management or rollout plan",
+      eventDescription:
+        "Lisa Huang (VP Operations) described a phased rollout: start with 45 hospitalists at downtown campus, expand to cardiology and pulmonology, then full rollout. A buyer who voluntarily plans rollout logistics is mentally past 'should we buy' and into 'how do we succeed.'",
+      status: "detected",
+      detectedAt: W4,
+      detectionSources: ["transcript"],
+      sourceReferences: [refBusiness],
+      evidenceSnippets: [
+        {
+          source: "transcript_3",
+          quote: "Phase one: 45 hospitalists at downtown campus. Phase two: cardiology and pulmonology. Phase three: full rollout.",
+          timestamp: W4.toISOString(),
+        },
+      ],
+      confidence: "0.94",
+      contactId: C_LISA_ID,
+      contactName: "Lisa Huang",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000021",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_asks_onboarding",
+      eventLabel: "Buyer asks about onboarding and CSM support",
+      eventDescription:
+        "Lisa asked specifically: 'Do you assign a dedicated CSM? Our last vendor left us on our own after signing and it was a disaster.' This signals they're planning for post-contract success and reveals a negative past experience we can differentiate against.",
+      status: "detected",
+      detectedAt: W4,
+      detectionSources: ["transcript"],
+      sourceReferences: [refBusiness],
+      evidenceSnippets: [
+        {
+          source: "transcript_3",
+          quote: "Do you assign a dedicated CSM? Our last vendor left us on our own after signing and it was a disaster.",
+          timestamp: W4.toISOString(),
+        },
+      ],
+      confidence: "0.90",
+      contactId: C_LISA_ID,
+      contactName: "Lisa Huang",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000022",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_executive_alignment",
+      eventLabel: "Executive sponsor actively confirms organizational priority",
+      eventDescription:
+        "Dr. Kim joined Call 5 and stated: 'I presented our AI strategy to the board. Clinical documentation was the top priority. Three board members asked about it.' Board-level priority confirmation is the strongest organizational commitment signal.",
+      status: "detected",
+      detectedAt: W8,
+      detectionSources: ["transcript"],
+      sourceReferences: [refExec],
+      evidenceSnippets: [
+        {
+          source: "transcript_5",
+          quote: "I presented our AI strategy to the board. Clinical documentation was the top priority. Three board members asked about it.",
+          timestamp: W8.toISOString(),
+        },
+      ],
+      confidence: "0.96",
+      contactId: C_SARAH_KIM_ID,
+      contactName: "Dr. Sarah Kim",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000023",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_addresses_blockers",
+      eventLabel: "Buyer proactively resolves internal obstacles",
+      eventDescription:
+        "Amanda: 'I talked to legal last week. They're fine with the BAA structure you proposed. That was the last internal gate I was worried about.' When a champion proactively removes blockers without being asked, they're actively selling internally on your behalf.",
+      status: "detected",
+      detectedAt: W8,
+      detectionSources: ["transcript"],
+      sourceReferences: [refExec],
+      evidenceSnippets: [
+        {
+          source: "transcript_5",
+          quote: "I talked to legal last week. They're fine with the BAA structure. That was the last internal gate I was worried about.",
+          timestamp: W8.toISOString(),
+        },
+      ],
+      confidence: "0.95",
+      contactId: C_AMANDA_ID,
+      contactName: "Dr. Amanda Chen",
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000024",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_assigns_program_owner",
+      eventLabel: "Buyer assigns dedicated day-to-day program owner",
+      eventDescription:
+        "Amanda is the executive champion (VP Clinical Innovation) but she will not run the program day-to-day post-launch. No one has been identified as the operational owner who will drive physician adoption, manage training schedules, and handle ongoing optimization. This is a customer success risk even if the deal closes — coaching: ask Amanda directly who will own this on day 90.",
+      status: "not_yet",
+      detectedAt: null,
+      detectionSources: null,
+      sourceReferences: null,
+      evidenceSnippets: null,
+      confidence: null,
+      contactId: null,
+      contactName: null,
+    },
+    {
+      id: "e4000001-0000-0000-0000-000000000025",
+      dealId: HORIZON_DEAL_ID,
+      fitCategory: "readiness_fit",
+      eventKey: "buyer_creates_success_milestones",
+      eventLabel: "Buyer defines 30/60/90-day success milestones",
+      eventDescription:
+        "Lisa built a 12-week rollout timeline focused on deployment phases, but it does not yet include measurable success milestones — no adoption targets, no physician satisfaction benchmarks, no documentation time reduction goals. Without measurable milestones, ROI proof post-launch will be hard. Coaching: co-author the success plan in week one of CS engagement so both sides agree on the bar.",
+      status: "not_yet",
+      detectedAt: null,
+      detectionSources: null,
+      sourceReferences: null,
+      evidenceSnippets: null,
+      confidence: null,
+      contactId: null,
+      contactName: null,
+    },
+  ]);
+  console.log("  ✓ 25 fitness events created");
+
+  // ── Fitness scores summary ──
+  await db.insert(schema.dealFitnessScores).values({
+    id: "e5000001-0001-4000-8000-000000000001",
+    dealId: HORIZON_DEAL_ID,
+    businessFitScore: 83,
+    businessFitDetected: 5,
+    businessFitTotal: 6,
+    emotionalFitScore: 67,
+    emotionalFitDetected: 4,
+    emotionalFitTotal: 6,
+    technicalFitScore: 100,
+    technicalFitDetected: 6,
+    technicalFitTotal: 6,
+    readinessFitScore: 71,
+    readnessFitDetected: 5,
+    readinessFitTotal: 7,
+    overallFitness: 80,
+    velocityTrend: "accelerating",
+    lastEventAt: W8,
+    daysSinceLastEvent: 2,
+    fitImbalanceFlag: true, // Technical 100% vs Emotional 67% = 33-pt spread > 30
+    eventsThisWeek: 3,
+    eventsLastWeek: 1,
+    benchmarkVsWon: {
+      stage: "negotiation",
+      vertical: "healthcare",
+      avgFitnessAtStage: 78,
+      thisDealsPosition: "above_average",
+      avgBusinessFit: 75,
+      avgEmotionalFit: 72,
+      avgTechnicalFit: 85,
+      avgReadinessFit: 68,
+      wonDealCount: 12,
+      insight:
+        "This deal's overall fitness (80%) exceeds the average for won Healthcare deals at Negotiation stage (78%). Technical Fit is unusually strong at 100% vs 85% average. Emotional Fit at 67% is below the 72% average — won deals typically show stronger personal relationship signals by this stage.",
+    },
+  });
+  console.log("  ✓ Fitness scores summary created");
 
   console.log("\n✅ Horizon Health Partners seed complete!");
   console.log("   Company: 1");
@@ -1218,6 +1906,8 @@ async function seedDealFitness() {
   console.log("   Milestones: 9");
   console.log("   Transcripts: 5");
   console.log("   Email activities: 14");
+  console.log("   Fitness events: 25 (20 detected, 5 not_yet)");
+  console.log("   Fitness scores: 1");
 
   await client.end();
   process.exit(0);

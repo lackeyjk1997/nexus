@@ -516,6 +516,22 @@ apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit 
   - MEDDPICC populated from transcript evidence
   - Deal milestones tracking buyer's journey
   - UUID pattern: e0=companies, e1=contacts, e2=deals, e3=transcripts, e4=fitness events, e5=fitness scores, e6=milestones, e7=meddpicc
-- Part 2 will seed fitness events + build API routes
+- Part 2 (S15.2) seeded 25 fitness events + 1 scores record + GET /api/deal-fitness
 - Part 3 will build the Deal Fitness UI page
+
+### Session S15.2: Deal Fitness Events + API
+- Seed file (`seed-deal-fitness.ts`) refactored: base records gated on `baseAlreadySeeded`, fitness events/scores always re-seeded (delete-then-insert) so the script is fully idempotent
+- 25 `deal_fitness_events` for Horizon Health: 20 detected + 5 not_yet
+  - Business Fit: 6 events (5 detected, 1 not_yet) = 83%
+  - Emotional Fit: 6 events (4 detected, 2 not_yet) = 67%
+  - Technical Fit: 6 events (6 detected, 0 not_yet) = 100%
+  - Readiness Fit: 7 events (5 detected, 2 not_yet) = 71%
+  - Each detected event has `evidenceSnippets` (short quotes) and `sourceReferences` linking to actual transcript UUIDs and email-activity UUIDs
+- 1 `deal_fitness_scores` record: overall 80, accelerating velocity, fitImbalanceFlag true (Technical 100 vs Emotional 67 = 33-pt spread), benchmarkVsWon for Negotiation/Healthcare
+- New API route `apps/web/src/app/api/deal-fitness/route.ts`:
+  - `GET /api/deal-fitness` → portfolio view (all deals with fitness scores), sorted by imbalance flag desc, then overall fitness asc
+  - `GET /api/deal-fitness?dealId=<uuid>` → single-deal view: `{ deal, scores, events: { business_fit, emotional_fit, technical_fit, readiness_fit }, timeline }`
+  - Events grouped by category, detected first (chronological) then not_yet
+  - Timeline = all detected events sorted by detectedAt asc
+- UUID convention extended: `e4` = fitness events, `e5` = fitness scores
 
