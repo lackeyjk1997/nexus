@@ -950,3 +950,80 @@ export const accountHealthRelations = relations(accountHealth, ({ one }) => ({
     references: [deals.id],
   }),
 }));
+
+// ── Deal Fitness (oDeal Framework) ─────────────────
+
+export const dealFitnessEvents = pgTable("deal_fitness_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  dealId: uuid("deal_id")
+    .references(() => deals.id)
+    .notNull(),
+  fitCategory: text("fit_category").notNull(), // business_fit | emotional_fit | technical_fit | readiness_fit
+  eventKey: text("event_key").notNull(),
+  eventLabel: text("event_label").notNull(),
+  eventDescription: text("event_description"),
+  status: text("status").notNull().default("not_yet"), // detected | not_yet | negative
+  detectedAt: timestamp("detected_at"),
+  lifecyclePhase: text("lifecycle_phase").notNull().default("pre_sale"), // pre_sale | onboarding | active | renewal
+  detectionSources: text("detection_sources").array(),
+  sourceReferences: jsonb("source_references"),
+  evidenceSnippets: jsonb("evidence_snippets"),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }),
+  detectedBy: text("detected_by").default("ai"),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  contactName: text("contact_name"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const dealFitnessScores = pgTable(
+  "deal_fitness_scores",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id")
+      .references(() => deals.id)
+      .notNull(),
+    businessFitScore: integer("business_fit_score").default(0),
+    businessFitDetected: integer("business_fit_detected").default(0),
+    businessFitTotal: integer("business_fit_total").default(0),
+    emotionalFitScore: integer("emotional_fit_score").default(0),
+    emotionalFitDetected: integer("emotional_fit_detected").default(0),
+    emotionalFitTotal: integer("emotional_fit_total").default(0),
+    technicalFitScore: integer("technical_fit_score").default(0),
+    technicalFitDetected: integer("technical_fit_detected").default(0),
+    technicalFitTotal: integer("technical_fit_total").default(0),
+    readinessFitScore: integer("readiness_fit_score").default(0),
+    readnessFitDetected: integer("readiness_fit_detected").default(0),
+    readinessFitTotal: integer("readiness_fit_total").default(0),
+    overallFitness: integer("overall_fitness").default(0),
+    velocityTrend: text("velocity_trend").default("stable"), // accelerating | stable | decelerating | stalled
+    lastEventAt: timestamp("last_event_at"),
+    daysSinceLastEvent: integer("days_since_last_event"),
+    fitImbalanceFlag: boolean("fit_imbalance_flag").default(false),
+    eventsThisWeek: integer("events_this_week").default(0),
+    eventsLastWeek: integer("events_last_week").default(0),
+    benchmarkVsWon: jsonb("benchmark_vs_won"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("deal_fitness_scores_deal_id_idx").on(table.dealId)]
+);
+
+export const dealFitnessEventsRelations = relations(dealFitnessEvents, ({ one }) => ({
+  deal: one(deals, {
+    fields: [dealFitnessEvents.dealId],
+    references: [deals.id],
+  }),
+  contact: one(contacts, {
+    fields: [dealFitnessEvents.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const dealFitnessScoresRelations = relations(dealFitnessScores, ({ one }) => ({
+  deal: one(deals, {
+    fields: [dealFitnessScores.dealId],
+    references: [deals.id],
+  }),
+}));

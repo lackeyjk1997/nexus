@@ -490,3 +490,32 @@ apps/web/src/app/api/customer/qbr-prep/route.ts      → POST generate QBR agend
 apps/web/src/app/(dashboard)/book/book-client.tsx     → My Book page with drawer, all sections
 apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit modal
 ```
+
+## Session 13 (Post-Sale Book)
+
+- 3 new tables: `knowledge_articles`, `customer_messages`, `account_health` (35 tables total)
+- 5 jsonb columns added to `account_health`: `contracted_use_cases`, `expansion_map`, `proactive_signals`, `similar_situations`, `recommended_resources`
+- Migrations: 0005, 0006, 0007
+- `seed-book.ts`: 18 post-close companies, 22 contacts, 18 closed_won deals (Sarah Chen), 18 account_health records, 15 KB articles, 8 customer messages (6 with response kits)
+- New API routes: `GET /api/book`, `POST /api/customer/response-kit`, `POST /api/customer/qbr-prep`, `POST /api/customer/outreach-email`
+- `/book` page sections: Morning Brief (seeded), Cross-Book Intelligence (4 pattern cards), All Accounts table with vertical filters, Account Detail Drawer (14 sections)
+- Drawer sections: health overview (Seat Utilization, Usage Trend, Stakeholder Health, Engagement Recency as days), contracted use cases with adoption bars and check-in email generation (multi-select purpose chips + free text), contract info, usage metrics, stakeholders, expansion map, risk signals, expansion signals, proactive signals with clickable email actions, similar situations with transferable playbooks, recommended resources, recent messages with response kit modal, actions (log observation functional, QBR prep with live Claude, draft check-in email)
+- Sidebar: My Book added between Pipeline and Intelligence
+- "Needs Your Attention" section hidden, page order: Brief → Metrics → Cross-Book → All Accounts
+- Demo reset updated for new tables
+- Response kit modal z-index fixed above drawer (drawer z-40, modal z-50)
+
+## Session S15: Deal Fitness (oDeal Framework)
+- Added tables: deal_fitness_events, deal_fitness_scores
+- Added seed: seed-deal-fitness.ts — Horizon Health Partners account
+  - Company: Horizon Health Partners (healthcare, $890M revenue, 4,200 employees)
+  - 7 contacts: Amanda Chen (champion), Priya Mehta (tech eval), Robert Garrison (EB), Lisa Huang (end user), James Whitfield (CISO), Mark Davidson (procurement), Dr. Sarah Kim (CMO)
+  - Deal: $1.8M, Negotiation stage, Sarah Chen AE, Alex Kim SC
+  - 5 call transcripts spanning 8 weeks
+  - 14 email activities showing buyer committee expansion
+  - MEDDPICC populated from transcript evidence
+  - Deal milestones tracking buyer's journey
+  - UUID pattern: e0=companies, e1=contacts, e2=deals, e3=transcripts, e4=fitness events, e5=fitness scores, e6=milestones, e7=meddpicc
+- Part 2 will seed fitness events + build API routes
+- Part 3 will build the Deal Fitness UI page
+
