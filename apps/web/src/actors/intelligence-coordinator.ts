@@ -4,6 +4,7 @@ import {
   normalizeCompetitorName,
   findCompetitorInText,
 } from "@/lib/validation";
+import { callClaude } from "./claude-api";
 
 // ── Types ──
 
@@ -211,20 +212,9 @@ export const intelligenceCoordinator = actor({
         .join("\n");
 
       try {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": process.env.ANTHROPIC_API_KEY || "",
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1024,
-            messages: [
-              {
-                role: "user",
-                content: `You are an AI sales intelligence analyst. Multiple deals in the ${pattern.vertical} vertical are experiencing the same ${pattern.signalType.replace(/_/g, " ")} pattern.
+        const text = await callClaude({
+          system: "",
+          userMessage: `You are an AI sales intelligence analyst. Multiple deals in the ${pattern.vertical} vertical are experiencing the same ${pattern.signalType.replace(/_/g, " ")} pattern.
 
 Signals from across the portfolio:
 ${signalSummary}
@@ -244,21 +234,8 @@ Return JSON:
   "recommendations": ["...", "..."],
   "arrImpactMultiplier": 1.5
 }`,
-              },
-            ],
-          }),
+          maxTokens: 1024,
         });
-
-        if (!response.ok) {
-          console.error(
-            `[coordinator] Claude API error: ${response.status}`
-          );
-          pattern.pushStatus = "failed";
-          return;
-        }
-
-        const data = await response.json();
-        const text = data.content?.[0]?.text || "";
 
         let parsed: {
           synthesis?: string;

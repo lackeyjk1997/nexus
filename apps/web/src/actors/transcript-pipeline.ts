@@ -8,6 +8,7 @@ import {
   findCompetitorInText,
   type ValidatedSignal,
 } from "@/lib/validation";
+import { callClaude } from "./claude-api";
 
 // ── Types ──
 
@@ -91,38 +92,6 @@ export interface TranscriptPipelineState {
   experimentAttributions: ExperimentAttribution[];
 }
 
-// ── Claude API helper ──
-
-const MODEL = "claude-sonnet-4-20250514";
-
-async function callClaude(systemPrompt: string, userPrompt: string, maxTokens = 1024): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const textBlock = data.content?.find((b: { type: string }) => b.type === "text");
-  return textBlock?.text || "";
-}
 
 function parseJSON<T>(text: string, fallback: T): T {
   // Strategy 1: Extract from markdown code fences
@@ -267,19 +236,19 @@ export const transcriptPipeline = actor({
 
           const [actionsRaw, meddpiccRaw, signalsRaw] = await Promise.all([
             // Call 1: Extract actions
-            callClaude(
-              "You are a sales call analyst. Extract all action items, commitments, and key decisions from the transcript. Return valid JSON only — no markdown, no explanation.",
-              `Extract action items from this call transcript between ${input.companyName} and our sales team.
+            callClaude({
+              system: "You are a sales call analyst. Extract all action items, commitments, and key decisions from the transcript. Return valid JSON only — no markdown, no explanation.",
+              userMessage: `Extract action items from this call transcript between ${input.companyName} and our sales team.
 
 Return JSON: { "actionItems": [{ "item": "description", "owner": "person name", "deadline": "if mentioned or null" }] }
 
 TRANSCRIPT:
-${input.transcriptText.slice(0, 15000)}`
-            ),
+${input.transcriptText.slice(0, 15000)}`,
+            }),
             // Call 2: Score MEDDPICC
-            callClaude(
-              "You are a MEDDPICC scoring expert for enterprise sales. Analyze the transcript against the MEDDPICC framework. Only update dimensions where the transcript provides NEW evidence. Return valid JSON only.",
-              `Score this call transcript against MEDDPICC. Current scores: ${currentScores}
+            callClaude({
+              system: "You are a MEDDPICC scoring expert for enterprise sales. Analyze the transcript against the MEDDPICC framework. Only update dimensions where the transcript provides NEW evidence. Return valid JSON only.",
+              userMessage: `Score this call transcript against MEDDPICC. Current scores: ${currentScores}
 
 For each dimension where new evidence exists, provide:
 - score: confidence 0-100
@@ -292,11 +261,11 @@ Return JSON: { "updates": { "dimensionName": { "score": number, "evidence": "str
 Only include dimensions with new evidence.
 
 TRANSCRIPT:
-${input.transcriptText.slice(0, 15000)}`
-            ),
+${input.transcriptText.slice(0, 15000)}`,
+            }),
             // Call 3: Detect signals
-            callClaude(
-              `You are analyzing a sales call transcript for a deal in the ${input.vertical} vertical. Extract every meaningful signal from this conversation.
+            callClaude({
+              system: `You are analyzing a sales call transcript for a deal in the ${input.vertical} vertical. Extract every meaningful signal from this conversation.
 
 For each signal found, classify it into exactly one of these types:
 - competitive_intel: Any mention of competitors, competitive positioning, pricing comparisons, feature comparisons
@@ -336,14 +305,14 @@ Return JSON:
 }
 
 Only include signals where there is clear evidence in the transcript. Do not invent or infer signals that aren't supported by what was said.`,
-              `Analyze this transcript for ${input.dealName} at ${input.companyName} (${input.vertical}).
+              userMessage: `Analyze this transcript for ${input.dealName} at ${input.companyName} (${input.vertical}).
 
 Known contacts: ${contactsCtx || "None specified"}
 
 TRANSCRIPT:
 ${input.transcriptText.slice(0, 15000)}`,
-              2048
-            ),
+              maxTokens: 2048,
+            }),
           ]);
 
           // Parse actions
@@ -469,9 +438,9 @@ ${input.transcriptText.slice(0, 15000)}`,
           loopCtx.state.currentStep = "synthesize_learnings";
           await getDealActor().workflowProgress({ step: "synthesize_learnings", status: "running" });
 
-          const raw = await callClaude(
-            "You are a deal strategist. Synthesize the transcript analysis into key learnings. Return valid JSON only.",
-            `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), identify the key learnings that should inform future interactions.
+          const raw = await callClaude({
+            system: "You are a deal strategist. Synthesize the transcript analysis into key learnings. Return valid JSON only.",
+            userMessage: `Based on this transcript analysis for ${input.dealName} at ${input.companyName} (${input.vertical}), identify the key learnings that should inform future interactions.
 
 Each learning MUST combine:
 1. Specific evidence from the transcript (a person's name, a number, a stated preference, a direct quote)
@@ -491,8 +460,8 @@ Focus on: stakeholder preferences, decision criteria, competitive positioning, r
 Return 3-7 learnings. Each should be 1-2 sentences.
 
 TRANSCRIPT:
-${input.transcriptText.slice(0, 8000)}`
-          );
+${input.transcriptText.slice(0, 8000)}`,
+          });
           const parsed = parseJSON<{ learnings: string[] }>(raw, { learnings: [] });
           const validatedLearnings = validateLearnings(parsed.learnings);
           console.log(
@@ -518,8 +487,8 @@ ${input.transcriptText.slice(0, 8000)}`
           await loopCtx.step("check-experiments", async () => {
             loopCtx.state.currentStep = "check_experiments";
 
-            const raw = await callClaude(
-              `You are checking whether a sales call transcript contains evidence relevant to active A/B experiments.
+            const raw = await callClaude({
+              system: `You are checking whether a sales call transcript contains evidence relevant to active A/B experiments.
 
 Active experiments:
 ${experiments.map((e) => `- "${e.title}" (ID: ${e.id}): ${e.hypothesis} (Category: ${e.category})`).join("\n")}
@@ -544,11 +513,11 @@ Return JSON:
 }
 
 Only include experiments where you found clear evidence. Do not guess.`,
-              `Analyze this transcript for experiment evidence.
+              userMessage: `Analyze this transcript for experiment evidence.
 
 TRANSCRIPT:
-${input.transcriptText.slice(0, 12000)}`
-            );
+${input.transcriptText.slice(0, 12000)}`,
+            });
             const parsed = parseJSON<{ attributions: ExperimentAttribution[] }>(raw, { attributions: [] });
             loopCtx.state.experimentAttributions = parsed.attributions;
 
@@ -613,17 +582,17 @@ ${input.transcriptText.slice(0, 12000)}`
           try {
             loopCtx.state.currentStep = "draft_email";
 
-            const raw = await callClaude(
-              "You are a sales email writer. Draft a professional follow-up email incorporating key action items from the call. Return valid JSON only.",
-              `Draft a follow-up email after a call with ${input.companyName} regarding ${input.dealName}.
+            const raw = await callClaude({
+              system: "You are a sales email writer. Draft a professional follow-up email incorporating key action items from the call. Return valid JSON only.",
+              userMessage: `Draft a follow-up email after a call with ${input.companyName} regarding ${input.dealName}.
 
 Action items: ${JSON.stringify(actions)}
 Key stakeholders: ${JSON.stringify(signals.stakeholderInsights.map((s) => s.name))}
 ${input.agentConfigInstructions ? `Rep's communication style preferences: ${input.agentConfigInstructions}` : ""}
 
 Return JSON: { "subject": "email subject line", "body": "full email body text" }
-Keep it professional, concise, and reference specific commitments from the call.`
-            );
+Keep it professional, concise, and reference specific commitments from the call.`,
+            });
             const parsed = parseJSON<{ subject: string; body: string }>(raw, {
               subject: `Follow-up: ${input.dealName} Discussion`,
               body: "Thank you for taking the time to meet today.",
