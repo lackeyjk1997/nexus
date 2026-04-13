@@ -1,3 +1,11 @@
+## ACTIVE AUDIT IN PROGRESS
+A phased architecture audit is running. Output files are in docs/audit/.
+Each phase reads the previous phase's output for context.
+Do NOT modify any source code during audit phases.
+When uncertain about any finding, mark it as UNVERIFIED.
+Never fabricate file paths, function names, or data flows.
+If referencing a file, you MUST read it first.
+
 # NEXUS — Architecture Reference
 
 ## Overview
