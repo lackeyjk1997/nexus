@@ -25,7 +25,7 @@ export function AdminReset() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "X") {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "x" || e.key === "X")) {
         e.preventDefault();
         setState((s) => (s === "idle" ? "confirm" : s));
       }
