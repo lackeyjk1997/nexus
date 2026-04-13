@@ -181,6 +181,10 @@ export async function POST() {
       }
 
       // Destroy intelligence coordinator
+      // NOTE: coordinator_patterns table is intentionally NOT cleared here.
+      // Patterns persist across demo resets so the Act 2 cross-deal story works
+      // without re-running pipeline transcripts. To hard-reset patterns:
+      // DELETE FROM coordinator_patterns;
       try {
         const coordinator = rivetClient.intelligenceCoordinator.getOrCreate(["default"]);
         await coordinator.destroyActor();

@@ -1013,6 +1013,29 @@ export const dealFitnessScores = pgTable(
   (table) => [uniqueIndex("deal_fitness_scores_deal_id_idx").on(table.dealId)]
 );
 
+// ── Coordinator Patterns ───────────────────────────────
+// Persisted cross-deal patterns detected by the intelligence coordinator actor.
+// Survives actor destruction and demo reset so the Act 2 demo story works.
+
+export const coordinatorPatterns = pgTable("coordinator_patterns", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  patternId: text("pattern_id").notNull().unique(),
+  signalType: text("signal_type").notNull(),
+  vertical: text("vertical"),
+  competitor: text("competitor"),
+  dealIds: text("deal_ids").array(),
+  dealNames: text("deal_names").array(),
+  synthesis: text("synthesis"),
+  recommendations: jsonb("recommendations"),
+  arrImpact: integer("arr_impact").default(0),
+  dealCount: integer("deal_count").notNull().default(0),
+  status: text("status").default("active"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  synthesizedAt: timestamp("synthesized_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const dealFitnessEventsRelations = relations(dealFitnessEvents, ({ one }) => ({
   deal: one(deals, {
     fields: [dealFitnessEvents.dealId],

@@ -299,6 +299,39 @@ Return JSON:
 
         pattern.pushStatus = "pushed";
 
+        // Persist pattern to database for demo reset survival
+        try {
+          const siteUrl =
+            process.env.NEXT_PUBLIC_SITE_URL ||
+            `http://localhost:${process.env.PORT || 3001}`;
+          await fetch(`${siteUrl}/api/intelligence/persist-pattern`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              patternId: pattern.id,
+              signalType: pattern.signalType,
+              vertical: pattern.vertical,
+              competitor: pattern.competitor,
+              dealIds: pattern.dealIds,
+              dealNames: pattern.dealNames,
+              synthesis: pattern.synthesis,
+              recommendations: pattern.recommendations,
+              arrImpact: pattern.arrImpact,
+              dealCount: pattern.dealIds.length,
+              detectedAt: pattern.detectedAt,
+              synthesizedAt: pattern.synthesizedAt,
+            }),
+          });
+          console.log(
+            `[coordinator] Persisted pattern to DB: ${pattern.id}`
+          );
+        } catch (persistErr) {
+          console.error(
+            `[coordinator] Failed to persist pattern to DB (non-fatal):`,
+            persistErr
+          );
+        }
+
         c.broadcast("patternSynthesized", {
           patternId: pattern.id,
           synthesis: pattern.synthesis,
