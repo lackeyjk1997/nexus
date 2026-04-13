@@ -1,105 +1,6 @@
-"use client";
-
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-
-const LOADING_STEPS = [
-  "Preparing fresh demo...",
-  "Clearing AI agents...",
-  "Resetting pipeline data...",
-];
-
-const STEP_DURATION = 1500;
-const DONE_DISPLAY = 1000;
+import Link from "next/link";
 
 export default function LandingPage() {
-  const router = useRouter();
-  const [resetState, setResetState] = useState<
-    "idle" | "loading" | "done"
-  >("idle");
-  const [stepIndex, setStepIndex] = useState(0);
-  const apiDoneRef = useRef(false);
-  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const finishAndNavigate = useCallback(() => {
-    setResetState("done");
-    setTimeout(() => {
-      localStorage.clear();
-      localStorage.setItem("demoGuideActive", "true");
-      localStorage.setItem("demoGuideStep", "0");
-      router.push("/pipeline");
-    }, DONE_DISPLAY);
-  }, [router]);
-
-  const runReset = useCallback(async () => {
-    if (resetState !== "idle") return;
-    setResetState("loading");
-    setStepIndex(0);
-    apiDoneRef.current = false;
-
-    fetch("/api/demo/reset", { method: "POST" })
-      .then(() => {
-        apiDoneRef.current = true;
-      })
-      .catch(() => {
-        apiDoneRef.current = true;
-      });
-
-    let current = 0;
-    const advanceStep = () => {
-      current++;
-      if (current < LOADING_STEPS.length) {
-        setStepIndex(current);
-        stepTimerRef.current = setTimeout(() => {
-          if (apiDoneRef.current) {
-            finishAndNavigate();
-          } else {
-            advanceStep();
-          }
-        }, STEP_DURATION);
-      } else {
-        const poll = () => {
-          if (apiDoneRef.current) {
-            finishAndNavigate();
-          } else {
-            stepTimerRef.current = setTimeout(poll, 200);
-          }
-        };
-        stepTimerRef.current = setTimeout(poll, 500);
-      }
-    };
-
-    stepTimerRef.current = setTimeout(() => {
-      if (apiDoneRef.current) {
-        setTimeout(finishAndNavigate, 500);
-      } else {
-        advanceStep();
-      }
-    }, STEP_DURATION);
-  }, [resetState, finishAndNavigate]);
-
-  const autoResetRef = useRef(false);
-  useEffect(() => {
-    if (typeof window !== "undefined" && !autoResetRef.current) {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("reset") === "true") {
-        autoResetRef.current = true;
-        window.history.replaceState({}, document.title, "/");
-        setTimeout(() => runReset(), 50);
-      }
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    return () => {
-      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
-    };
-  }, []);
-
-  const isLoading = resetState === "loading";
-  const isDone = resetState === "done";
-  const isActive = isLoading || isDone;
-
   return (
     <div
       style={{
@@ -427,58 +328,29 @@ export default function LandingPage() {
 
         {/* Enter button */}
         <div style={{ textAlign: "center" }}>
-          <button
-            onClick={runReset}
-            disabled={isActive}
+          <Link
+            href="/pipeline"
             style={{
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
               minWidth: 240,
-              background: isActive ? "#F5F3EF" : "#E07A5F",
-              color: isDone ? "#4A9E6B" : isLoading ? "#8A8078" : "#FFFFFF",
+              background: "#E07A5F",
+              color: "#FFFFFF",
               padding: "12px 36px",
               borderRadius: 8,
               fontSize: 15,
               fontWeight: 600,
               fontFamily: "'DM Sans', sans-serif",
-              cursor: isActive ? "not-allowed" : "pointer",
-              border: isActive ? "1px solid rgba(0,0,0,0.06)" : "none",
-              transition: "background 0.2s ease, color 0.2s ease",
-            }}
-            onMouseOver={(e) => {
-              if (!isActive) e.currentTarget.style.background = "#D06A4F";
-            }}
-            onMouseOut={(e) => {
-              if (!isActive) e.currentTarget.style.background = "#E07A5F";
+              cursor: "pointer",
+              border: "none",
+              textDecoration: "none",
+              transition: "background 0.2s ease",
             }}
           >
-            {isDone ? (
-              <>
-                <span style={{ color: "#4A9E6B", fontSize: 18 }}>&#10003;</span>
-                <span style={{ color: "#3D3833" }}>Demo Ready</span>
-              </>
-            ) : isLoading ? (
-              <>
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 16,
-                    height: 16,
-                    border: "2px solid #E07A5F",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "nexus-spin 0.8s linear infinite",
-                  }}
-                />
-                {LOADING_STEPS[stepIndex]}
-              </>
-            ) : (
-              "Enter Demo \u2192"
-            )}
-          </button>
-          <style>{`@keyframes nexus-spin { to { transform: rotate(360deg); } }`}</style>
+            Enter Demo &#8594;
+          </Link>
         </div>
       </div>
     </div>

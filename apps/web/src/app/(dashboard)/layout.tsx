@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 import { LayoutAgentBar } from "@/components/layout-agent-bar";
 import { DemoGuide } from "@/components/demo-guide";
+import { AdminReset } from "@/components/admin-reset";
 import { db } from "@/lib/db";
 import { teamMembers, supportFunctionMembers } from "@nexus/db";
 import type { Role } from "@nexus/shared";
@@ -65,6 +66,7 @@ export default async function DashboardLayout({
         </div>
       </div>
       <DemoGuide />
+      <AdminReset />
     </PersonaProvider>
   );
 }
