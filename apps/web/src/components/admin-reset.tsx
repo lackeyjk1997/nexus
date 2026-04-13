@@ -33,8 +33,15 @@ export function AdminReset() {
         setState("idle");
       }
     }
+    function handleTrigger() {
+      setState((s) => (s === "idle" ? "confirm" : s));
+    }
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("admin-reset-trigger", handleTrigger);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("admin-reset-trigger", handleTrigger);
+    };
   }, [state]);
 
   if (state === "idle") return null;

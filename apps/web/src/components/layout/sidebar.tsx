@@ -111,9 +111,18 @@ export function Sidebar() {
 
       <div className="p-4 border-t border-border">
         {!collapsed && (
-          <p className="text-xs text-muted-foreground">
-            AI Sales Orchestration
-          </p>
+          <>
+            <p className="text-xs text-muted-foreground">
+              AI Sales Orchestration
+            </p>
+            <button
+              onClick={() => window.dispatchEvent(new Event("admin-reset-trigger"))}
+              className="mt-2 text-muted-foreground hover:underline"
+              style={{ fontSize: 11, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+            >
+              Reset Demo
+            </button>
+          </>
         )}
       </div>
     </aside>
