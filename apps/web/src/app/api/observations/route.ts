@@ -60,7 +60,7 @@ const SIGNAL_ROUTES: Record<string, string> = {
 // ── POST: create observation ──
 
 export async function POST(request: Request) {
-  const { rawInput, context, observerId } = await request.json();
+  const { rawInput, context, observerId, preClassified, signalType: preSignalType, severity: preSeverity, aiClassification: preAiClassification } = await request.json();
 
   if (!rawInput || !observerId) {
     return NextResponse.json(
@@ -137,7 +137,13 @@ export async function POST(request: Request) {
   let followUp: { should_ask: boolean; question: string | null; chips: string[] | null; clarifies: string | null };
   let aiAcknowledgment: string | null = null;
 
-  if (apiKey) {
+  // Skip Claude re-classification when the pipeline already classified this signal
+  if (preClassified && preSignalType && preAiClassification) {
+    console.log(`[Observations] Skipping classification — pre-classified as ${preSignalType}`);
+    classification = preAiClassification;
+    followUp = { should_ask: false, question: null, chips: null, clarifies: null };
+    aiAcknowledgment = null;
+  } else if (apiKey) {
     try {
       const client = new Anthropic({ apiKey });
       const aiResult = await classifyWithClaude(client, rawInput, context, observer, allAccounts, observerDeals);

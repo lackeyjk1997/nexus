@@ -413,6 +413,26 @@ ${input.transcriptText.slice(0, 15000)}`,
                     sourceSpeaker: signal.source_speaker,
                   },
                   observerId: input.assignedAeId,
+                  preClassified: true,
+                  signalType: signal.type,
+                  severity: signal.urgency,
+                  aiClassification: {
+                    signals: [{
+                      type: signal.type,
+                      confidence: 0.9,
+                      summary: signal.content,
+                      ...(signal.type === "competitive_intel" && findCompetitorInSignal(signal as ValidatedSignal)
+                        ? { competitor_name: findCompetitorInSignal(signal as ValidatedSignal) }
+                        : {}),
+                    }],
+                    sentiment: "neutral",
+                    urgency: signal.urgency || "medium",
+                    sensitivity: "normal",
+                    entities: [],
+                    linked_accounts: [],
+                    linked_deals: [],
+                    needs_clarification: false,
+                  },
                 }),
               }).catch((e) => {
                 console.error(`Failed to create observation for signal: ${signal.type}`, e);
