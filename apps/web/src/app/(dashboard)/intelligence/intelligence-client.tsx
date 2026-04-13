@@ -19,6 +19,7 @@ import {
   Send,
   X,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { usePersona } from "@/components/providers";
@@ -148,11 +149,11 @@ function timeAgo(d: Date | string | null): string {
 }
 
 export function IntelligenceClient({
-  clusters,
-  observations,
-  avgResponseTime = "No data",
-  closeIntelligence = null,
-  directives = [],
+  clusters: initialClusters,
+  observations: initialObservations,
+  avgResponseTime: initialAvgResponseTime = "No data",
+  closeIntelligence: initialCloseIntelligence = null,
+  directives: initialDirectives = [],
 }: {
   clusters: Cluster[];
   observations: Observation[];
@@ -166,6 +167,16 @@ export function IntelligenceClient({
   const router = useRouter();
   const initialTab = (searchParams.get("tab") as TabKey) || "patterns";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  // Live data state — initialized from server props
+  const [clusters, setClusters] = useState<Cluster[]>(initialClusters);
+  const [observations, setObservations] = useState<Observation[]>(initialObservations);
+  const [avgResponseTime, setAvgResponseTime] = useState(initialAvgResponseTime);
+  const [closeIntelligence, setCloseIntelligence] = useState<CloseIntelligence>(initialCloseIntelligence);
+  const [directives, setDirectives] = useState<Directive[]>(initialDirectives);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState("Just now");
 
   const handleTabChange = useCallback((tab: TabKey) => {
     setActiveTab(tab);
@@ -193,12 +204,57 @@ export function IntelligenceClient({
     }>
   >([]);
 
+  // Fetch all intelligence data (main + agent patterns)
+  const fetchData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const [mainRes, patternsRes] = await Promise.all([
+        fetch("/api/intelligence"),
+        fetch("/api/intelligence/agent-patterns"),
+      ]);
+      if (mainRes.ok) {
+        const data = await mainRes.json();
+        setClusters(data.clusters || []);
+        setObservations(data.observations || []);
+        setAvgResponseTime(data.avgResponseTime || "No data");
+        setCloseIntelligence(data.closeIntelligence || null);
+        setDirectives(data.directives || []);
+      }
+      if (patternsRes.ok) {
+        const data = await patternsRes.json();
+        setAgentPatterns(data.patterns || []);
+      }
+      setLastUpdated(new Date());
+    } catch {
+      // Silently fail — keep existing data
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Initial fetch for agent patterns + start polling
   useEffect(() => {
+    // Fetch agent patterns on mount (main data comes from server props)
     fetch("/api/intelligence/agent-patterns")
       .then((r) => r.json())
       .then((data) => setAgentPatterns(data.patterns || []))
       .catch(() => setAgentPatterns([]));
-  }, []);
+
+    // Poll every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  // Update "last updated" label every second
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const seconds = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+      if (seconds < 5) setLastUpdatedLabel("Just now");
+      else if (seconds < 60) setLastUpdatedLabel(`${seconds}s ago`);
+      else setLastUpdatedLabel(`${Math.floor(seconds / 60)}m ago`);
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [lastUpdated]);
 
   const isSupport = (currentUser?.role as string) === "SUPPORT";
   const isAE = currentUser?.role === "AE" || currentUser?.role === "SA" || currentUser?.role === "BDR" || currentUser?.role === "CSM";
@@ -244,11 +300,39 @@ export function IntelligenceClient({
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">
-          Field Intelligence Dashboard
-        </h1>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Field Intelligence Dashboard
+          </h1>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 12, color: "#8A8078" }}>
+            Updated {lastUpdatedLabel}
+          </span>
+          <button
+            onClick={fetchData}
+            disabled={isRefreshing}
+            title="Refresh data"
+            style={{
+              padding: 6,
+              borderRadius: 6,
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: "transparent",
+              cursor: isRefreshing ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <RefreshCw
+              size={14}
+              className={isRefreshing ? "animate-spin" : ""}
+              style={{ color: "#8A8078" }}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Tab Bar */}
