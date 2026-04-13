@@ -47,6 +47,13 @@ export async function PATCH(
     competition: { text: "competition", confidence: "competitionConfidence" },
   };
 
+  // Check if a MEDDPICC record already exists
+  const [existing] = await db
+    .select({ id: meddpiccFields.id })
+    .from(meddpiccFields)
+    .where(eq(meddpiccFields.dealId, dealId))
+    .limit(1);
+
   // Build the update object
   const updateValues: Record<string, unknown> = {
     aiExtracted: true,
@@ -58,23 +65,20 @@ export async function PATCH(
   for (const [dimension, update] of Object.entries(updates)) {
     const mapping = fieldMap[dimension];
     if (!mapping) continue;
-    if (update.delta === 0) continue;
+    // When inserting a new record, accept any field with a score > 0
+    // (delta may be 0 if Claude couldn't compute change from "No existing scores")
+    // When updating, skip fields with no change
+    if (existing && update.delta === 0) continue;
+    if (!existing && update.score === 0) continue;
 
     updateValues[mapping.confidence] = update.score;
     updateValues[mapping.text] = update.evidence;
-    changedFields.push(`${dimension}: ${update.delta > 0 ? "+" : ""}${update.delta}`);
+    changedFields.push(`${dimension}: ${update.delta > 0 ? "+" : ""}${update.delta || update.score}`);
   }
 
   if (changedFields.length === 0) {
     return NextResponse.json({ success: true, updated: 0 });
   }
-
-  // Update or insert MEDDPICC record
-  const [existing] = await db
-    .select({ id: meddpiccFields.id })
-    .from(meddpiccFields)
-    .where(eq(meddpiccFields.dealId, dealId))
-    .limit(1);
 
   if (existing) {
     await db
