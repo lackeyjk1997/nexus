@@ -104,6 +104,9 @@ export interface DealAgentState {
   // Prepared brief (auto-generated after transcript processing)
   briefReady: BriefReady | null;
 
+  // Flag set by pipeline to indicate brief should be generated client-side
+  briefPending: boolean;
+
   // Proactive interventions
   activeIntervention: ActiveIntervention | null;
 
@@ -223,6 +226,7 @@ const DEFAULT_STATE: DealAgentState = {
   stageEnteredAt: null,
   closeDate: null,
   briefReady: null,
+  briefPending: false,
   activeIntervention: null,
   lastHealthCheck: null,
   healthScore: 100,
@@ -245,6 +249,7 @@ export const dealAgent = actor({
       title: string;
     }>(),
     briefReady: event<{ generatedAt: string }>(),
+    briefPending: event<Record<string, never>>(),
     healthChecked: event<{ score: number; issues: string[] }>(),
     coordinatedIntelReceived: event<{
       signalType: string;
@@ -393,6 +398,66 @@ export const dealAgent = actor({
       if (!c.state.riskSignals.includes(signal)) {
         c.state.riskSignals.push(signal);
         c.broadcast("riskDetected", { signal, details: _details });
+
+        // Check if this signal implies a timeline conflict with close date
+        if (c.state.closeDate && (!c.state.activeIntervention || c.state.activeIntervention.dismissed)) {
+          const lower = signal.toLowerCase();
+          const isProcessSignal = lower.includes('security') || lower.includes('review') ||
+            lower.includes('process_friction') || lower.includes('friction') ||
+            lower.includes('timeline') || lower.includes('delay') ||
+            lower.includes('blocker') || lower.includes('approval');
+
+          if (isProcessSignal) {
+            // Extract timeline from signal text (e.g., "6-8 weeks", "90 days")
+            const weekMatch = signal.match(/(\d+)[\s-]*(?:to\s*)?(\d+)?\s*week/i);
+            const dayMatch = signal.match(/(\d+)\s*day/i);
+            let impliedDays = 56; // default 8 weeks if no timeline found
+            let timelineDesc = 'process delays';
+
+            if (weekMatch) {
+              const weeks = weekMatch[2] ? parseInt(weekMatch[2]) : parseInt(weekMatch[1]);
+              impliedDays = weeks * 7;
+              timelineDesc = weekMatch[2]
+                ? `${weekMatch[1]}-${weekMatch[2]} week timeline`
+                : `${weekMatch[1]} week timeline`;
+            } else if (dayMatch) {
+              impliedDays = parseInt(dayMatch[1]);
+              timelineDesc = `${dayMatch[1]} day timeline`;
+            }
+
+            const closeDate = new Date(c.state.closeDate + 'T00:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const daysUntilClose = Math.round((closeDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+            if (impliedDays > daysUntilClose) {
+              // Signal timeline pushes past close date — fire intervention
+              const recommended = new Date(today);
+              recommended.setDate(recommended.getDate() + impliedDays + 14); // timeline + 2 week buffer
+              const recommendedStr = recommended.toISOString().split('T')[0];
+              const closeDateDisplay = closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+              c.state.activeIntervention = {
+                type: 'timeline_risk',
+                title: 'Close Date at Risk',
+                diagnosis: `A ${timelineDesc} detected in this deal extends past your close date of ${closeDateDisplay}. With only ${daysUntilClose} days remaining, the deal needs more runway.`,
+                action: {
+                  type: 'update_field',
+                  field: 'close_date',
+                  currentValue: c.state.closeDate,
+                  suggestedValue: recommendedStr,
+                  displayLabel: 'Close Date',
+                },
+                dismissed: false,
+              };
+
+              c.broadcast("interventionReady", {
+                type: 'timeline_risk',
+                title: 'Close Date at Risk',
+              });
+            }
+          }
+        }
       }
     },
 
@@ -454,6 +519,17 @@ export const dealAgent = actor({
 
     getBriefReady: (c) => {
       return c.state.briefReady;
+    },
+
+    setBriefPending: (c, pending: boolean) => {
+      c.state.briefPending = pending;
+      if (pending) {
+        c.broadcast("briefPending", {});
+      }
+    },
+
+    getBriefPending: (c) => {
+      return c.state.briefPending;
     },
 
     setIntervention: (c, intervention: ActiveIntervention | null) => {
@@ -596,72 +672,8 @@ export const dealAgent = actor({
 
       c.broadcast("healthChecked", { score: c.state.healthScore, issues });
 
-      // Create intervention if health is low and no active undismissed intervention
-      if (score < 60 && (!c.state.activeIntervention || c.state.activeIntervention.dismissed)) {
-        // Check for timeline risk: process friction/security risk signals + close date under pressure
-        const hasProcessFriction = c.state.riskSignals?.some(s => {
-          const lower = s.toLowerCase();
-          return lower.includes('security') || lower.includes('review') ||
-            lower.includes('process_friction') || lower.includes('friction') ||
-            lower.includes('timeline') || lower.includes('delay');
-        });
-
-        if (hasProcessFriction && c.state.closeDate) {
-          const closeDate = new Date(c.state.closeDate + 'T00:00:00');
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const daysUntilClose = Math.round((closeDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
-
-          if (daysUntilClose < 70) {
-            // Recommend today + 12 weeks buffer
-            const recommended = new Date(today);
-            recommended.setDate(recommended.getDate() + 84);
-            const recommendedStr = recommended.toISOString().split('T')[0];
-
-            const closeDateDisplay = closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-            c.state.activeIntervention = {
-              type: 'timeline_risk',
-              title: 'Close Date at Risk',
-              diagnosis: `Risk signals suggest process delays that could push this deal past your current close date of ${closeDateDisplay}. With ${daysUntilClose} days remaining, you may not have enough runway for remaining approvals and reviews.`,
-              action: {
-                type: 'update_field',
-                field: 'close_date',
-                currentValue: c.state.closeDate,
-                suggestedValue: recommendedStr,
-                displayLabel: 'Close Date',
-              },
-              dismissed: false,
-            };
-
-            c.broadcast("interventionReady", {
-              type: 'timeline_risk',
-              title: 'Close Date at Risk',
-            });
-            return;
-          }
-        }
-
-        // Fallback: generic intervention with contextual type
-        const primaryIssue = issues[0] || "Multiple risk factors detected";
-        const interventionType =
-          c.state.riskSignals.some(s => s.toLowerCase().includes("blocker")) ? "competitive_threat"
-          : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
-          : "meddpicc_gap";
-
-        c.state.activeIntervention = {
-          type: interventionType,
-          title: primaryIssue,
-          diagnosis: issues.join(". "),
-          recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
-          dismissed: false,
-        };
-
-        c.broadcast("interventionReady", {
-          type: interventionType,
-          title: primaryIssue,
-        });
-      }
+      // Disabled for demo — generic stall interventions are not compelling.
+      // Close date interventions now fire immediately from addRiskSignal instead.
     },
   },
 });
