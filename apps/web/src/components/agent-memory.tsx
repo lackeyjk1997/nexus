@@ -316,9 +316,14 @@ export function AgentMemory({
 
           {/* Footer */}
           <p className="text-[11px] pt-1" style={{ color: "#8A8078" }}>
-            {agentState.daysSinceCreation === 0
-              ? "Watching since today"
-              : `Watching for ${agentState.daysSinceCreation} day${agentState.daysSinceCreation !== 1 ? "s" : ""}`}
+            {(() => {
+              const days = agentState.createdAt
+                ? Math.floor((Date.now() - new Date(agentState.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                : 0;
+              return days === 0
+                ? "Watching since today"
+                : `Watching for ${days} day${days !== 1 ? "s" : ""}`;
+            })()}
           </p>
         </div>
       )}

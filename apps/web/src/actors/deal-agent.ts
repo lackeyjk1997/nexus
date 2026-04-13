@@ -87,7 +87,7 @@ export interface DealAgentState {
   coordinatedIntel: CoordinatedIntel[];
 
   // Agent health
-  daysSinceCreation: number;
+  createdAt: string | null;
   totalInteractions: number;
   lastInteractionDate: string | null;
   lastCallPrepFeedback: {
@@ -99,7 +99,6 @@ export interface DealAgentState {
   // Pipeline status
   currentStage: string;
   stageEnteredAt: string | null;
-  lastCustomerResponseDate: string | null;
   closeDate: string | null;
 
   // Prepared brief (auto-generated after transcript processing)
@@ -123,8 +122,11 @@ export function formatMemoryForPrompt(state: DealAgentState): string {
   const sections: string[] = [];
 
   // Header
+  const daysSinceCreation = state.createdAt
+    ? Math.floor((Date.now() - new Date(state.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
   sections.push(
-    `This deal agent has been active for ${state.daysSinceCreation} day(s) with ${state.totalInteractions} interaction(s).`
+    `This deal agent has been active for ${daysSinceCreation} day(s) with ${state.totalInteractions} interaction(s).`
   );
 
   // Key learnings
@@ -213,13 +215,12 @@ const DEFAULT_STATE: DealAgentState = {
     recentMentions: [],
   },
   coordinatedIntel: [],
-  daysSinceCreation: 0,
+  createdAt: null,
   totalInteractions: 0,
   lastInteractionDate: null,
   lastCallPrepFeedback: null,
   currentStage: "",
   stageEnteredAt: null,
-  lastCustomerResponseDate: null,
   closeDate: null,
   briefReady: null,
   activeIntervention: null,
@@ -272,7 +273,7 @@ export const dealAgent = actor({
       c.state.stageEnteredAt = data.stageEnteredAt;
       c.state.closeDate = data.closeDate ?? null;
       c.state.initialized = true;
-      c.state.daysSinceCreation = 0;
+      c.state.createdAt = new Date().toISOString();
 
       // Schedule first health check after 30 seconds (demo timing)
       c.schedule.after(30000, "runHealthCheck");
@@ -552,18 +553,6 @@ export const dealAgent = actor({
       let score = 100;
       const issues: string[] = [];
 
-      // Check days since last customer interaction
-      if (c.state.lastCustomerResponseDate) {
-        const daysSilent = Math.floor(
-          (Date.now() - new Date(c.state.lastCustomerResponseDate).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (daysSilent > 14) { score -= 30; issues.push(`No customer response in ${daysSilent} days`); }
-        else if (daysSilent > 7) { score -= 15; issues.push(`Customer silent for ${daysSilent} days`); }
-      } else if (c.state.totalInteractions > 2) {
-        score -= 20;
-        issues.push("No customer response date tracked");
-      }
-
       // Check risk signals
       score -= c.state.riskSignals.length * 10;
       for (const signal of c.state.riskSignals) {
@@ -609,73 +598,69 @@ export const dealAgent = actor({
 
       // Create intervention if health is low and no active undismissed intervention
       if (score < 60 && (!c.state.activeIntervention || c.state.activeIntervention.dismissed)) {
-        // Demo constraint: limit timeline_risk to NordicMed for controlled demo flow. Remove for production.
-        const isNordicMed = c.state.companyName?.toLowerCase().includes('nordicmed') ||
-                            c.state.dealName?.toLowerCase().includes('nordicmed');
+        // Check for timeline risk: process friction/security risk signals + close date under pressure
+        const hasProcessFriction = c.state.riskSignals?.some(s => {
+          const lower = s.toLowerCase();
+          return lower.includes('security') || lower.includes('review') ||
+            lower.includes('process_friction') || lower.includes('friction') ||
+            lower.includes('timeline') || lower.includes('delay');
+        });
 
-        if (isNordicMed) {
-          const hasProcessFriction = c.state.riskSignals?.some(s => {
-            const lower = s.toLowerCase();
-            return lower.includes('security') || lower.includes('review') ||
-              lower.includes('process_friction') || lower.includes('friction');
-          });
+        if (hasProcessFriction && c.state.closeDate) {
+          const closeDate = new Date(c.state.closeDate + 'T00:00:00');
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const daysUntilClose = Math.round((closeDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 
-          if (hasProcessFriction && c.state.closeDate) {
-            const closeDate = new Date(c.state.closeDate + 'T00:00:00');
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const daysUntilClose = Math.round((closeDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+          if (daysUntilClose < 70) {
+            // Recommend today + 12 weeks buffer
+            const recommended = new Date(today);
+            recommended.setDate(recommended.getDate() + 84);
+            const recommendedStr = recommended.toISOString().split('T')[0];
 
-            if (daysUntilClose < 70) { // Less than 10 weeks out
-              // Recommended: today + 12 weeks (8 weeks security + 4 weeks pilot/approval buffer)
-              const recommended = new Date(today);
-              recommended.setDate(recommended.getDate() + 84);
-              const recommendedStr = recommended.toISOString().split('T')[0];
+            const closeDateDisplay = closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-              const closeDateDisplay = closeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            c.state.activeIntervention = {
+              type: 'timeline_risk',
+              title: 'Close Date at Risk',
+              diagnosis: `Risk signals suggest process delays that could push this deal past your current close date of ${closeDateDisplay}. With ${daysUntilClose} days remaining, you may not have enough runway for remaining approvals and reviews.`,
+              action: {
+                type: 'update_field',
+                field: 'close_date',
+                currentValue: c.state.closeDate,
+                suggestedValue: recommendedStr,
+                displayLabel: 'Close Date',
+              },
+              dismissed: false,
+            };
 
-              c.state.activeIntervention = {
-                type: 'timeline_risk',
-                title: 'Close Date at Risk',
-                diagnosis: `Dr. Larsson mentioned the security review has been running for 5 weeks with a typical timeline of 6-8 weeks. After security clears, you still need final technical validation and board approval. Your current close date of ${closeDateDisplay} may not leave enough runway.`,
-                action: {
-                  type: 'update_field',
-                  field: 'close_date',
-                  currentValue: c.state.closeDate,
-                  suggestedValue: recommendedStr,
-                  displayLabel: 'Close Date',
-                },
-                dismissed: false,
-              };
-
-              c.broadcast("interventionReady", {
-                type: 'timeline_risk',
-                title: 'Close Date at Risk',
-              });
-            }
+            c.broadcast("interventionReady", {
+              type: 'timeline_risk',
+              title: 'Close Date at Risk',
+            });
+            return;
           }
-        } else {
-          // Generic health check intervention for non-NordicMed deals
-          const primaryIssue = issues[0] || "Multiple risk factors detected";
-          const interventionType =
-            c.state.riskSignals.some(s => s.includes("blocker")) ? "competitive_threat"
-            : issues.some(i => i.includes("No customer response") || i.includes("Customer silent")) ? "stall_detected"
-            : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
-            : "meddpicc_gap";
-
-          c.state.activeIntervention = {
-            type: interventionType,
-            title: primaryIssue,
-            diagnosis: issues.join(". "),
-            recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
-            dismissed: false,
-          };
-
-          c.broadcast("interventionReady", {
-            type: interventionType,
-            title: primaryIssue,
-          });
         }
+
+        // Fallback: generic intervention with contextual type
+        const primaryIssue = issues[0] || "Multiple risk factors detected";
+        const interventionType =
+          c.state.riskSignals.some(s => s.toLowerCase().includes("blocker")) ? "competitive_threat"
+          : issues.some(i => i.includes("stage") || i.includes("days")) ? "stage_overdue"
+          : "meddpicc_gap";
+
+        c.state.activeIntervention = {
+          type: interventionType,
+          title: primaryIssue,
+          diagnosis: issues.join(". "),
+          recommendation: `Health score: ${score}/100. ${issues.length} issue(s) detected. Review the deal and take action.`,
+          dismissed: false,
+        };
+
+        c.broadcast("interventionReady", {
+          type: interventionType,
+          title: primaryIssue,
+        });
       }
     },
   },
