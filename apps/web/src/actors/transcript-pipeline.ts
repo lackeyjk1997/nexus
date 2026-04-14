@@ -759,7 +759,35 @@ Keep it professional, concise, and reference specific commitments from the call.
           }
         });
 
-        // FINALIZE STEP 3: Mark pipeline complete
+        // FINALIZE STEP 3: Analyze deal fitness (oDeal framework)
+        currentStepName = "analyze_deal_fitness";
+        await loopCtx.step({ name: "analyze-deal-fitness", timeout: 180_000, run: async () => {
+          try {
+            console.log("[pipeline] Running deal fitness analysis (oDeal framework)...");
+            await getDealActor().workflowProgress({ step: "deal_fitness", status: "running" });
+            const fitnessResp = await fetch(`${input.appUrl}/api/deal-fitness/analyze`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ dealId: input.dealId }),
+            });
+            if (fitnessResp.ok) {
+              const result = await fitnessResp.json();
+              console.log(`[pipeline] Deal Fitness: ${result.eventsDetected} events detected, overall ${result.scores?.overall}%`);
+              await getDealActor().workflowProgress({ step: "deal_fitness", status: "complete", details: `${result.eventsDetected} events, ${result.scores?.overall}% fitness` });
+            } else {
+              const errText = await fitnessResp.text();
+              console.error("[pipeline] Deal fitness analysis returned non-OK:", fitnessResp.status, errText.substring(0, 200));
+              await getDealActor().workflowProgress({ step: "deal_fitness", status: "complete", details: "Skipped (non-blocking)" });
+            }
+          } catch (e) {
+            console.error("[pipeline] Deal fitness analysis failed (non-blocking):", e);
+            try {
+              await getDealActor().workflowProgress({ step: "deal_fitness", status: "complete", details: "Skipped (non-blocking)" });
+            } catch {}
+          }
+        }});
+
+        // FINALIZE STEP 4: Mark pipeline complete
         await loopCtx.step("mark-complete", async () => {
           loopCtx.state.status = "complete";
           loopCtx.state.completedAt = new Date().toISOString();

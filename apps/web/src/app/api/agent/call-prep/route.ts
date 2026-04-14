@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
