@@ -17,7 +17,6 @@ const STEPS = [
   { key: "check_experiments", label: "Check Experiments" },
   { key: "synthesize_learnings", label: "Synthesize" },
   { key: "finalize", label: "Finalize" },
-  { key: "deal_fitness", label: "Buyer Analysis" },
 ] as const;
 
 // Map pipeline event step names to tracker step keys
@@ -31,8 +30,7 @@ const STEP_MAPPING: Record<string, (typeof STEPS)[number]["key"]> = {
   update_deal_agent: "finalize",
   auto_call_prep: "finalize",
   send_signals_to_coordinator: "finalize",
-  deal_fitness: "deal_fitness",
-  mark_complete: "deal_fitness",
+  mark_complete: "finalize",
 };
 
 type StepKey = (typeof STEPS)[number]["key"];
@@ -44,7 +42,6 @@ export function WorkflowTracker({ dealId }: { dealId: string }) {
     check_experiments: { status: "pending" },
     synthesize_learnings: { status: "pending" },
     finalize: { status: "pending" },
-    deal_fitness: { status: "pending" },
   });
   const [active, setActive] = useState(false);
   const [collapsed, setCollapsed] = useState(false);

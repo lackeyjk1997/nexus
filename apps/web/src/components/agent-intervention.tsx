@@ -137,10 +137,6 @@ export function AgentIntervention({ dealId, onCloseDateChange }: AgentInterventi
 
   if (!visible || !intervention) return null;
 
-  // Health score bar color
-  const barColor = healthScore >= 70 ? "#0C7489" : healthScore >= 40 ? "#D4A843" : "#E07A5F";
-  const barWidth = Math.max(0, Math.min(100, healthScore));
-
   const formattedAdjustedDate = adjustedDate
     ? new Date(adjustedDate + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     : "";
@@ -186,49 +182,11 @@ export function AgentIntervention({ dealId, onCloseDateChange }: AgentInterventi
           <>
             {/* Title */}
             <p
-              className="text-[15px] font-semibold mb-1.5"
+              className="text-[15px] font-semibold mb-3"
               style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
             >
               {intervention.title}
             </p>
-
-            {/* Diagnosis */}
-            <p
-              className="text-[13px] leading-[1.6] mb-3"
-              style={{ color: "#8A8078", fontFamily: "'DM Sans', sans-serif" }}
-            >
-              {intervention.diagnosis}
-            </p>
-
-            {/* Health Score Bar */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className="text-[11px] font-medium"
-                  style={{ color: "#8A8078", fontFamily: "'DM Sans', sans-serif" }}
-                >
-                  Health Score
-                </span>
-                <span
-                  className="text-[11px] font-semibold"
-                  style={{ color: barColor, fontFamily: "'DM Sans', sans-serif" }}
-                >
-                  {healthScore}/100
-                </span>
-              </div>
-              <div
-                className="h-1.5 w-full rounded-full"
-                style={{ background: "#F3EDE7" }}
-              >
-                <div
-                  className="h-1.5 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${barWidth}%`,
-                    background: barColor,
-                  }}
-                />
-              </div>
-            </div>
 
             {/* Action section (if intervention has an action) */}
             {intervention.action && (

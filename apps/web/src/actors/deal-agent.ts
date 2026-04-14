@@ -439,7 +439,7 @@ export const dealAgent = actor({
 
               c.state.activeIntervention = {
                 type: 'timeline_risk',
-                title: 'Close Date at Risk',
+                title: `Close date at risk — ${daysUntilClose} days remaining`,
                 diagnosis: `A ${timelineDesc} detected in this deal extends past your close date of ${closeDateDisplay}. With only ${daysUntilClose} days remaining, the deal needs more runway.`,
                 action: {
                   type: 'update_field',
@@ -453,7 +453,7 @@ export const dealAgent = actor({
 
               c.broadcast("interventionReady", {
                 type: 'timeline_risk',
-                title: 'Close Date at Risk',
+                title: `Close date at risk — ${daysUntilClose} days remaining`,
               });
             }
           }

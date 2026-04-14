@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -300,6 +300,9 @@ export function DealDetailClient({
   const [emailSaved, setEmailSaved] = useState(false);
   const [draftContext, setDraftContext] = useState("");
 
+  // Guard: only trigger deal fitness analysis once per pipeline run
+  const fitnessTriggered = useRef(false);
+
   const { currentUser } = usePersona();
 
   // Deal agent actor for recording interactions
@@ -383,7 +386,7 @@ export function DealDetailClient({
       }
     });
 
-    // Subscribe to workflow completion to refresh MEDDPICC data
+    // Subscribe to workflow completion to refresh MEDDPICC data + trigger deal fitness
     const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string }) => {
       if (event.step === "score_meddpicc" && event.status === "complete") {
         // Re-fetch MEDDPICC data from the server
@@ -397,6 +400,19 @@ export function DealDetailClient({
             }
           }
         } catch {}
+      }
+
+      // Fire deal fitness analysis after pipeline completes (separate Vercel function)
+      if (event.step === "finalize" && event.status === "complete" && !fitnessTriggered.current) {
+        fitnessTriggered.current = true;
+        fetch("/api/deal-fitness/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealId: deal.id }),
+        })
+          .then((res) => res.ok ? res.json() : Promise.reject(res.status))
+          .then((result) => console.log(`[Deal Fitness] ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
+          .catch((err) => console.error("[Deal Fitness] Analysis error:", err));
       }
     });
 
