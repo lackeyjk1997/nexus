@@ -469,7 +469,7 @@ function PortfolioView({
           >
             <Activity size={48} color={PALETTE.muted} style={{ margin: "0 auto 16px" }} />
             <p style={{ color: PALETTE.muted, fontSize: 14, margin: 0 }}>
-              No deals with fitness tracking yet. Upload a transcript to get started.
+              No deal fitness data yet. Process call transcripts to generate buyer behavior analysis.
             </p>
           </div>
         </Card>
@@ -849,7 +849,18 @@ function DrillSkeleton() {
 
 function DrillContent({ detail }: { detail: DealDetail }) {
   const { deal, scores, events } = detail;
-  if (!scores) return null;
+  if (!scores) {
+    return (
+      <Card>
+        <div style={{ textAlign: "center", padding: "48px 24px" }}>
+          <Activity size={48} color={PALETTE.muted} style={{ margin: "0 auto 16px" }} />
+          <p style={{ color: PALETTE.muted, fontSize: 14, margin: 0 }}>
+            No fitness analysis for this deal yet. Process a transcript to begin.
+          </p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

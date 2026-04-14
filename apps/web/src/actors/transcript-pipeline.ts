@@ -768,7 +768,7 @@ Keep it professional, concise, and reference specific commitments from the call.
             const fitnessResp = await fetch(`${input.appUrl}/api/deal-fitness/analyze`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ dealId: input.dealId }),
+              body: JSON.stringify({ dealId: input.dealId, transcriptId: input.transcriptId }),
             });
             if (fitnessResp.ok) {
               const result = await fitnessResp.json();

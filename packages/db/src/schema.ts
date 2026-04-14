@@ -426,6 +426,7 @@ export const callAnalyses = pgTable(
     callQualityScore: integer("call_quality_score"),
     meddpiccExtractions: jsonb("meddpicc_extractions"),
     coachingInsights: jsonb("coaching_insights"),
+    pipelineProcessed: boolean("pipeline_processed").default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [uniqueIndex("call_analyses_transcript_id_idx").on(table.transcriptId)]

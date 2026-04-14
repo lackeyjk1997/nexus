@@ -7,6 +7,7 @@ import {
   companies,
   contacts,
   callTranscripts,
+  callAnalyses,
   dealFitnessEvents,
   dealFitnessScores,
 } from "@nexus/db";
@@ -273,13 +274,22 @@ const EVENT_LABELS: Record<string, { label: string; description: string }> = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { dealId } = body as { dealId?: string };
+    const { dealId, transcriptId } = body as { dealId?: string; transcriptId?: string };
 
     if (!dealId) {
       return NextResponse.json(
         { success: false, message: "dealId is required" },
         { status: 400 }
       );
+    }
+
+    // If a transcriptId was provided, mark its callAnalyses row as processed
+    // This must happen BEFORE we query for processed transcripts below
+    if (transcriptId) {
+      await db
+        .update(callAnalyses)
+        .set({ pipelineProcessed: true })
+        .where(eq(callAnalyses.transcriptId, transcriptId));
     }
 
     // ── Step A: Gather context ──
@@ -325,6 +335,13 @@ export async function POST(req: NextRequest) {
         transcriptText: callTranscripts.transcriptText,
       })
       .from(callTranscripts)
+      .innerJoin(
+        callAnalyses,
+        and(
+          eq(callTranscripts.id, callAnalyses.transcriptId),
+          eq(callAnalyses.pipelineProcessed, true)
+        )
+      )
       .where(eq(callTranscripts.dealId, dealId));
 
     if (transcripts.length === 0) {

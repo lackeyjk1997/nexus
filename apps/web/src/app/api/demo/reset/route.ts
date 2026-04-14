@@ -26,6 +26,11 @@ export async function POST() {
       WHERE status = 'responded' AND response_kit IS NULL
     `);
 
+    // ── Phase 0b: Clear fitness + transcript processed state ──────────
+    await db.execute(sql`DELETE FROM deal_fitness_events`);
+    await db.execute(sql`DELETE FROM deal_fitness_scores`);
+    await db.execute(sql`UPDATE call_analyses SET pipeline_processed = false`);
+
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 
     // 1. Delete observation_routing for pipeline-created observations (FK first)

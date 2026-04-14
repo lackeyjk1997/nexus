@@ -143,6 +143,7 @@ type Transcript = {
   nextSteps: unknown;
   talkRatio: unknown;
   coachingInsights: unknown;
+  pipelineProcessed: boolean | null;
 };
 
 type StageHistoryItem = {
@@ -2276,126 +2277,8 @@ function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Trans
               </div>
             </div>
 
-            {/* Analysis */}
-            {t.analysisSummary && (
-              <div className="p-4 space-y-4">
-                <p className="text-sm text-foreground leading-relaxed">
-                  {t.analysisSummary}
-                </p>
-
-                <div className="grid grid-cols-3 gap-4">
-                  {/* Talk Ratio */}
-                  {talkRatio && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-2">Talk Ratio</p>
-                      <div className="flex h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-primary"
-                          style={{ width: `${talkRatio.ae || 50}%` }}
-                        />
-                        <div
-                          className="bg-warning"
-                          style={{ width: `${talkRatio.prospect || 50}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[10px] text-primary">AE {talkRatio.ae}%</span>
-                        <span className="text-[10px] text-warning">Prospect {talkRatio.prospect}%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pain Points */}
-                  {painPoints.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-2">Pain Points</p>
-                      <ul className="space-y-1">
-                        {painPoints.slice(0, 3).map((p, i) => (
-                          <li key={i} className="text-xs text-foreground flex items-start gap-1">
-                            <span className="text-danger mt-0.5">·</span>
-                            <span className="line-clamp-2">{p}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Next Steps */}
-                  {nextSteps.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-2">Next Steps</p>
-                      <ul className="space-y-1">
-                        {nextSteps.slice(0, 3).map((s, i) => (
-                          <li key={i} className="text-xs text-foreground flex items-start gap-1">
-                            <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                            <span className="line-clamp-2">{s}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                {/* Coaching Insights */}
-                {coaching.length > 0 && (
-                  <div className="bg-primary-light/50 rounded-lg p-3">
-                    <p className="text-xs font-medium text-primary mb-1.5 flex items-center gap-1">
-                      <Bot className="h-3 w-3" />
-                      Coaching Insights
-                    </p>
-                    <ul className="space-y-1">
-                      {coaching.map((c, i) => (
-                        <li key={i} className="text-xs text-foreground">{c}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-                  <button
-                    onClick={() => onDraftFollowUp(t)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
-                    style={{ background: "rgba(224,122,95,0.08)", color: "#E07A5F", border: "1px solid rgba(224,122,95,0.2)" }}
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Draft Follow-Up
-                  </button>
-                  {t.transcriptText && (
-                    <button
-                      onClick={() => handleProcessTranscript(t)}
-                      disabled={!!processingIds[t.id]}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
-                      style={{
-                        background: processingIds[t.id] === "done" ? "rgba(12,116,137,0.08)" : "rgba(12,116,137,0.08)",
-                        color: processingIds[t.id] === "done" ? "#0C7489" : "#0C7489",
-                        border: `1px solid ${processingIds[t.id] === "done" ? "rgba(12,116,137,0.3)" : "rgba(12,116,137,0.2)"}`,
-                      }}
-                    >
-                      {processingIds[t.id] === "processing" ? (
-                        <>
-                          <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
-                          Processing...
-                        </>
-                      ) : processingIds[t.id] === "done" ? (
-                        <>
-                          <Check className="h-3 w-3" />
-                          Processed
-                        </>
-                      ) : (
-                        <>
-                          <Bot className="h-3 w-3" />
-                          Process Transcript
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Actions — always visible when transcript has text, even without analysis */}
-            {!t.analysisSummary && t.transcriptText && (
+            {/* Actions */}
+            {t.transcriptText && (
               <div className="px-4 pb-4">
                 <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
                   <button
@@ -2406,33 +2289,44 @@ function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Trans
                     <Sparkles className="h-3 w-3" />
                     Draft Follow-Up
                   </button>
-                  <button
-                    onClick={() => handleProcessTranscript(t)}
-                    disabled={!!processingIds[t.id]}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
-                    style={{
-                      background: processingIds[t.id] === "done" ? "rgba(12,116,137,0.08)" : "rgba(12,116,137,0.08)",
-                      color: processingIds[t.id] === "done" ? "#0C7489" : "#0C7489",
-                      border: `1px solid ${processingIds[t.id] === "done" ? "rgba(12,116,137,0.3)" : "rgba(12,116,137,0.2)"}`,
-                    }}
-                  >
-                    {processingIds[t.id] === "processing" ? (
-                      <>
-                        <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
-                        Processing...
-                      </>
-                    ) : processingIds[t.id] === "done" ? (
-                      <>
-                        <Check className="h-3 w-3" />
-                        Processed
-                      </>
-                    ) : (
-                      <>
-                        <Bot className="h-3 w-3" />
-                        Process Transcript
-                      </>
-                    )}
-                  </button>
+                  {(() => {
+                    const isProcessed = t.pipelineProcessed || processingIds[t.id] === "done";
+                    const isProcessing = processingIds[t.id] === "processing";
+                    return (
+                      <button
+                        onClick={() => handleProcessTranscript(t)}
+                        disabled={isProcessing}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
+                        style={isProcessed && !isProcessing ? {
+                          background: "#F3EDE7",
+                          color: "#8A8078",
+                          border: "1px solid #D4C9BD",
+                        } : {
+                          background: "rgba(12,116,137,0.08)",
+                          color: "#0C7489",
+                          border: "1px solid rgba(12,116,137,0.2)",
+                        }}
+                        title={isProcessed ? "Click to re-process" : undefined}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
+                            Processing...
+                          </>
+                        ) : isProcessed ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            Processed
+                          </>
+                        ) : (
+                          <>
+                            <Bot className="h-3 w-3" />
+                            Process Transcript
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             )}
