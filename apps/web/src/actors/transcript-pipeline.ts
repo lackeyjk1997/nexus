@@ -640,7 +640,7 @@ Keep it professional, concise, and reference specific commitments from the call.
         console.log("[pipeline] Saving deal agent state to Supabase");
         await loopCtx.step("save-state-to-supabase", async () => {
           try {
-            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
             // Build competitive context from signals
             const competitiveMentions = loopCtx.state.detectedSignals.filter(
@@ -811,7 +811,7 @@ Keep it professional, concise, and reference specific commitments from the call.
         await loopCtx.step("flag-brief-pending", async () => {
           // Write to Supabase (source of truth)
           try {
-            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`;
             await fetch(`${appUrl}/api/deal-agent-state`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -839,7 +839,7 @@ Keep it professional, concise, and reference specific commitments from the call.
           loopCtx.state.completedAt = new Date().toISOString();
           // Update Supabase pipeline status
           try {
-            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`;
             await fetch(`${appUrl}/api/deal-agent-state`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },

@@ -20,6 +20,8 @@ import {
   systemIntelligence,
   managerDirectives,
   playbookIdeas,
+  dealFitnessEvents,
+  dealFitnessScores,
 } from "@nexus/db";
 import { eq, desc, and, sql, or, ne, isNull, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -700,7 +702,7 @@ export async function POST(request: Request) {
   // ── Retrieve agent memory from Supabase (9th intelligence layer) ──
   let agentMemory = "";
   try {
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`;
     const stateRes = await fetch(`${appUrl}/api/deal-agent-state?dealId=${resolvedDealId}`);
     if (stateRes.ok) {
       const stateData = await stateRes.json();
@@ -722,6 +724,65 @@ export async function POST(request: Request) {
     }
   } catch (e) {
     console.log("Deal agent state not available for memory injection:", e);
+  }
+
+  // ── Deal Fitness gaps for coaching (10th intelligence layer) ──
+  let fitnessContext = "";
+  try {
+    const fitnessEvents = await db.select()
+      .from(dealFitnessEvents)
+      .where(eq(dealFitnessEvents.dealId, resolvedDealId!));
+
+    if (fitnessEvents.length > 0) {
+      const detected = fitnessEvents.filter(e => e.status === "detected");
+      const notYet = fitnessEvents.filter(e => e.status === "not_yet");
+
+      // Group not_yet events by fit category
+      const gaps: Record<string, Array<{ event: string; coaching: string }>> = {};
+      for (const event of notYet) {
+        const category = event.fitCategory || "unknown";
+        if (!gaps[category]) gaps[category] = [];
+        gaps[category].push({
+          event: event.eventLabel || event.eventKey,
+          coaching: event.eventDescription || event.notes || "",
+        });
+      }
+
+      // Fetch overall scores
+      const scores = await db.select()
+        .from(dealFitnessScores)
+        .where(eq(dealFitnessScores.dealId, resolvedDealId!));
+
+      if (Object.keys(gaps).length > 0 || scores.length > 0) {
+        fitnessContext = "\n\n## DEAL FITNESS (oDeal Framework)\n";
+
+        if (scores.length > 0) {
+          const s = scores[0];
+          fitnessContext += `Overall Fitness: ${s.overallFitness}% | Business: ${s.businessFitScore}% | Emotional: ${s.emotionalFitScore}% | Technical: ${s.technicalFitScore}% | Readiness: ${s.readinessFitScore}%\n`;
+          fitnessContext += `Events detected: ${detected.length}/${fitnessEvents.length} | Velocity: ${s.velocityTrend}\n`;
+
+          if (s.fitImbalanceFlag) {
+            fitnessContext += `⚠ FIT IMBALANCE DETECTED — significant gap between strongest and weakest fit areas\n`;
+          }
+        }
+
+        if (Object.keys(gaps).length > 0) {
+          fitnessContext += "\nBUYER BEHAVIOR GAPS (not yet observed — prioritize in this conversation):\n";
+          for (const [category, events] of Object.entries(gaps)) {
+            const categoryLabel = category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+            fitnessContext += `\n${categoryLabel}:\n`;
+            for (const event of events) {
+              fitnessContext += `- ${event.event}\n`;
+              if (event.coaching) {
+                fitnessContext += `  Coaching: ${event.coaching}\n`;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[CallPrep] Failed to fetch fitness data:", e);
   }
 
   // ── Build attendee context if specific attendees selected ──
@@ -776,6 +837,12 @@ ${agentMemory ? `
 The following insights were accumulated by this deal's AI agent over time through previous interactions, transcript analyses, and rep feedback. Use these to make your output more contextual and avoid repeating mistakes from previous generations.
 
 ${agentMemory}
+` : ""}${fitnessContext ? `
+${fitnessContext}
+If DEAL FITNESS data is provided above, use the buyer behavior gaps to suggest specific questions and actions.
+Frame gaps as opportunities: "Your buyer hasn't [gap] yet — consider [coaching suggestion]."
+Prioritize gaps from the weakest fit category.
+Do not list all gaps — pick the 2-3 most impactful for this specific meeting type and attendees.
 ` : ""}
 ${agentConfigRow ? `YOUR AGENT CONFIGURATION:
 Persona & Instructions: ${agentConfigRow.instructions}

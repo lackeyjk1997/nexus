@@ -5,8 +5,7 @@ import { DealFitnessClient } from "./deal-fitness-client";
 export default async function DealFitnessPage() {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
+    `http://localhost:${process.env.PORT || 3001}`;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let initialData: { deals: any[] } = { deals: [] };
