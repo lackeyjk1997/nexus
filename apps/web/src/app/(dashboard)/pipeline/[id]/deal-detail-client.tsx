@@ -302,6 +302,7 @@ export function DealDetailClient({
 
   // Guard: only trigger deal fitness analysis once per pipeline run
   const fitnessTriggered = useRef(false);
+  const fitnessPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { currentUser } = usePersona();
 
@@ -387,9 +388,11 @@ export function DealDetailClient({
     });
 
     // Subscribe to workflow completion to refresh MEDDPICC data + trigger deal fitness
-    const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string }) => {
-      if (event.step === "score_meddpicc" && event.status === "complete") {
-        // Re-fetch MEDDPICC data from the server
+    const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string; details?: string }) => {
+      console.log("[DealDetail] workflowProgress event:", JSON.stringify(event));
+
+      // Refresh MEDDPICC after update_scores completes (pipeline sends "update_scores")
+      if (event.step === "update_scores" && event.status === "complete") {
         try {
           const res = await fetch(`/api/deals/${deal.id}/meddpicc`);
           if (res.ok) {
@@ -402,9 +405,10 @@ export function DealDetailClient({
         } catch {}
       }
 
-      // Fire deal fitness analysis after pipeline completes (separate Vercel function)
+      // Fire deal fitness analysis after pipeline completes
       if (event.step === "finalize" && event.status === "complete" && !fitnessTriggered.current) {
         fitnessTriggered.current = true;
+        console.log("[DealDetail] Pipeline complete — triggering fitness analysis for deal:", deal.id);
         fetch("/api/deal-fitness/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -416,7 +420,7 @@ export function DealDetailClient({
       }
     });
 
-    return () => { unsub(); unsubPending(); unsubWorkflow(); };
+    return () => { unsub(); unsubPending(); unsubWorkflow(); if (fitnessPollRef.current) clearInterval(fitnessPollRef.current); };
   }, [dealActor.connection, deal.id, currentUser]);
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
@@ -1554,7 +1558,39 @@ export function DealDetailClient({
           <ActivityFeed activities={mergedActivities} showFilters maxItems={50} />
         </div>
       )}
-      {activeTab === "calls" && <CallsTab transcripts={transcripts} dealId={deal.id} onDraftFollowUp={handleDraftForTranscript} />}
+      {activeTab === "calls" && <CallsTab transcripts={transcripts} dealId={deal.id} onDraftFollowUp={handleDraftForTranscript} onProcessStart={() => {
+        fitnessTriggered.current = false;
+        // Polling fallback: check deal agent state every 15s to detect pipeline completion
+        if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+        const startTime = Date.now();
+        fitnessPollRef.current = setInterval(async () => {
+          if (Date.now() - startTime > 180000 || fitnessTriggered.current) {
+            if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+            fitnessPollRef.current = null;
+            return;
+          }
+          try {
+            if (dealActor.connection) {
+              const state = await dealActor.connection.getState();
+              // Check if pipeline broadcasted finalize complete but event was missed
+              if (state && state.briefPending && !fitnessTriggered.current) {
+                fitnessTriggered.current = true;
+                if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+                fitnessPollRef.current = null;
+                console.log("[DealDetail] Poll fallback detected pipeline complete — triggering fitness");
+                fetch("/api/deal-fitness/analyze", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ dealId: deal.id }),
+                })
+                  .then((res) => res.ok ? res.json() : Promise.reject(res.status))
+                  .then((result) => console.log(`[Deal Fitness] Poll fallback: ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
+                  .catch((err) => console.error("[Deal Fitness] Poll fallback error:", err));
+              }
+            }
+          } catch {}
+        }, 15000);
+      }} />}
 
       {/* Stage Change Modal */}
       <StageChangeModal
@@ -2185,14 +2221,16 @@ function StakeholdersTab({ contacts }: { contacts: Contact[] }) {
 
 // ── Calls Tab ──
 
-function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Transcript[]; dealId: string; onDraftFollowUp: (t: Transcript) => void }) {
+function CallsTab({ transcripts, dealId, onDraftFollowUp, onProcessStart }: { transcripts: Transcript[]; dealId: string; onDraftFollowUp: (t: Transcript) => void; onProcessStart?: () => void }) {
   const [processingIds, setProcessingIds] = useState<Record<string, "processing" | "done">>({});
 
   async function handleProcessTranscript(t: Transcript) {
     if (!t.transcriptText) return;
+    // Reset fitness trigger so it can fire again for this pipeline run
+    onProcessStart?.();
     setProcessingIds((prev) => ({ ...prev, [t.id]: "processing" }));
     try {
-      await fetch("/api/transcript-pipeline", {
+      const res = await fetch("/api/transcript-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2201,12 +2239,14 @@ function CallsTab({ transcripts, dealId, onDraftFollowUp }: { transcripts: Trans
           transcriptId: t.id,
         }),
       });
+      console.log("[CallsTab] Pipeline trigger response:", res.status);
       // Pipeline is running — deal agent events will drive the WorkflowTracker
       // Mark as done after a short delay to indicate the request was sent
       setTimeout(() => {
         setProcessingIds((prev) => ({ ...prev, [t.id]: "done" }));
       }, 2000);
-    } catch {
+    } catch (err) {
+      console.error("[CallsTab] Pipeline trigger error:", err);
       setProcessingIds((prev) => {
         const next = { ...prev };
         delete next[t.id];

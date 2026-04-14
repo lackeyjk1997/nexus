@@ -33,6 +33,9 @@ export async function POST() {
 
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 
+    // 0c. Clear playbook_ideas FK to observations (prevents FK violation on observation delete)
+    await db.execute(sql`UPDATE playbook_ideas SET source_observation_id = NULL WHERE source_observation_id IS NOT NULL`);
+
     // 1. Delete observation_routing for pipeline-created observations (FK first)
     await db.execute(sql`
       DELETE FROM observation_routing WHERE observation_id IN (
@@ -163,7 +166,7 @@ export async function POST() {
     // ── Phase 3: Destroy Rivet agents ──────────────────────────────────
 
     try {
-      const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
+      const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
       const rivetClient = createClient<Registry>(rivetEndpoint);
 
       const allDeals = await db

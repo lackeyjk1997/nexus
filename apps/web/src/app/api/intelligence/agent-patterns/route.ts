@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const endpoint =
       process.env.RIVET_ENDPOINT ||
-      `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
+      `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
 
     const client = createClient<Registry>(endpoint);
     const coordinator = client.intelligenceCoordinator.getOrCreate(["default"]);

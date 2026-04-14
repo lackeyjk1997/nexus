@@ -6,7 +6,7 @@ export default async function DealFitnessPage() {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3001";
+    "http://localhost:3000";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let initialData: { deals: any[] } = { deals: [] };

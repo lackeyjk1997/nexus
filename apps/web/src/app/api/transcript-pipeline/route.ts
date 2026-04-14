@@ -120,10 +120,10 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_APP_URL ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3001");
+      : "http://localhost:3000");
 
   // Send to Rivet pipeline actor
-  const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3001}`}/api/rivet`;
+  const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
   const rivetClient = createClient<Registry>(rivetEndpoint);
   const pipeline = rivetClient.transcriptPipeline.getOrCreate([dealId]);
 

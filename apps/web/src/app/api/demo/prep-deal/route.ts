@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : `http://localhost:${process.env.PORT || 3001}`);
+        : `http://localhost:${process.env.PORT || 3000}`);
 
     const total = transcripts.length;
     let processed = 0;

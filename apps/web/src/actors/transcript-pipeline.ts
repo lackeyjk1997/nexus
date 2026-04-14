@@ -405,7 +405,7 @@ ${input.transcriptText.slice(0, 15000)}`,
 
         // Create observations for ALL detected signals (fire-and-forget, don't block pipeline)
         if (signals.signals.length > 0) {
-          await loopCtx.step("create-signal-observations", async () => {
+          await loopCtx.step({ name: "create-signal-observations", timeout: 120_000, run: async () => {
             console.log(`[pipeline] Creating observations for ${signals.signals.length} signals`);
             // Fire all observation creates in parallel, don't await individually
             const promises = signals.signals.map((signal) =>
@@ -451,7 +451,7 @@ ${input.transcriptText.slice(0, 15000)}`,
             );
             await Promise.all(promises);
             console.log(`[pipeline] All observation creates finished`);
-          });
+          }});
         }
 
         await loopCtx.step("progress-update-scores-done", async () => {

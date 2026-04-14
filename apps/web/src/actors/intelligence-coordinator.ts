@@ -303,7 +303,7 @@ Return JSON:
         try {
           const siteUrl =
             process.env.NEXT_PUBLIC_SITE_URL ||
-            `http://localhost:${process.env.PORT || 3001}`;
+            `http://localhost:${process.env.PORT || 3000}`;
           await fetch(`${siteUrl}/api/intelligence/persist-pattern`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
