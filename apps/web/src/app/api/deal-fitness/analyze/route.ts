@@ -148,6 +148,8 @@ READINESS FIT — "Will this buyer be a successful customer?"
 
 ═══════════════════════════════════════
 
+LANGUAGE PROGRESSION — For each transcript in the timeline, estimate the percentage of buyer statements that use ownership language ("we", "our", "when we implement") vs. evaluative language ("your product", "this solution"). Return these in languageProgression.perCallOwnership as an array with ONE entry per transcript in chronological order. Each entry must have a DIFFERENT weOurPct showing the actual progression — early calls should typically show lower ownership percentages and later calls higher.
+
 RESPONSE FORMAT — You MUST respond with valid JSON only, no markdown, no preamble:
 
 {
@@ -199,12 +201,12 @@ RESPONSE FORMAT — You MUST respond with valid JSON only, no markdown, no pream
     }
   ],
   "languageProgression": {
-    "examples": [
-      { "call": "Call 1", "phrase": "your AI solution", "framing": "evaluative" },
-      { "call": "Call 3", "phrase": "when we implement this", "framing": "ownership" }
+    "perCallOwnership": [
+      { "call": 1, "label": "Call 1: Initial Discovery", "weOurPct": 15, "yourProductPct": 85, "sampleQuotes": ["your AI solution", "what your product does"] },
+      { "call": 2, "label": "Call 2: Technical Deep Dive", "weOurPct": 40, "yourProductPct": 60, "sampleQuotes": ["how it would integrate with our systems"] }
     ],
     "trend": "Strong progression from evaluative to ownership language",
-    "ownershipPercentage": 75
+    "overallOwnershipPercent": 75
   },
   "buyingCommitteeExpansion": {
     "contacts": [
@@ -834,21 +836,27 @@ Respond with valid JSON only. No markdown. No preamble.`;
       ? {
           ownershipLanguage: {
             trend: langProg.trend || "detected",
-            dataPoints: (langProg.examples || []).map(
+            dataPoints: (langProg.perCallOwnership || []).length > 0
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (ex: any, i: number) => ({
-                call: i + 1,
-                label: ex.call || `Entry ${i + 1}`,
-                week: i,
-                yourProductPct:
-                  ex.framing === "evaluative"
-                    ? 100 - (langProg.ownershipPercentage || 50)
-                    : 100 - (langProg.ownershipPercentage || 50),
-                weOurPct: langProg.ownershipPercentage || 50,
-                sampleQuotes: [ex.phrase],
-              })
-            ),
-            insight: `Ownership language: ${langProg.ownershipPercentage || 50}% "we/our" usage. ${langProg.trend || ""}`,
+              ? (langProg.perCallOwnership as any[]).map((p: any, i: number) => ({
+                  call: p.call ?? i + 1,
+                  label: p.label || `Call ${p.call ?? i + 1}`,
+                  week: i,
+                  yourProductPct: p.yourProductPct ?? (100 - (p.weOurPct ?? 50)),
+                  weOurPct: p.weOurPct ?? 50,
+                  sampleQuotes: p.sampleQuotes || [],
+                }))
+              // Fallback: if Claude returned old-format examples instead of perCallOwnership
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              : (langProg.examples || []).map((ex: any, i: number) => ({
+                  call: i + 1,
+                  label: ex.call || `Call ${i + 1}`,
+                  week: i,
+                  yourProductPct: 100 - (ex.ownershipPercent ?? langProg.overallOwnershipPercent ?? langProg.ownershipPercentage ?? 50),
+                  weOurPct: ex.ownershipPercent ?? langProg.overallOwnershipPercent ?? langProg.ownershipPercentage ?? 50,
+                  sampleQuotes: ex.phrase ? [ex.phrase] : [],
+                })),
+            insight: `Ownership language: ${langProg.overallOwnershipPercent ?? langProg.ownershipPercentage ?? 50}% "we/our" usage. ${langProg.trend || ""}`,
           },
           sentimentProfile: {
             type:
