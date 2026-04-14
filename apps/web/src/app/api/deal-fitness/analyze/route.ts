@@ -7,7 +7,6 @@ import {
   companies,
   contacts,
   callTranscripts,
-  callAnalyses,
   dealFitnessEvents,
   dealFitnessScores,
 } from "@nexus/db";
@@ -283,30 +282,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If a transcriptId was provided, mark its callAnalyses row as processed.
-    // Create the callAnalyses row if it doesn't exist (Horizon Health transcripts
-    // are seeded without callAnalyses rows — only callTranscripts).
+    // Mark this transcript as processed on callTranscripts (simple update, no JOIN needed)
     if (transcriptId) {
-      const [existing] = await db
-        .select({ id: callAnalyses.id })
-        .from(callAnalyses)
-        .where(eq(callAnalyses.transcriptId, transcriptId))
-        .limit(1);
-
-      if (existing) {
-        await db
-          .update(callAnalyses)
-          .set({ pipelineProcessed: true })
-          .where(eq(callAnalyses.transcriptId, transcriptId));
-        console.log(`[deal-fitness] Marked existing callAnalyses row as processed for transcript ${transcriptId}`);
-      } else {
-        await db
-          .insert(callAnalyses)
-          .values({ transcriptId, pipelineProcessed: true });
-        console.log(`[deal-fitness] Created callAnalyses row with pipelineProcessed=true for transcript ${transcriptId}`);
-      }
-    } else {
-      console.log("[deal-fitness] No transcriptId provided, skipping processed mark");
+      await db
+        .update(callTranscripts)
+        .set({ pipelineProcessed: true })
+        .where(eq(callTranscripts.id, transcriptId));
+      console.log(`[deal-fitness] Marked transcript ${transcriptId} as processed`);
     }
 
     // ── Step A: Gather context ──
@@ -352,14 +334,12 @@ export async function POST(req: NextRequest) {
         transcriptText: callTranscripts.transcriptText,
       })
       .from(callTranscripts)
-      .innerJoin(
-        callAnalyses,
+      .where(
         and(
-          eq(callTranscripts.id, callAnalyses.transcriptId),
-          eq(callAnalyses.pipelineProcessed, true)
+          eq(callTranscripts.dealId, dealId),
+          eq(callTranscripts.pipelineProcessed, true)
         )
-      )
-      .where(eq(callTranscripts.dealId, dealId));
+      );
 
     console.log(`[deal-fitness] Found ${transcripts.length} processed transcripts for deal ${dealId}`);
 

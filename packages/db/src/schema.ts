@@ -404,6 +404,7 @@ export const callTranscripts = pgTable("call_transcripts", {
   transcriptText: text("transcript_text"),
   source: transcriptSourceEnum("source").default("simulated"),
   status: transcriptStatusEnum("status").default("complete"),
+  pipelineProcessed: boolean("pipeline_processed").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -426,7 +427,6 @@ export const callAnalyses = pgTable(
     callQualityScore: integer("call_quality_score"),
     meddpiccExtractions: jsonb("meddpicc_extractions"),
     coachingInsights: jsonb("coaching_insights"),
-    pipelineProcessed: boolean("pipeline_processed").default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [uniqueIndex("call_analyses_transcript_id_idx").on(table.transcriptId)]

@@ -29,7 +29,7 @@ export async function POST() {
     // ── Phase 0b: Clear fitness + transcript processed state ──────────
     await db.execute(sql`DELETE FROM deal_fitness_events`);
     await db.execute(sql`DELETE FROM deal_fitness_scores`);
-    await db.execute(sql`UPDATE call_analyses SET pipeline_processed = false`);
+    await db.execute(sql`UPDATE call_transcripts SET pipeline_processed = false`);
 
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 

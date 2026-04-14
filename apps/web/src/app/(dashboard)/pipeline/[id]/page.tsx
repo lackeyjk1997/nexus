@@ -128,7 +128,7 @@ export default async function DealDetailPage({
         nextSteps: callAnalyses.nextSteps,
         talkRatio: callAnalyses.talkRatio,
         coachingInsights: callAnalyses.coachingInsights,
-        pipelineProcessed: callAnalyses.pipelineProcessed,
+        pipelineProcessed: callTranscripts.pipelineProcessed,
       })
       .from(callTranscripts)
       .leftJoin(callAnalyses, eq(callTranscripts.id, callAnalyses.transcriptId))
