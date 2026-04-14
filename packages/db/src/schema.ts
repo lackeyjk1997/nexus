@@ -1014,6 +1014,56 @@ export const dealFitnessScores = pgTable(
   (table) => [uniqueIndex("deal_fitness_scores_deal_id_idx").on(table.dealId)]
 );
 
+// ── Deal Agent State (persistent, Supabase-backed) ────────
+
+export const dealAgentStates = pgTable(
+  "deal_agent_states",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id")
+      .references(() => deals.id)
+      .notNull(),
+
+    // Interaction tracking
+    interactionCount: integer("interaction_count").default(0).notNull(),
+    lastInteractionDate: timestamp("last_interaction_date"),
+    lastInteractionSummary: text("last_interaction_summary"),
+
+    // Learnings (array of insight strings)
+    learnings: jsonb("learnings").default([]).notNull(),
+
+    // Risk signals (array of signal strings)
+    riskSignals: jsonb("risk_signals").default([]).notNull(),
+
+    // Competitive context
+    competitiveContext: jsonb("competitive_context"),
+
+    // Coordinated intel from cross-deal patterns
+    coordinatedIntel: jsonb("coordinated_intel").default([]).notNull(),
+
+    // Brief status
+    briefReady: jsonb("brief_ready"),
+    briefPending: boolean("brief_pending").default(false).notNull(),
+
+    // Pipeline status (for polling fallback)
+    pipelineStatus: text("pipeline_status").default("idle").notNull(),
+    pipelineStep: text("pipeline_step"),
+    pipelineDetails: text("pipeline_details"),
+
+    // Timestamps
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("deal_agent_states_deal_id_idx").on(table.dealId)]
+);
+
+export const dealAgentStatesRelations = relations(dealAgentStates, ({ one }) => ({
+  deal: one(deals, {
+    fields: [dealAgentStates.dealId],
+    references: [deals.id],
+  }),
+}));
+
 // ── Coordinator Patterns ───────────────────────────────
 // Persisted cross-deal patterns detected by the intelligence coordinator actor.
 // Survives actor destruction and demo reset so the Act 2 demo story works.

@@ -71,6 +71,13 @@
       "when": 1775622463372,
       "tag": "0009_loving_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776206405189,
+      "tag": "0010_misty_screwball",
+      "breakpoints": true
     }
   ]
 }

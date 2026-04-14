@@ -1,91 +1,63 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useActor } from "@/lib/rivet";
 import { ChevronDown, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DealAgentState } from "@/actors/deal-agent";
+
+interface CompetitiveContext {
+  competitors: string[];
+  ourDifferentiators: string[];
+  recentMentions: Array<{ date: string; competitor: string; context: string }>;
+}
+
+interface CoordinatedIntelItem {
+  patternId?: string;
+  signalType: string;
+  synthesis: string;
+  recommendations: string[];
+  affectedDeals: string[];
+}
+
+interface AgentStateData {
+  learnings: string[];
+  riskSignals: string[];
+  competitiveContext: CompetitiveContext | null;
+  interactionCount: number;
+  coordinatedIntel: CoordinatedIntelItem[];
+  lastInteractionDate: string | null;
+  createdAt?: string | null;
+}
 
 interface AgentMemoryProps {
   dealId: string;
-  dealName: string;
-  companyName: string;
-  vertical: string;
-  currentStage: string;
-  stageEnteredAt: string | null;
-  closeDate?: string | null;
+  triggerRefetch?: number;
 }
 
-export function AgentMemory({
-  dealId,
-  dealName,
-  companyName,
-  vertical,
-  currentStage,
-  stageEnteredAt,
-  closeDate,
-}: AgentMemoryProps) {
+export function AgentMemory({ dealId, triggerRefetch }: AgentMemoryProps) {
   const [expanded, setExpanded] = useState(false);
-  const [agentState, setAgentState] = useState<DealAgentState | null>(null);
-  const [error, setError] = useState(false);
+  const [agentState, setAgentState] = useState<AgentStateData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const actor = useActor({
-    name: "dealAgent",
-    key: [dealId],
-  });
-
-  // Initialize actor and fetch state
-  const initializeAgent = useCallback(async () => {
-    if (!actor.connection) return;
+  const fetchState = useCallback(async () => {
     try {
-      const state = await actor.connection.getState();
-      if (!state.initialized) {
-        await actor.connection.initialize({
-          dealId,
-          dealName,
-          companyName,
-          vertical,
-          currentStage,
-          stageEnteredAt,
-          closeDate,
-        });
-        const updatedState = await actor.connection.getState();
-        setAgentState(updatedState);
-      } else {
-        setAgentState(state);
+      const res = await fetch(`/api/deal-agent-state?dealId=${dealId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgentState(data.state);
       }
     } catch (e) {
-      console.log("Agent memory unavailable:", e);
-      setError(true);
+      console.error("[AgentMemory] Failed to fetch state:", e);
+    } finally {
+      setLoading(false);
     }
-  }, [actor.connection, dealId, dealName, companyName, vertical, currentStage, stageEnteredAt, closeDate]);
+  }, [dealId]);
 
   useEffect(() => {
-    initializeAgent();
-  }, [initializeAgent]);
+    fetchState();
+  }, [fetchState, triggerRefetch]);
 
-  // Subscribe to events for live updates
-  useEffect(() => {
-    if (!actor.connection) return;
-
-    const handleMemoryUpdate = async () => {
-      try {
-        const state = await actor.connection!.getState();
-        setAgentState(state);
-      } catch {}
-    };
-
-    // Listen for events on the already-connected actor connection
-    actor.connection.on("memoryUpdated", handleMemoryUpdate);
-    actor.connection.on("learningsUpdated", handleMemoryUpdate);
-    actor.connection.on("coordinatedIntelReceived", handleMemoryUpdate);
-  }, [actor.connection]);
-
-  // Graceful degradation — if Rivet is unavailable, render nothing
-  if (error) return null;
-
-  const isLoading = !agentState || actor.connStatus === "connecting" || actor.connStatus === "idle";
-  const hasActivity = agentState && agentState.totalInteractions > 0;
+  const isLoading = loading && !agentState;
+  const hasActivity = agentState && agentState.interactionCount > 0;
 
   return (
     <div className="mt-3">
@@ -107,7 +79,7 @@ export function AgentMemory({
           {isLoading
             ? "Agent connecting..."
             : hasActivity
-              ? `Agent active \u00B7 ${agentState.totalInteractions} interaction${agentState.totalInteractions !== 1 ? "s" : ""} \u00B7 ${agentState.learnings.length} learning${agentState.learnings.length !== 1 ? "s" : ""}${agentState.riskSignals.length > 0 ? ` \u00B7 ${agentState.riskSignals.length} signal${agentState.riskSignals.length !== 1 ? "s" : ""}` : ""}`
+              ? `Agent active \u00B7 ${agentState.interactionCount} interaction${agentState.interactionCount !== 1 ? "s" : ""} \u00B7 ${agentState.learnings.length} learning${agentState.learnings.length !== 1 ? "s" : ""}${agentState.riskSignals.length > 0 ? ` \u00B7 ${agentState.riskSignals.length} signal${agentState.riskSignals.length !== 1 ? "s" : ""}` : ""}`
               : "Agent initializing \u00B7 listening for deal activity"}
         </span>
         {hasActivity && (
@@ -195,7 +167,7 @@ export function AgentMemory({
           )}
 
           {/* Competitive Context */}
-          {agentState.competitiveContext.competitors.length > 0 && (
+          {agentState.competitiveContext && agentState.competitiveContext.competitors.length > 0 && (
             <div>
               <p
                 className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
@@ -288,29 +260,6 @@ export function AgentMemory({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Last Feedback */}
-          {agentState.lastCallPrepFeedback && (
-            <div>
-              <p
-                className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
-                style={{ color: "#8A8078" }}
-              >
-                Last Feedback
-              </p>
-              <p
-                className="text-[13px]"
-                style={{
-                  color: "#3D3833",
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                {agentState.lastCallPrepFeedback.rating}/5
-                {agentState.lastCallPrepFeedback.comment &&
-                  ` — "${agentState.lastCallPrepFeedback.comment}"`}
-              </p>
             </div>
           )}
 

@@ -300,6 +300,9 @@ export function DealDetailClient({
   const [emailSaved, setEmailSaved] = useState(false);
   const [draftContext, setDraftContext] = useState("");
 
+  // Agent memory refetch trigger
+  const [agentMemoryRefetchKey, setAgentMemoryRefetchKey] = useState(0);
+
   // Guard: only trigger deal fitness analysis once per pipeline run
   const fitnessTriggered = useRef(false);
   const fitnessPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -329,16 +332,20 @@ export function DealDetailClient({
       });
       if (res.ok) {
         const briefData = await res.json();
-        // Store the brief on the deal agent and clear the pending flag
-        if (dealActor.connection) {
-          await dealActor.connection.setBriefReady({
-            brief: briefData.brief,
-            generatedAt: new Date().toISOString(),
-            context: "post_transcript_analysis",
+        const briefPayload = { brief: briefData.brief, generatedAt: new Date().toISOString() };
+        setBriefReady(briefPayload);
+
+        // Save to Supabase so it persists across page reloads
+        try {
+          await fetch("/api/deal-agent-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dealId: deal.id,
+              updates: { briefReady: briefPayload, briefPending: false },
+            }),
           });
-          await dealActor.connection.setBriefPending(false);
-        }
-        setBriefReady({ brief: briefData.brief, generatedAt: new Date().toISOString() });
+        } catch {}
       } else {
         console.error("[deal-detail] Client-side brief generation failed:", res.status);
       }
@@ -349,45 +356,29 @@ export function DealDetailClient({
     }
   };
 
-  // Check for briefReady and briefPending on the deal agent, subscribe to events
+  // Check for briefReady from Supabase on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!dealActor.connection) return;
-
-    const checkBrief = async () => {
+    const checkBriefFromSupabase = async () => {
       try {
-        // First check if a brief is already ready
-        const brief = await dealActor.connection!.getBriefReady();
-        if (brief && !brief.dismissed) {
-          setBriefReady({ brief: brief.brief, generatedAt: brief.generatedAt });
-          return;
-        }
-        // If no brief ready, check if one is pending generation
-        const pending = await dealActor.connection!.getBriefPending();
-        if (pending && currentUser) {
-          generateBriefClientSide();
+        const res = await fetch(`/api/deal-agent-state?dealId=${deal.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.state?.briefReady) {
+            setBriefReady(data.state.briefReady);
+          } else if (data.state?.briefPending && currentUser) {
+            generateBriefClientSide();
+          }
         }
       } catch {}
     };
-    checkBrief();
+    checkBriefFromSupabase();
+  }, [deal.id, currentUser]);
 
-    const unsub = dealActor.connection.on("briefReady", async () => {
-      try {
-        const brief = await dealActor.connection!.getBriefReady();
-        if (brief && !brief.dismissed) {
-          setBriefReady({ brief: brief.brief, generatedAt: brief.generatedAt });
-        }
-      } catch {}
-    });
+  // Subscribe to workflow events from the deal agent actor (event relay only)
+  useEffect(() => {
+    if (!dealActor.connection) return;
 
-    // Listen for briefPending event (pipeline just finished, trigger client-side generation)
-    const unsubPending = dealActor.connection.on("briefPending", async () => {
-      if (currentUser) {
-        generateBriefClientSide();
-      }
-    });
-
-    // Subscribe to workflow completion to refresh MEDDPICC data + trigger deal fitness
     const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string; details?: string }) => {
       console.log("[DealDetail] workflowProgress event:", JSON.stringify(event));
 
@@ -405,22 +396,33 @@ export function DealDetailClient({
         } catch {}
       }
 
-      // Fire deal fitness analysis after pipeline completes
-      if (event.step === "finalize" && event.status === "complete" && !fitnessTriggered.current) {
-        fitnessTriggered.current = true;
-        console.log("[DealDetail] Pipeline complete — triggering fitness analysis for deal:", deal.id);
-        fetch("/api/deal-fitness/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dealId: deal.id }),
-        })
-          .then((res) => res.ok ? res.json() : Promise.reject(res.status))
-          .then((result) => console.log(`[Deal Fitness] ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
-          .catch((err) => console.error("[Deal Fitness] Analysis error:", err));
+      // Fire deal fitness analysis + brief generation after pipeline completes
+      if (event.step === "finalize" && event.status === "complete") {
+        // Trigger fitness analysis
+        if (!fitnessTriggered.current) {
+          fitnessTriggered.current = true;
+          console.log("[DealDetail] Pipeline complete — triggering fitness analysis for deal:", deal.id);
+          fetch("/api/deal-fitness/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dealId: deal.id }),
+          })
+            .then((res) => res.ok ? res.json() : Promise.reject(res.status))
+            .then((result) => console.log(`[Deal Fitness] ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
+            .catch((err) => console.error("[Deal Fitness] Analysis error:", err));
+        }
+
+        // Trigger brief generation
+        if (currentUser) {
+          generateBriefClientSide();
+        }
+
+        // Refresh agent memory
+        setAgentMemoryRefetchKey((prev) => prev + 1);
       }
     });
 
-    return () => { unsub(); unsubPending(); unsubWorkflow(); if (fitnessPollRef.current) clearInterval(fitnessPollRef.current); };
+    return () => { unsubWorkflow(); if (fitnessPollRef.current) clearInterval(fitnessPollRef.current); };
   }, [dealActor.connection, deal.id, currentUser]);
 
   const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
@@ -454,12 +456,12 @@ export function DealDetailClient({
       setCallBriefProvenPlays([]);
       setCallPrepPhase("result");
       setBriefReady(null);
-      // Dismiss the brief in the deal agent
-      try {
-        if (dealActor.connection) {
-          dealActor.connection.dismissBrief();
-        }
-      } catch {}
+      // Dismiss the brief in Supabase
+      fetch("/api/deal-agent-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId: deal.id, updates: { briefReady: null } }),
+      }).catch(() => {});
       return;
     }
 
@@ -495,16 +497,7 @@ export function DealDetailClient({
         setCallBriefProvenPlays(data.provenPlayNames ?? []);
         setCallPrepPhase("result");
 
-        // Record interaction with deal agent
-        try {
-          if (dealActor.connection) {
-            await dealActor.connection.recordInteraction({
-              type: "call_prep",
-              summary: `Call prep for ${ctx}: ${data.brief?.headline || "Generated brief"}`,
-              insights: data.brief?.talking_points?.map((tp: { topic: string }) => tp.topic) || [],
-            });
-          }
-        } catch {}
+        // Record interaction is now handled by Supabase (no actor call needed)
       } else {
         setCallPrepPhase("error");
       }
@@ -922,16 +915,12 @@ export function DealDetailClient({
         {/* Agent Memory */}
         <AgentMemory
           dealId={deal.id}
-          dealName={deal.name}
-          companyName={deal.companyName || ""}
-          vertical={deal.vertical}
-          currentStage={deal.stage}
-          stageEnteredAt={deal.stageEnteredAt?.toISOString() ?? null}
-          closeDate={closeDate || null}
+          triggerRefetch={agentMemoryRefetchKey}
         />
 
         <AgentIntervention
           dealId={deal.id}
+          deal={{ closeDate: closeDate || null, stage: deal.stage, name: deal.name }}
           onCloseDateChange={(newDate) => setCloseDate(newDate)}
         />
 
@@ -1570,10 +1559,11 @@ export function DealDetailClient({
             return;
           }
           try {
-            if (dealActor.connection) {
-              const state = await dealActor.connection.getState();
-              // Check if pipeline broadcasted finalize complete but event was missed
-              if (state && state.briefPending && !fitnessTriggered.current) {
+            const stateRes = await fetch(`/api/deal-agent-state?dealId=${deal.id}`);
+            if (stateRes.ok) {
+              const data = await stateRes.json();
+              // Check if pipeline completed but event was missed
+              if (data.state?.pipelineStatus === "complete" && !fitnessTriggered.current) {
                 fitnessTriggered.current = true;
                 if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
                 fitnessPollRef.current = null;
@@ -1586,6 +1576,12 @@ export function DealDetailClient({
                   .then((res) => res.ok ? res.json() : Promise.reject(res.status))
                   .then((result) => console.log(`[Deal Fitness] Poll fallback: ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
                   .catch((err) => console.error("[Deal Fitness] Poll fallback error:", err));
+                // Also refresh agent memory
+                setAgentMemoryRefetchKey((prev) => prev + 1);
+                // Generate brief if pending
+                if (data.state?.briefPending && currentUser) {
+                  generateBriefClientSide();
+                }
               }
             }
           } catch {}

@@ -26,9 +26,10 @@ export async function POST() {
       WHERE status = 'responded' AND response_kit IS NULL
     `);
 
-    // ── Phase 0b: Clear fitness + transcript processed state ──────────
+    // ── Phase 0b: Clear fitness + transcript processed state + deal agent states ──
     await db.execute(sql`DELETE FROM deal_fitness_events`);
     await db.execute(sql`DELETE FROM deal_fitness_scores`);
+    await db.execute(sql`DELETE FROM deal_agent_states`);
     await db.execute(sql`UPDATE call_transcripts SET pipeline_processed = false`);
 
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────

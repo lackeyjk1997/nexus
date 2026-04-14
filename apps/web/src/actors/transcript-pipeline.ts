@@ -635,7 +635,66 @@ Keep it professional, concise, and reference specific commitments from the call.
           }
         });
 
-        // FINALIZE STEP 1: Update deal agent with accumulated intelligence
+        // FINALIZE STEP 0: Write state to Supabase (source of truth)
+        currentStepName = "save_state_to_supabase";
+        console.log("[pipeline] Saving deal agent state to Supabase");
+        await loopCtx.step("save-state-to-supabase", async () => {
+          try {
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+            // Build competitive context from signals
+            const competitiveMentions = loopCtx.state.detectedSignals.filter(
+              (s) => s.type === "competitive_intel"
+            );
+            const competitorNames = [...new Set(
+              competitiveMentions
+                .map((s) => findCompetitorInSignal(s as ValidatedSignal))
+                .filter((c): c is string => c !== null)
+            )];
+            const competitiveContext = competitorNames.length > 0 ? {
+              competitors: competitorNames,
+              ourDifferentiators: [] as string[],
+              recentMentions: competitiveMentions.map((s) => ({
+                date: new Date().toISOString().split("T")[0],
+                competitor: findCompetitorInSignal(s as ValidatedSignal) || "Unknown",
+                context: s.content,
+              })),
+            } : undefined;
+
+            // Build risk signals
+            const riskSignalTexts = loopCtx.state.detectedSignals
+              .filter((s) => s.type === "deal_blocker" || (s.type === "process_friction" && s.urgency === "high"))
+              .map((s) => s.content);
+
+            const stateRes = await fetch(`${appUrl}/api/deal-agent-state`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                dealId: input.dealId,
+                updates: {
+                  interactionCount: 1,
+                  lastInteractionDate: new Date().toISOString(),
+                  lastInteractionSummary: `Analyzed call transcript: ${loopCtx.state.actionItems.length} actions, ${Object.keys(loopCtx.state.meddpiccUpdates).length} MEDDPICC fields, ${loopCtx.state.detectedSignals.length} signals`,
+                  learnings: loopCtx.state.newLearnings,
+                  ...(riskSignalTexts.length > 0 ? { riskSignals: riskSignalTexts } : {}),
+                  ...(competitiveContext ? { competitiveContext } : {}),
+                  pipelineStatus: "running",
+                  pipelineStep: "update_deal_agent",
+                },
+              }),
+            });
+            if (!stateRes.ok) {
+              console.error("[pipeline] Supabase state save failed:", stateRes.status);
+            } else {
+              console.log("[pipeline] Deal agent state saved to Supabase");
+            }
+          } catch (e) {
+            console.error("[pipeline] Failed to save deal agent state to Supabase:", (e as Error).message);
+            // Non-blocking — actor calls below serve as backup
+          }
+        });
+
+        // FINALIZE STEP 1: Update deal agent with accumulated intelligence (dummy actions, kept for safety)
         currentStepName = "update_deal_agent";
         console.log("[pipeline] Starting update-deal-agent step");
         await loopCtx.step("update-deal-agent", async () => {
@@ -748,14 +807,29 @@ Keep it professional, concise, and reference specific commitments from the call.
         // which created a Rivet Cloud → Vercel → Claude chain that timed out on production.
         // Now we just set a flag — the deal detail page generates the brief client-side.
         currentStepName = "flag_brief_pending";
-        console.log("[pipeline] Setting briefPending flag on deal agent (decoupled from pipeline)");
+        console.log("[pipeline] Setting briefPending flag (Supabase + actor fallback)");
         await loopCtx.step("flag-brief-pending", async () => {
+          // Write to Supabase (source of truth)
+          try {
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            await fetch(`${appUrl}/api/deal-agent-state`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                dealId: input.dealId,
+                updates: { briefPending: true },
+              }),
+            });
+            console.log("[pipeline] briefPending flag set in Supabase");
+          } catch (e) {
+            console.error("[pipeline] Failed to set briefPending in Supabase:", (e as Error).message);
+          }
+          // Also call actor (dummy, for backward compat)
           try {
             const dealActor = getDealActor();
             await dealActor.setBriefPending(true);
-            console.log("[pipeline] briefPending flag set — brief will generate on next page load");
           } catch (error) {
-            console.error('[pipeline] Failed to set briefPending flag, continuing:', error);
+            console.error('[pipeline] Failed to set briefPending on actor, continuing:', error);
           }
         });
 
@@ -763,6 +837,18 @@ Keep it professional, concise, and reference specific commitments from the call.
         await loopCtx.step("mark-complete", async () => {
           loopCtx.state.status = "complete";
           loopCtx.state.completedAt = new Date().toISOString();
+          // Update Supabase pipeline status
+          try {
+            const appUrl = input.appUrl || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            await fetch(`${appUrl}/api/deal-agent-state`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                dealId: input.dealId,
+                updates: { pipelineStatus: "complete" },
+              }),
+            });
+          } catch {}
           await getDealActor().workflowProgress({ step: "finalize", status: "complete", details: "Pipeline complete" });
           console.log("[pipeline] Pipeline complete!");
         });

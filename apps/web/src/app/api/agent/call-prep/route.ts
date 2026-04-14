@@ -23,8 +23,6 @@ import {
 } from "@nexus/db";
 import { eq, desc, and, sql, or, ne, isNull, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createClient } from "rivetkit/client";
-import type { Registry } from "@/actors/registry";
 
 // Map vertical enum values to display names for matching against industryFocus
 const VERTICAL_DISPLAY: Record<string, string[]> = {
@@ -699,15 +697,31 @@ export async function POST(request: Request) {
     })),
   };
 
-  // ── Retrieve agent memory (9th intelligence layer) ──
+  // ── Retrieve agent memory from Supabase (9th intelligence layer) ──
   let agentMemory = "";
   try {
-    const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
-    const rivetClient = createClient<Registry>(rivetEndpoint);
-    const dealActorHandle = rivetClient.dealAgent.getOrCreate([resolvedDealId!]);
-    agentMemory = await dealActorHandle.getMemoryForPrompt();
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const stateRes = await fetch(`${appUrl}/api/deal-agent-state?dealId=${resolvedDealId}`);
+    if (stateRes.ok) {
+      const stateData = await stateRes.json();
+      if (stateData.exists) {
+        const { formatMemoryForPrompt } = await import("@/lib/format-agent-memory");
+        agentMemory = formatMemoryForPrompt({
+          dealId: resolvedDealId!,
+          dealName: dealRow.name,
+          companyName: dealRow.companyName || "",
+          learnings: (stateData.state.learnings as string[]) || [],
+          riskSignals: (stateData.state.riskSignals as string[]) || [],
+          competitiveContext: stateData.state.competitiveContext || null,
+          interactionCount: stateData.state.interactionCount || 0,
+          lastInteractionDate: stateData.state.lastInteractionDate || null,
+          coordinatedIntel: stateData.state.coordinatedIntel || [],
+          createdAt: stateData.state.createdAt || null,
+        });
+      }
+    }
   } catch (e) {
-    console.log("Deal agent not available for memory injection:", e);
+    console.log("Deal agent state not available for memory injection:", e);
   }
 
   // ── Build attendee context if specific attendees selected ──
