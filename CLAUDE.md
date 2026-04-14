@@ -573,3 +573,14 @@ apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit 
 - Removed `VelocityTimeline` component entirely, removed `timeline` from the destructured `DrillContent` props (but the API still returns it for potential future use)
 - TypeScript fix: `let bg/fg/border: string` annotations needed on `lastBadge` in `FitCard` because `PALETTE` is `as const`
 
+## Deal Fitness Analysis Engine (Session S15.5)
+- Created `/api/deal-fitness/analyze` POST route — takes a dealId, gathers all transcripts + emails chronologically, sends to Claude with full oDeal framework prompt (25 inspectable events), writes results to deal_fitness_events and deal_fitness_scores tables
+- Added "analyze-deal-fitness" as final pipeline step (non-blocking, 180s timeout) — runs after coordinator signals and brief flagging
+- No Horizon Health pipeline trigger fix needed — transcripts correctly seeded in callTranscripts with transcriptText, button and pipeline work as designed
+- Analysis works for any deal with transcripts — not limited to seed data
+- Each pipeline run re-analyzes all transcripts for the deal (cumulative, not incremental) — existing events upserted by dealId + eventKey, not_yet events upgraded to detected when evidence found
+- Claude prompt defines behavioral patterns, not keywords — works across verticals (healthcare, finserv, etc.)
+- Robust JSON parsing: 3 strategies (direct, fence extraction, brace extraction) to handle Claude response variations
+- JSONB columns populated: stakeholderEngagement, buyerMomentum, conversationSignals on dealFitnessScores from Claude's response
+- Seed data cleared by seed-deal-fitness.ts — fitness events/scores generated live by the analysis engine
+- Key file: `apps/web/src/app/api/deal-fitness/analyze/route.ts`
