@@ -463,7 +463,7 @@ Respond with valid JSON only. No markdown. No preamble.`;
     try {
       message = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
+        max_tokens: 16000,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userPrompt }],
       });
