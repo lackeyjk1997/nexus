@@ -283,13 +283,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If a transcriptId was provided, mark its callAnalyses row as processed
-    // This must happen BEFORE we query for processed transcripts below
+    // If a transcriptId was provided, mark its callAnalyses row as processed.
+    // Create the callAnalyses row if it doesn't exist (Horizon Health transcripts
+    // are seeded without callAnalyses rows — only callTranscripts).
     if (transcriptId) {
-      await db
-        .update(callAnalyses)
-        .set({ pipelineProcessed: true })
-        .where(eq(callAnalyses.transcriptId, transcriptId));
+      const [existing] = await db
+        .select({ id: callAnalyses.id })
+        .from(callAnalyses)
+        .where(eq(callAnalyses.transcriptId, transcriptId))
+        .limit(1);
+
+      if (existing) {
+        await db
+          .update(callAnalyses)
+          .set({ pipelineProcessed: true })
+          .where(eq(callAnalyses.transcriptId, transcriptId));
+        console.log(`[deal-fitness] Marked existing callAnalyses row as processed for transcript ${transcriptId}`);
+      } else {
+        await db
+          .insert(callAnalyses)
+          .values({ transcriptId, pipelineProcessed: true });
+        console.log(`[deal-fitness] Created callAnalyses row with pipelineProcessed=true for transcript ${transcriptId}`);
+      }
+    } else {
+      console.log("[deal-fitness] No transcriptId provided, skipping processed mark");
     }
 
     // ── Step A: Gather context ──
@@ -343,6 +360,8 @@ export async function POST(req: NextRequest) {
         )
       )
       .where(eq(callTranscripts.dealId, dealId));
+
+    console.log(`[deal-fitness] Found ${transcripts.length} processed transcripts for deal ${dealId}`);
 
     if (transcripts.length === 0) {
       return NextResponse.json({
