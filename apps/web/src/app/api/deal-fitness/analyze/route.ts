@@ -78,6 +78,12 @@ CRITICAL PRINCIPLES:
 5. Confidence reflects evidence strength: 0.90-1.00 = explicit clear evidence, 0.70-0.89 = strong inference from context, 0.50-0.69 = moderate signal that could be interpreted differently.
 6. For events not yet detected, provide a coaching recommendation — what should the seller do to cultivate this buyer behavior?
 
+COMMITMENT TRACKING RULES:
+- Only track commitments made by the BUYER, not by the seller.
+- Seller commitments (e.g., "Sarah said she'd send the proposal") are expected professional behavior and don't signal buyer engagement.
+- Buyer commitments (e.g., "Henrik said he'd send the security questionnaire by Friday") ARE signals of engagement and investment.
+- For each buyer commitment, track: who promised, what they promised, when, and whether they followed through in subsequent interactions.
+
 THE 25 INSPECTABLE EVENTS:
 
 ═══════════════════════════════════════

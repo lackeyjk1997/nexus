@@ -31,6 +31,8 @@ export async function POST() {
     await db.execute(sql`DELETE FROM deal_fitness_scores`);
     await db.execute(sql`DELETE FROM deal_agent_states`);
     await db.execute(sql`UPDATE call_transcripts SET pipeline_processed = false`);
+    // Reset call analyses so transcripts show as unanalyzed (no quality score badge)
+    await db.execute(sql`UPDATE call_analyses SET call_quality_score = NULL`);
 
     // ── Phase 1: Clean pipeline-generated data ─────────────────────────
 
@@ -164,42 +166,51 @@ export async function POST() {
     // 12. Mark all notifications as unread
     await db.execute(sql`UPDATE notifications SET is_read = false`);
 
-    // ── Phase 3: Destroy Rivet agents ──────────────────────────────────
+    // ── Phase 3: Destroy ALL Rivet actors ──────────────────────────────
+    console.log('[Reset] Phase 3: Destroying all Rivet actors...');
 
     try {
       const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
       const rivetClient = createClient<Registry>(rivetEndpoint);
 
+      // Get ALL deal IDs from the database (not just a hardcoded list)
       const allDeals = await db
         .select({ id: deals.id })
         .from(deals);
+      const dealIds = allDeals.map(d => d.id);
 
-      for (const deal of allDeals) {
+      // Destroy deal agents for ALL deals
+      for (const dealId of dealIds) {
         try {
-          const dealActor = rivetClient.dealAgent.getOrCreate([deal.id]);
-          await dealActor.destroyActor();
-        } catch {
-          // Actor might not exist — that's fine
-        }
-        try {
-          const pipelineActor = rivetClient.transcriptPipeline.getOrCreate([deal.id]);
-          await pipelineActor.destroyActor();
-        } catch {
-          // Actor might not exist — that's fine
+          const agent = rivetClient.dealAgent.getOrCreate([dealId]);
+          await agent.destroyActor();
+          console.log(`[Reset] Destroyed dealAgent: ${dealId}`);
+        } catch (e) {
+          console.log(`[Reset] dealAgent destroy failed for ${dealId}: ${(e as Error).message}`);
         }
       }
 
-      // Destroy intelligence coordinator
-      // NOTE: coordinator_patterns table is intentionally NOT cleared here.
-      // Patterns persist across demo resets so the Act 2 cross-deal story works
-      // without re-running pipeline transcripts. To hard-reset patterns:
-      // DELETE FROM coordinator_patterns;
+      // Destroy transcript pipelines for ALL deals
+      for (const dealId of dealIds) {
+        try {
+          const pipeline = rivetClient.transcriptPipeline.getOrCreate([dealId]);
+          await pipeline.destroyActor();
+          console.log(`[Reset] Destroyed transcriptPipeline: ${dealId}`);
+        } catch (e) {
+          console.log(`[Reset] transcriptPipeline destroy failed for ${dealId}: ${(e as Error).message}`);
+        }
+      }
+
+      // Destroy intelligence coordinator (single actor, key: ["default"])
       try {
         const coordinator = rivetClient.intelligenceCoordinator.getOrCreate(["default"]);
         await coordinator.destroyActor();
-      } catch {
-        // Actor might not exist
+        console.log('[Reset] Destroyed intelligenceCoordinator');
+      } catch (e) {
+        console.log(`[Reset] intelligenceCoordinator destroy failed: ${(e as Error).message}`);
       }
+
+      console.log('[Reset] Phase 3 complete — all actors destroyed');
     } catch (e) {
       console.error("Failed to destroy Rivet actors during demo reset:", e);
       // Non-fatal — actors will be recreated fresh

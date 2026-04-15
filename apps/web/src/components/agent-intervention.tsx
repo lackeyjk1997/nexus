@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface AgentInterventionProps {
   dealId: string;
@@ -14,7 +14,23 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
   const [adjustedDate, setAdjustedDate] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionConfirmed, setActionConfirmed] = useState(false);
+  const [hasRunPipeline, setHasRunPipeline] = useState(false);
 
+  // Only show intervention if the pipeline has actually been run for this deal
+  useEffect(() => {
+    const checkPipelineState = async () => {
+      try {
+        const res = await fetch(`/api/deal-agent-state?dealId=${dealId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHasRunPipeline(data.exists && data.state.interactionCount > 0);
+        }
+      } catch {}
+    };
+    checkPipelineState();
+  }, [dealId]);
+
+  if (!hasRunPipeline) return null;
   if (!deal.closeDate) return null;
 
   // Compute close date risk
