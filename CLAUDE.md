@@ -584,3 +584,23 @@ apps/web/src/components/response-kit-modal.tsx        → Reusable Response Kit 
 - JSONB columns populated: stakeholderEngagement, buyerMomentum, conversationSignals on dealFitnessScores from Claude's response
 - Seed data cleared by seed-deal-fitness.ts — fitness events/scores generated live by the analysis engine
 - Key file: `apps/web/src/app/api/deal-fitness/analyze/route.ts`
+
+## MCP Server (Session 16)
+- Single route: `apps/web/src/app/api/mcp/route.ts`
+- Transport: `WebStandardStreamableHTTPServerTransport` from `@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js` — Web-standard `Request` → `Response` transport, serverless-friendly. NOT the Node.js-only `StreamableHTTPServerTransport` (which takes `IncomingMessage`/`ServerResponse` and is incompatible with Next.js App Router)
+- Stateless mode: `sessionIdGenerator: undefined`. A fresh `McpServer` + transport is built per request
+- Next.js route exports: `GET`, `POST`, `DELETE`, `OPTIONS` — each a thin wrapper forwarding to a shared `handle(request)` that calls `transport.handleRequest(request)` and merges CORS headers onto the returned Response
+- CORS headers include `Mcp-Session-Id`, `MCP-Protocol-Version`, `Last-Event-ID` for cross-origin Claude.ai compatibility; `OPTIONS` returns 204
+- Dependencies added to `apps/web/package.json`: `@modelcontextprotocol/sdk@^1.29.0`, `zod@^4.3.6` (required peer dep — not auto-installed by the SDK)
+- Tool registration via `server.registerTool(name, config, handler)`. `inputSchema` is a **Zod raw shape** — a plain object like `{ foo: z.string() }`, NOT `z.object({...})`
+- 5 tools:
+  - `get_pipeline({ assignedTo? })` — direct DB join (deals ⋈ companies ⋈ teamMembers ⋈ contacts) with pipeline summary (open total, commit count, closed won/lost). AE filter is case-insensitive partial match
+  - `get_deal_details({ dealName })` — fuzzy resolve deal → 7 parallel queries (deal+company+AE, MEDDPICC, fitness scores, fitness events, agent state, last-10 activities, all company contacts)
+  - `generate_call_prep({ dealName, prepContext?, attendeeNames? })` — resolves deal + Sarah Chen's memberId + attendee IDs from names, then internal fetch to `/api/agent/call-prep` (reuses all 8+ intelligence layers, no prompt duplication)
+  - `get_deal_fitness({ dealName })` — fitness scores + events grouped by category + buyerMomentum + conversationSignals. Returns helpful message if analysis hasn't run yet (fitness is generated live by the pipeline)
+  - `log_observation({ observation, dealName?, context? })` — internal fetch to `/api/observations` with Sarah Chen's observerId + optional deal/account scoping. Returns Claude classification, entity extraction, giveback, routing
+- Fuzzy deal resolution helper: SQL ILIKE on `deals.name OR companies.name`, limit 5; prefers exact name match, else shortest (most specific) name. Imported `sql` from drizzle-orm for the tagged template
+- Internal fetches use absolute URL: `process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001"` (relative URLs fail server-side on Vercel)
+- `maxDuration = 300` at the route level covers call-prep's up-to-2-minute Claude call
+- Sarah Chen's memberId is looked up by name per invocation (not hardcoded)
+- Each tool handler is wrapped in try/catch that returns `{ content, isError: true }` on failure rather than propagating — gives clean MCP-protocol errors instead of internal stack traces
