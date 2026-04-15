@@ -738,13 +738,14 @@ export async function POST(request: Request) {
       const notYet = fitnessEvents.filter(e => e.status === "not_yet");
 
       // Group not_yet events by fit category
-      const gaps: Record<string, Array<{ event: string; coaching: string }>> = {};
+      const gaps: Record<string, Array<{ event: string; coaching: string; fitCategory: string }>> = {};
       for (const event of notYet) {
         const category = event.fitCategory || "unknown";
         if (!gaps[category]) gaps[category] = [];
         gaps[category].push({
           event: event.eventLabel || event.eventKey,
           coaching: event.eventDescription || event.notes || "",
+          fitCategory: category,
         });
       }
 
@@ -763,6 +764,17 @@ export async function POST(request: Request) {
 
           if (s.fitImbalanceFlag) {
             fitnessContext += `⚠ FIT IMBALANCE DETECTED — significant gap between strongest and weakest fit areas\n`;
+          }
+
+          // Extract buyer commitments from buyerMomentum JSONB
+          const momentum = s.buyerMomentum as { commitmentFollowThrough?: { commitments?: Array<{ madeBy: string; commitment: string; madeIn: string; fulfilled: boolean; fulfilledHow: string }> } } | null;
+          const commitments = momentum?.commitmentFollowThrough?.commitments || [];
+          if (commitments.length > 0) {
+            fitnessContext += '\nBUYER COMMITMENTS:\n';
+            for (const c of commitments) {
+              const status = c.fulfilled ? 'KEPT' : 'PENDING';
+              fitnessContext += `- ${status}: "${c.commitment}" — ${c.madeBy} (from ${c.madeIn})${c.fulfilled ? ` → ${c.fulfilledHow}` : ''}\n`;
+            }
           }
         }
 
@@ -839,10 +851,14 @@ The following insights were accumulated by this deal's AI agent over time throug
 ${agentMemory}
 ` : ""}${fitnessContext ? `
 ${fitnessContext}
-If DEAL FITNESS data is provided above, use the buyer behavior gaps to suggest specific questions and actions.
-Frame gaps as opportunities: "Your buyer hasn't [gap] yet — consider [coaching suggestion]."
-Prioritize gaps from the weakest fit category.
-Do not list all gaps — pick the 2-3 most impactful for this specific meeting type and attendees.
+If DEAL FITNESS data is provided above, include a "deal_fitness_insights" section in the JSON output.
+DEAL FITNESS INSIGHTS SECTION:
+- Select the 2-3 most relevant buyer behavior gaps for THIS meeting type with THESE attendees.
+- Do NOT include all gaps — pick the ones that can naturally come up in this conversation.
+- For pending buyer commitments, suggest a natural way to follow up.
+- Frame everything as conversation opportunities, not as an audit checklist.
+- If a gap is about introducing the economic buyer and the economic buyer IS in this meeting, don't surface it as a gap — instead note that their presence is a positive signal in the summary.
+- Prioritize gaps from the weakest fit category.
 ` : ""}
 ${agentConfigRow ? `YOUR AGENT CONFIGURATION:
 Persona & Instructions: ${agentConfigRow.instructions}
@@ -1003,7 +1019,25 @@ Return ONLY valid JSON with this exact structure:
       "talking_point": "The specific talking point you added to talking_points for this play",
       "close_action": "The specific next step you added to suggested_next_steps for this play"
     }
-  ]
+  ],
+  "deal_fitness_insights": {
+    "summary": "One sentence on overall buyer engagement level and strongest/weakest fit — ONLY include if Deal Fitness data was provided",
+    "gaps": [
+      {
+        "event": "What the buyer hasn't done yet",
+        "fit_category": "business_fit | emotional_fit | technical_fit | readiness_fit",
+        "coaching": "Specific suggestion for how to address this in THIS meeting",
+        "relevance": "Why this matters for this meeting type and these attendees"
+      }
+    ],
+    "pending_commitments": [
+      {
+        "promise": "What the buyer committed to",
+        "promised_by": "Who made the promise",
+        "suggested_follow_up": "How to naturally bring this up"
+      }
+    ]
+  }
 }`;
 
   const client = new Anthropic();

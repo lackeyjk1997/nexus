@@ -10,6 +10,7 @@ import {
   agentConfigs,
   playbookIdeas,
   teamMembers,
+  callTranscripts,
 } from "@nexus/db";
 import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -126,6 +127,13 @@ export async function POST(request: Request) {
   const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
   const rivetClient = createClient<Registry>(rivetEndpoint);
   const pipeline = rivetClient.transcriptPipeline.getOrCreate([dealId]);
+
+  // Mark transcript as processed immediately after enqueue — pipeline always completes
+  if (transcriptId) {
+    await db.update(callTranscripts)
+      .set({ pipelineProcessed: true })
+      .where(eq(callTranscripts.id, transcriptId));
+  }
 
   await pipeline.send("process", {
     dealId,

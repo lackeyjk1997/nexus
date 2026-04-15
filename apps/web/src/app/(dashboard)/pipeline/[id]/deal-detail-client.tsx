@@ -183,6 +183,11 @@ type CallBrief = {
   competitive_context: string | null;
   suggested_resources?: Array<{ title: string; type: string; why: string }>;
   suggested_next_steps: string[];
+  deal_fitness_insights?: {
+    summary: string;
+    gaps: Array<{ event: string; fit_category: string; coaching: string; relevance: string }>;
+    pending_commitments: Array<{ promise: string; promised_by: string; suggested_follow_up: string }>;
+  } | null;
 };
 
 // ── Collapsible Section ──
@@ -1210,6 +1215,43 @@ export function DealDetailClient({
                       </div>
                     ))}
                   </div>
+                </BriefSection>
+              )}
+
+              {/* Deal Fitness Insights */}
+              {callBrief.deal_fitness_insights && (
+                <BriefSection title="Deal Fitness Insights">
+                  <p className="text-[12.5px] leading-[1.5] mb-2" style={{ color: "#3D3833" }}>{callBrief.deal_fitness_insights.summary}</p>
+
+                  {callBrief.deal_fitness_insights.gaps?.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Buyer Behavior Gaps</p>
+                      <div className="space-y-2">
+                        {callBrief.deal_fitness_insights.gaps.map((gap, i) => (
+                          <div key={i} className="rounded-lg p-3" style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)", border: "1px solid rgba(0,0,0,0.06)", borderLeftWidth: "3px", borderLeftColor: "#E07A5F" }}>
+                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{gap.event}</p>
+                            <p className="text-[12px] mt-0.5" style={{ color: "#3D3833" }}>{gap.coaching}</p>
+                            <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>{gap.relevance}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {callBrief.deal_fitness_insights.pending_commitments?.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Pending Buyer Commitments</p>
+                      <div className="space-y-1.5">
+                        {callBrief.deal_fitness_insights.pending_commitments.map((c, i) => (
+                          <div key={i} className="rounded-lg p-2.5" style={{ background: "#FAF9F6", border: "1px solid rgba(0,0,0,0.06)" }}>
+                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{c.promise}&rdquo;</p>
+                            <p className="text-[11px]" style={{ color: "#8A8078" }}>{c.promised_by}</p>
+                            <p className="text-[12px] mt-0.5" style={{ color: "#0C7489" }}>{c.suggested_follow_up}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </BriefSection>
               )}
 

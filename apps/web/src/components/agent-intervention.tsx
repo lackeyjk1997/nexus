@@ -15,6 +15,7 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
   const [actionLoading, setActionLoading] = useState(false);
   const [actionConfirmed, setActionConfirmed] = useState(false);
   const [hasRunPipeline, setHasRunPipeline] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   // Only show intervention if the pipeline has actually been run for this deal
   useEffect(() => {
@@ -23,14 +24,16 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
         const res = await fetch(`/api/deal-agent-state?dealId=${dealId}`);
         if (res.ok) {
           const data = await res.json();
-          setHasRunPipeline(data.exists && data.state.interactionCount > 0);
+          setHasRunPipeline(data.exists && (data.state?.interactionCount || 0) > 0);
         }
       } catch {}
+      setChecked(true);
     };
     checkPipelineState();
   }, [dealId]);
 
-  if (!hasRunPipeline) return null;
+  // Don't render anything until we've checked
+  if (!checked || !hasRunPipeline) return null;
   if (!deal.closeDate) return null;
 
   // Compute close date risk
