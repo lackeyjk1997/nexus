@@ -1050,6 +1050,10 @@ export const dealAgentStates = pgTable(
     pipelineStep: text("pipeline_step"),
     pipelineDetails: text("pipeline_details"),
 
+    // Intervention dismissal
+    interventionDismissed: boolean("intervention_dismissed").default(false).notNull(),
+    interventionDismissedAt: timestamp("intervention_dismissed_at"),
+
     // Timestamps
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

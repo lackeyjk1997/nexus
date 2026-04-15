@@ -113,6 +113,8 @@ export async function POST(request: Request) {
   if (updates.pipelineStatus !== undefined) setValues.pipelineStatus = updates.pipelineStatus;
   if (updates.pipelineStep !== undefined) setValues.pipelineStep = updates.pipelineStep;
   if (updates.pipelineDetails !== undefined) setValues.pipelineDetails = updates.pipelineDetails;
+  if (updates.interventionDismissed !== undefined) setValues.interventionDismissed = updates.interventionDismissed;
+  if (updates.interventionDismissedAt !== undefined) setValues.interventionDismissedAt = updates.interventionDismissedAt ? new Date(updates.interventionDismissedAt as string) : null;
 
   // Upsert: insert if not exists, update if exists
   const [result] = await db

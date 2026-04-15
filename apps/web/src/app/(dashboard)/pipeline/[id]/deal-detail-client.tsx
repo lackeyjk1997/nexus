@@ -1218,74 +1218,78 @@ export function DealDetailClient({
                 </BriefSection>
               )}
 
-              {/* Deal Fitness Insights */}
-              {callBrief.deal_fitness_insights && (
-                <BriefSection title="Deal Fitness Insights">
-                  <p className="text-[12.5px] leading-[1.5] mb-2" style={{ color: "#3D3833" }}>{callBrief.deal_fitness_insights.summary}</p>
-
-                  {callBrief.deal_fitness_insights.gaps?.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Buyer Behavior Gaps</p>
-                      <div className="space-y-2">
-                        {callBrief.deal_fitness_insights.gaps.map((gap, i) => (
-                          <div key={i} className="rounded-lg p-3" style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)", border: "1px solid rgba(0,0,0,0.06)", borderLeftWidth: "3px", borderLeftColor: "#E07A5F" }}>
-                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{gap.event}</p>
-                            <p className="text-[12px] mt-0.5" style={{ color: "#3D3833" }}>{gap.coaching}</p>
-                            <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>{gap.relevance}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {callBrief.deal_fitness_insights.pending_commitments?.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Pending Buyer Commitments</p>
-                      <div className="space-y-1.5">
-                        {callBrief.deal_fitness_insights.pending_commitments.map((c, i) => (
-                          <div key={i} className="rounded-lg p-2.5" style={{ background: "#FAF9F6", border: "1px solid rgba(0,0,0,0.06)" }}>
-                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{c.promise}&rdquo;</p>
-                            <p className="text-[11px]" style={{ color: "#8A8078" }}>{c.promised_by}</p>
-                            <p className="text-[12px] mt-0.5" style={{ color: "#0C7489" }}>{c.suggested_follow_up}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </BriefSection>
-              )}
-
-              {/* Suggested Resources */}
-              {callBrief.suggested_resources && callBrief.suggested_resources.length > 0 && (
-                <BriefSection title="Suggested Resources">
-                  <div className="space-y-2 mt-1">
-                    {callBrief.suggested_resources.map((r, i) => (
-                      <div key={i} className="flex gap-2.5 items-start">
-                        <FileText className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#0C7489" }} />
-                        <div>
-                          <p className="text-[12.5px] font-medium" style={{ color: "#0C7489" }}>{r.title}</p>
-                          <p className="text-[11px]" style={{ color: "#8A8078" }}>{r.why}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </BriefSection>
-              )}
-
-              {/* Next Steps */}
-              {callBrief.suggested_next_steps.length > 0 && (
-                <BriefSection title="Suggested Close">
-                  <div className="space-y-1 mt-1">
-                    {callBrief.suggested_next_steps.map((step, i) => (
-                      <div key={i} className="flex gap-2">
-                        <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
-                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                </BriefSection>
-              )}
             </div>
+          </div>
+
+          {/* Full-width sections below the two-column grid */}
+          <div className="px-5 pb-4 space-y-4">
+            {/* Deal Fitness Insights */}
+            {callBrief.deal_fitness_insights && (
+              <BriefSection title="Deal Fitness Insights">
+                <p className="text-[12.5px] leading-[1.5] mb-2" style={{ color: "#3D3833" }}>{callBrief.deal_fitness_insights.summary}</p>
+
+                {callBrief.deal_fitness_insights.gaps?.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Buyer Behavior Gaps</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {callBrief.deal_fitness_insights.gaps.map((gap, i) => (
+                        <div key={i} className="rounded-lg p-3" style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)", border: "1px solid rgba(0,0,0,0.06)", borderLeftWidth: "3px", borderLeftColor: "#E07A5F" }}>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{gap.event}</p>
+                          <p className="text-[12px] mt-0.5" style={{ color: "#3D3833" }}>{gap.coaching}</p>
+                          <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>{gap.relevance}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {callBrief.deal_fitness_insights.pending_commitments?.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Pending Buyer Commitments</p>
+                    <div className="space-y-1.5">
+                      {callBrief.deal_fitness_insights.pending_commitments.map((c, i) => (
+                        <div key={i} className="rounded-lg p-2.5" style={{ background: "#FAF9F6", border: "1px solid rgba(0,0,0,0.06)" }}>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{c.promise}&rdquo;</p>
+                          <p className="text-[11px]" style={{ color: "#8A8078" }}>{c.promised_by}</p>
+                          <p className="text-[12px] mt-0.5" style={{ color: "#0C7489" }}>{c.suggested_follow_up}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </BriefSection>
+            )}
+
+            {/* Suggested Resources */}
+            {callBrief.suggested_resources && callBrief.suggested_resources.length > 0 && (
+              <BriefSection title="Suggested Resources">
+                <div className="space-y-2 mt-1">
+                  {callBrief.suggested_resources.map((r, i) => (
+                    <div key={i} className="flex gap-2.5 items-start">
+                      <FileText className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#0C7489" }} />
+                      <div>
+                        <p className="text-[12.5px] font-medium" style={{ color: "#0C7489" }}>{r.title}</p>
+                        <p className="text-[11px]" style={{ color: "#8A8078" }}>{r.why}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </BriefSection>
+            )}
+
+            {/* Next Steps */}
+            {callBrief.suggested_next_steps.length > 0 && (
+              <BriefSection title="Suggested Close">
+                <div className="space-y-1 mt-1">
+                  {callBrief.suggested_next_steps.map((step, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
+                      <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </BriefSection>
+            )}
           </div>
 
           {/* Actions */}
@@ -1856,63 +1860,7 @@ function OverviewTab({ deal, milestones }: { deal: Deal; milestones: Milestone[]
         </div>
       </div>
 
-      {/* Milestones */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-muted-foreground" />
-          Deal Milestones
-        </h3>
-        <div className="grid grid-cols-1 gap-2">
-          {milestones.map((m) => (
-            <div
-              key={m.id}
-              className={cn(
-                "flex items-center gap-3 p-3 rounded-lg transition-colors",
-                m.isCompleted ? "bg-emerald-50/50" : "bg-muted/30"
-              )}
-            >
-              {m.isCompleted ? (
-                <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-              ) : (
-                <Circle className="h-5 w-5 text-border shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    m.isCompleted ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {MILESTONE_LABELS[m.milestoneKey] || m.milestoneKey}
-                </span>
-                {m.evidence && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {m.evidence}
-                  </p>
-                )}
-              </div>
-              {m.completedAt && (
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {new Date(m.completedAt).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </span>
-              )}
-              {m.source && (
-                <span
-                  className={cn(
-                    "text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0",
-                    SOURCE_COLORS[m.source] || "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {m.source.replace("_", " ")}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Milestones — hidden, may be rebuilt as a real feature later */}
     </div>
   );
 }

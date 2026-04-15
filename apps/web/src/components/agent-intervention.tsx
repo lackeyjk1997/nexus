@@ -16,24 +16,50 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
   const [actionConfirmed, setActionConfirmed] = useState(false);
   const [hasRunPipeline, setHasRunPipeline] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [riskSignal, setRiskSignal] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  // Only show for NordicMed deals (demo constraint)
+  const isNordicMed =
+    deal.name?.toLowerCase().includes("nordicmed") ||
+    deal.name?.toLowerCase().includes("nordic med");
 
   // Only show intervention if the pipeline has actually been run for this deal
   useEffect(() => {
+    if (!isNordicMed) {
+      setChecked(true);
+      return;
+    }
+
     const checkPipelineState = async () => {
       try {
         const res = await fetch(`/api/deal-agent-state?dealId=${dealId}`);
         if (res.ok) {
           const data = await res.json();
           setHasRunPipeline(data.exists && (data.state?.interactionCount || 0) > 0);
+
+          // Check if already dismissed
+          if (data.state?.interventionDismissed) {
+            setDismissed(true);
+          }
+
+          // Extract first risk signal for title
+          const signals = data.state?.riskSignals as string[] | undefined;
+          if (signals && signals.length > 0) {
+            const signal = signals[0];
+            setRiskSignal(signal.length > 80 ? signal.slice(0, 77) + "..." : signal);
+          }
         }
       } catch {}
       setChecked(true);
     };
     checkPipelineState();
-  }, [dealId]);
+  }, [dealId, isNordicMed]);
 
+  // Don't render for non-NordicMed deals
+  if (!isNordicMed) return null;
   // Don't render anything until we've checked
-  if (!checked || !hasRunPipeline) return null;
+  if (!checked || !hasRunPipeline || dismissed) return null;
   if (!deal.closeDate) return null;
 
   // Compute close date risk
@@ -56,10 +82,35 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
     ? new Date(displayDate + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     : "";
 
+  // Build title with risk signal
+  const title = riskSignal
+    ? `Close date at risk — ${daysRemaining} days remaining · ${riskSignal}`
+    : `Close date at risk — ${daysRemaining} days remaining`;
+
+  async function persistDismissal() {
+    try {
+      await fetch('/api/deal-agent-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealId,
+          updates: {
+            interventionDismissed: true,
+            interventionDismissedAt: new Date().toISOString(),
+          },
+        }),
+      });
+    } catch (e) {
+      console.error('[Intervention] Failed to persist dismissal:', e);
+    }
+  }
+
   function handleDismiss() {
     setAnimateIn(false);
+    persistDismissal();
     setTimeout(() => {
       setVisible(false);
+      setDismissed(true);
       setActionConfirmed(false);
     }, 300);
   }
@@ -81,10 +132,13 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
           onCloseDateChange(dateToSet);
         }
         setActionConfirmed(true);
+        // Also persist dismissal after updating close date
+        await persistDismissal();
         setTimeout(() => {
           setAnimateIn(false);
           setTimeout(() => {
             setVisible(false);
+            setDismissed(true);
             setActionConfirmed(false);
           }, 300);
         }, 3000);
@@ -132,12 +186,12 @@ export function AgentIntervention({ dealId, deal, onCloseDateChange }: AgentInte
           </p>
         ) : (
           <>
-            {/* Title */}
+            {/* Title with risk signal */}
             <p
               className="text-[15px] font-semibold mb-3"
               style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif" }}
             >
-              Close date at risk — {daysRemaining} days remaining
+              {title}
             </p>
 
             {/* Date picker */}

@@ -44,25 +44,9 @@ async function seed() {
   await db.delete(schema.dealStageHistory);
   await db.delete(schema.dealMilestones);
   await db.delete(schema.meddpiccFields);
-  await db.delete(schema.dealFitnessEvents);
-  await db.delete(schema.dealFitnessScores);
-  await db.delete(schema.dealAgentStates);
-  await db.delete(schema.customerMessages);
-  await db.delete(schema.accountHealth);
-  await db.delete(schema.knowledgeArticles);
-  await db.delete(schema.playbookIdeas);
-  await db.delete(schema.observationRouting);
-  await db.delete(schema.observations);
-  await db.delete(schema.observationClusters);
-  await db.delete(schema.crossAgentFeedback);
-  await db.delete(schema.influenceScores);
-  await db.delete(schema.systemIntelligence);
-  await db.delete(schema.managerDirectives);
-  await db.delete(schema.resources);
   await db.delete(schema.deals);
   await db.delete(schema.contacts);
   await db.delete(schema.companies);
-  await db.delete(schema.supportFunctionMembers);
   await db.delete(schema.agentConfigs);
   await db.delete(schema.teamMembers);
 

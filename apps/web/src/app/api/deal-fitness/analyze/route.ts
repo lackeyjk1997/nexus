@@ -355,9 +355,7 @@ export async function POST(req: NextRequest) {
         )
       );
 
-    const existingDetectedKeys = new Set(
-      existingEvents.map((e) => e.eventKey)
-    );
+    // existingDetectedKeys removed — using delete-then-insert approach
 
     // ── Step B: Build chronological timeline ──
 
@@ -549,7 +547,7 @@ Respond with valid JSON only. No markdown. No preamble.`;
       `[deal-fitness/analyze] Parsed successfully. Events: ${(analysisResult.events || []).length}, Commitments: ${(analysisResult.commitmentTracking || []).length}`
     );
 
-    // ── Step E: Write events to database ──
+    // ── Step E: Write events to database (delete-then-insert for dedup) ──
 
     const detectedEvents = (analysisResult.events || []).filter(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -561,8 +559,11 @@ Respond with valid JSON only. No markdown. No preamble.`;
       (e: any) => e.status !== "detected"
     );
 
+    // Delete all existing events for this deal — analysis always produces
+    // a complete set of 25 events, so replacing is simpler and prevents dedup issues
+    await db.delete(dealFitnessEvents).where(eq(dealFitnessEvents.dealId, dealId));
+
     let newEventsInserted = 0;
-    let eventsUpdated = 0;
 
     // Helper: find contact ID from name
     function findContactId(name: string | null): string | null {
@@ -577,131 +578,76 @@ Respond with valid JSON only. No markdown. No preamble.`;
       return match?.id || null;
     }
 
+    // Track which event keys we've inserted to avoid duplicates from Claude
+    const insertedKeys = new Set<string>();
+
+    // Insert detected events
     for (const event of detectedEvents) {
       const eventKey = event.eventKey as string;
+      if (insertedKeys.has(eventKey)) continue;
       const labelInfo = EVENT_LABELS[eventKey];
       const contactId = findContactId(event.contactName);
 
-      if (existingDetectedKeys.has(eventKey)) {
-        // Check if new evidence is stronger
-        const existing = existingEvents.find((e) => e.eventKey === eventKey);
-        const existingConf = existing?.confidence
-          ? parseFloat(String(existing.confidence))
-          : 0;
-        const newConf = event.confidence || 0;
-
-        if (newConf > existingConf) {
-          await db
-            .update(dealFitnessEvents)
-            .set({
-              confidence: String(newConf),
-              evidenceSnippets: event.evidenceSnippets,
-              detectionSources: event.detectionSources || ["transcript"],
-              contactId,
-              contactName: event.contactName || null,
-              eventDescription:
-                event.eventDescription ||
-                labelInfo?.description ||
-                null,
-              updatedAt: new Date(),
+      await db.insert(dealFitnessEvents).values({
+        dealId,
+        fitCategory: event.fitCategory,
+        eventKey,
+        eventLabel: labelInfo?.label || event.eventLabel || eventKey,
+        eventDescription:
+          event.eventDescription ||
+          labelInfo?.description ||
+          "Detected from transcript analysis.",
+        status: "detected",
+        detectedAt: new Date(),
+        lifecyclePhase: "pre_sale",
+        detectionSources: event.detectionSources || ["transcript"],
+        sourceReferences: event.evidenceSnippets
+          ?.map(
+            (s: { sourceId?: string; source?: string; sourceType?: string }) => ({
+              type: s.sourceType || "transcript",
+              id: s.sourceId || null,
+              label: s.source || "Analysis",
             })
-            .where(
-              and(
-                eq(dealFitnessEvents.dealId, dealId),
-                eq(dealFitnessEvents.eventKey, eventKey)
-              )
-            );
-          eventsUpdated++;
-        }
-      } else {
-        // Insert new detected event
-        await db.insert(dealFitnessEvents).values({
-          dealId,
-          fitCategory: event.fitCategory,
-          eventKey,
-          eventLabel: labelInfo?.label || event.eventLabel || eventKey,
-          eventDescription:
-            event.eventDescription ||
-            labelInfo?.description ||
-            "Detected from transcript analysis.",
-          status: "detected",
-          detectedAt: new Date(),
-          lifecyclePhase: "pre_sale",
-          detectionSources: event.detectionSources || ["transcript"],
-          sourceReferences: event.evidenceSnippets
-            ?.map(
-              (s: { sourceId?: string; source?: string; sourceType?: string }) => ({
-                type: s.sourceType || "transcript",
-                id: s.sourceId || null,
-                label: s.source || "Analysis",
-              })
-            ) || null,
-          evidenceSnippets: event.evidenceSnippets || null,
-          confidence: String(event.confidence || 0.7),
-          detectedBy: "ai",
-          contactId,
-          contactName: event.contactName || null,
-        });
-        newEventsInserted++;
-        existingDetectedKeys.add(eventKey);
-      }
+          ) || null,
+        evidenceSnippets: event.evidenceSnippets || null,
+        confidence: String(event.confidence || 0.7),
+        detectedBy: "ai",
+        contactId,
+        contactName: event.contactName || null,
+      });
+      newEventsInserted++;
+      insertedKeys.add(eventKey);
     }
 
-    // Insert not_yet rows for events Claude identified as not_yet
-    // AND for any canonical events not yet in the DB
-    const allExistingEventKeys = await db
-      .select({ eventKey: dealFitnessEvents.eventKey })
-      .from(dealFitnessEvents)
-      .where(eq(dealFitnessEvents.dealId, dealId));
-    const allExistingSet = new Set(
-      allExistingEventKeys.map((e) => e.eventKey)
-    );
-
-    // First handle Claude's not_yet events with coaching notes
+    // Insert not_yet events from Claude with coaching notes
     for (const event of notYetEvents) {
       const eventKey = event.eventKey as string;
+      if (insertedKeys.has(eventKey)) continue;
       const labelInfo = EVENT_LABELS[eventKey];
 
-      if (!allExistingSet.has(eventKey)) {
-        await db.insert(dealFitnessEvents).values({
-          dealId,
-          fitCategory: event.fitCategory,
-          eventKey,
-          eventLabel: labelInfo?.label || event.eventLabel || eventKey,
-          eventDescription: event.coachingNote || labelInfo?.description || null,
-          status: "not_yet",
-          detectedAt: null,
-          lifecyclePhase: "pre_sale",
-          detectionSources: null,
-          sourceReferences: null,
-          evidenceSnippets: null,
-          confidence: null,
-          detectedBy: null,
-          contactId: null,
-          contactName: null,
-        });
-        allExistingSet.add(eventKey);
-      } else if (event.coachingNote) {
-        // Update existing not_yet event with coaching note if present
-        await db
-          .update(dealFitnessEvents)
-          .set({
-            eventDescription: event.coachingNote,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(dealFitnessEvents.dealId, dealId),
-              eq(dealFitnessEvents.eventKey, eventKey),
-              eq(dealFitnessEvents.status, "not_yet")
-            )
-          );
-      }
+      await db.insert(dealFitnessEvents).values({
+        dealId,
+        fitCategory: event.fitCategory,
+        eventKey,
+        eventLabel: labelInfo?.label || event.eventLabel || eventKey,
+        eventDescription: event.coachingNote || labelInfo?.description || null,
+        status: "not_yet",
+        detectedAt: null,
+        lifecyclePhase: "pre_sale",
+        detectionSources: null,
+        sourceReferences: null,
+        evidenceSnippets: null,
+        confidence: null,
+        detectedBy: null,
+        contactId: null,
+        contactName: null,
+      });
+      insertedKeys.add(eventKey);
     }
 
     // Fill in any remaining canonical events that Claude didn't mention
     for (const canonicalEvent of ALL_EVENTS) {
-      if (!allExistingSet.has(canonicalEvent.key)) {
+      if (!insertedKeys.has(canonicalEvent.key)) {
         await db.insert(dealFitnessEvents).values({
           dealId,
           fitCategory: canonicalEvent.category,
@@ -722,48 +668,7 @@ Respond with valid JSON only. No markdown. No preamble.`;
       }
     }
 
-    // Upgrade any not_yet events that were detected in this analysis
-    for (const event of detectedEvents) {
-      const eventKey = event.eventKey as string;
-      // If the event was already in DB as not_yet (not in detected set, but in allExisting set)
-      if (
-        !existingDetectedKeys.has(eventKey) &&
-        allExistingSet.has(eventKey)
-      ) {
-        const contactId = findContactId(event.contactName);
-        await db
-          .update(dealFitnessEvents)
-          .set({
-            status: "detected",
-            detectedAt: new Date(),
-            confidence: String(event.confidence || 0.7),
-            detectionSources: event.detectionSources || ["transcript"],
-            sourceReferences: event.evidenceSnippets
-              ?.map(
-                (s: { sourceId?: string; source?: string; sourceType?: string }) => ({
-                  type: s.sourceType || "transcript",
-                  id: s.sourceId || null,
-                  label: s.source || "Analysis",
-                })
-              ) || null,
-            evidenceSnippets: event.evidenceSnippets || null,
-            eventDescription:
-              event.eventDescription ||
-              EVENT_LABELS[eventKey]?.description ||
-              null,
-            detectedBy: "ai",
-            contactId,
-            contactName: event.contactName || null,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(dealFitnessEvents.dealId, dealId),
-              eq(dealFitnessEvents.eventKey, eventKey)
-            )
-          );
-      }
-    }
+    // (Upgrade step removed — delete-then-insert handles this)
 
     // ── Step F: Compute and write scores ──
 
@@ -1061,7 +966,7 @@ Respond with valid JSON only. No markdown. No preamble.`;
       eventsDetected: totalDetected,
       eventsTotal: 25,
       newEventsInserted,
-      eventsUpdated,
+      eventsUpdated: 0,
       scores: {
         business: categoryScores.business_fit.score,
         emotional: categoryScores.emotional_fit.score,

@@ -1,0 +1,2 @@
+ALTER TABLE "deal_agent_states" ADD COLUMN "intervention_dismissed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "deal_agent_states" ADD COLUMN "intervention_dismissed_at" timestamp;
