@@ -172,23 +172,32 @@ const STAGES_ORDER: PipelineStage[] = [
 
 // ── Call Brief Types ──
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 type CallBrief = {
   headline: string;
-  deal_snapshot: { stage: string; value: string; days_in_stage: string; health: string; health_reason: string };
-  stakeholders_in_play: Array<{ name: string; title: string; role: string; engagement: string; last_contact: string | null; notes: string }>;
+  proven_plays?: Array<{ name: string; talking_point: string; close_action: string }>;
   talking_points: Array<{ topic: string; why: string; approach: string }>;
   questions_to_ask: Array<{ question: string; purpose: string; meddpicc_gap: string | null }>;
-  risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
-  team_intelligence: string[];
-  competitive_context: string | null;
-  suggested_resources?: Array<{ title: string; type: string; why: string }>;
-  suggested_next_steps: string[];
   deal_fitness_insights?: {
     summary: string;
-    gaps: Array<{ event: string; fit_category: string; coaching: string; relevance: string }>;
+    gaps: Array<{ event: string; fit_category: string; coaching: string; matched_play?: { name: string; evidence: string } | null }>;
     pending_commitments: Array<{ promise: string; promised_by: string; suggested_follow_up: string }>;
+    active_experiments?: Array<{ name: string; application: string }>;
   } | null;
+  risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
+  next_steps?: string[];
+  deal_snapshot: { stage: string; value: string; days_in_stage: string; health: string; health_reason: string };
+  stakeholders_in_play: Array<{ name: string; title: string; role: string; engagement: string; last_contact: string | null; notes: string }>;
+  competitive_context: string | null;
+  system_intelligence?: string[];
+  manager_directives?: string[];
+  // Backward compat with old saved briefs
+  suggested_next_steps?: string[];
+  team_intelligence?: string[];
+  suggested_resources?: Array<{ title: string; type: string; why: string }>;
+  [key: string]: any;
 };
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ── Collapsible Section ──
 
@@ -277,6 +286,7 @@ export function DealDetailClient({
   const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
   const [briefCopied, setBriefCopied] = useState(false);
   const [briefSaved, setBriefSaved] = useState(false);
+  const [contextExpanded, setContextExpanded] = useState(false);
   const [prepContext, setPrepContext] = useState("");
   const [prepContextHighlight, setPrepContextHighlight] = useState(-1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
@@ -562,8 +572,50 @@ export function DealDetailClient({
 
   async function copyBrief() {
     if (!callBrief) return;
-    const text = `CALL BRIEF — ${deal.companyName}\n\n${callBrief.headline}\n\nTalking Points:\n${callBrief.talking_points.map((tp, i) => `${i + 1}. ${tp.topic}: ${tp.approach}`).join("\n")}\n\nQuestions:\n${callBrief.questions_to_ask.map((q, i) => `${i + 1}. ${q.question}`).join("\n")}`;
-    await navigator.clipboard.writeText(text).catch(() => {});
+    const sections: string[] = [];
+    sections.push(`CALL BRIEF — ${deal.companyName}`);
+    sections.push(callBrief.headline);
+
+    const plays = callBrief.proven_plays || [];
+    if (plays.length > 0) {
+      sections.push(`\nPROVEN PLAYS\n${plays.map((p: { name: string }) => `📋 ${p.name}`).join("\n")}`);
+    }
+
+    const tps = callBrief.talking_points || [];
+    if (tps.length > 0) {
+      sections.push(`\nTALKING POINTS\n${tps.map((tp: { topic: string; approach: string }, i: number) => `${i + 1}. ${tp.topic}: ${tp.approach}`).join("\n")}`);
+    }
+
+    const qs = callBrief.questions_to_ask || [];
+    if (qs.length > 0) {
+      sections.push(`\nQUESTIONS TO ASK\n${qs.map((q: { question: string; meddpicc_gap?: string | null }, i: number) => `${i + 1}. ${q.question}${q.meddpicc_gap ? ` → ${q.meddpicc_gap}` : ""}`).join("\n")}`);
+    }
+
+    if (callBrief.deal_fitness_insights) {
+      const fi = callBrief.deal_fitness_insights;
+      let fitnessText = `\nDEAL FITNESS\n${fi.summary || ""}`;
+      const gaps = fi.gaps || [];
+      if (gaps.length > 0) {
+        fitnessText += `\n${gaps.map((g: { event: string; coaching: string; matched_play?: { name: string; evidence: string } | null }) => `⚠ ${g.event} — ${g.coaching}${g.matched_play ? `\n  ✦ Proven Play: ${g.matched_play.name} — ${g.matched_play.evidence}` : ""}`).join("\n")}`;
+      }
+      const commits = fi.pending_commitments || [];
+      if (commits.length > 0) {
+        fitnessText += `\n\nPending Commitments:\n${commits.map((c: { promise: string; promised_by: string; suggested_follow_up: string }) => `• "${c.promise}" — ${c.promised_by}. Follow up: ${c.suggested_follow_up}`).join("\n")}`;
+      }
+      sections.push(fitnessText);
+    }
+
+    const risks = callBrief.risks_and_landmines || [];
+    if (risks.length > 0) {
+      sections.push(`\nRISKS\n${risks.map((r: { risk: string; mitigation: string }) => `⚠ ${r.risk} — ${r.mitigation}`).join("\n")}`);
+    }
+
+    const nextSteps = callBrief.next_steps || callBrief.suggested_next_steps || [];
+    if (nextSteps.length > 0) {
+      sections.push(`\nNEXT STEPS\n${nextSteps.map((s: string) => `✓ ${s}`).join("\n")}`);
+    }
+
+    await navigator.clipboard.writeText(sections.join("\n\n")).catch(() => {});
     setBriefCopied(true);
     setTimeout(() => setBriefCopied(false), 2000);
   }
@@ -1091,86 +1143,14 @@ export function DealDetailClient({
             </div>
           )}
 
+          {/* Two-column grid: Talking Points (left) + Questions to Ask (right) */}
           <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left column */}
+            {/* Left column — Talking Points */}
             <div className="space-y-4">
-              {/* Deal Snapshot */}
-              <BriefSection title="Deal Snapshot">
-                <div className="flex flex-wrap gap-2 mt-1">
-                  <span className="text-[13px]" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.stage}</span>
-                  <span className="text-[13px] font-semibold" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.value}</span>
-                  <span className="text-[13px]" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.days_in_stage}</span>
-                  <span
-                    className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                    style={{
-                      background: callBrief.deal_snapshot.health === "on_track" ? "rgba(45,138,78,0.1)" : callBrief.deal_snapshot.health === "at_risk" ? "rgba(212,168,67,0.1)" : "rgba(199,75,59,0.1)",
-                      color: callBrief.deal_snapshot.health === "on_track" ? "#2D8A4E" : callBrief.deal_snapshot.health === "at_risk" ? "#D4A843" : "#C74B3B",
-                    }}
-                  >
-                    {callBrief.deal_snapshot.health.replace("_", " ")}
-                  </span>
-                </div>
-                <p className="text-[12px] mt-1" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.health_reason}</p>
-              </BriefSection>
-
-              {/* Stakeholders */}
-              {callBrief.stakeholders_in_play.length > 0 && (
-                <BriefSection title="Stakeholders">
-                  <div className="space-y-2 mt-1">
-                    {callBrief.stakeholders_in_play.map((s, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <div
-                          className="h-6 w-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold"
-                          style={{
-                            background: s.engagement === "hot" ? "rgba(224,122,95,0.12)" : s.engagement === "warm" ? "rgba(212,168,67,0.12)" : "rgba(107,107,107,0.1)",
-                            color: s.engagement === "hot" ? "#E07A5F" : s.engagement === "warm" ? "#D4A843" : "#6B6B6B",
-                          }}
-                        >
-                          {s.name.split(" ").map((n: string) => n[0]).join("")}
-                        </div>
-                        <div>
-                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
-                            {s.name} <span className="font-normal" style={{ color: "#8A8078" }}>· {s.role}</span>
-                          </p>
-                          <p className="text-[12px]" style={{ color: "#8A8078" }}>{s.title}</p>
-                          {s.notes && <p className="text-[12px] mt-0.5" style={{ color: "#6B6B6B" }}>{s.notes}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </BriefSection>
-              )}
-
-              {/* Team Intelligence */}
-              {callBrief.team_intelligence.length > 0 && (
-                <BriefSection title="💡 Team Intelligence">
-                  <div className="space-y-1.5 mt-1">
-                    {callBrief.team_intelligence.map((intel, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span style={{ color: "#E07A5F" }}>·</span>
-                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{intel}</p>
-                      </div>
-                    ))}
-                  </div>
-                </BriefSection>
-              )}
-
-              {/* Competitive */}
-              {callBrief.competitive_context && (
-                <div className="rounded-lg p-3" style={{ background: "rgba(199,75,59,0.05)", border: "1px solid rgba(199,75,59,0.15)" }}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: "#C74B3B" }}>Competitive</p>
-                  <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{callBrief.competitive_context}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Right column */}
-            <div className="space-y-4">
-              {/* Talking Points */}
-              {callBrief.talking_points.length > 0 && (
+              {callBrief.talking_points?.length > 0 && (
                 <BriefSection title="Talking Points">
                   <div className="space-y-2.5 mt-1">
-                    {callBrief.talking_points.map((tp, i) => (
+                    {callBrief.talking_points.map((tp: { topic: string; approach: string }, i: number) => (
                       <div key={i} className="flex gap-2.5">
                         <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
                         <div>
@@ -1182,16 +1162,17 @@ export function DealDetailClient({
                   </div>
                 </BriefSection>
               )}
-
-              {/* Questions */}
-              {callBrief.questions_to_ask.length > 0 && (
+            </div>
+            {/* Right column — Questions to Ask */}
+            <div className="space-y-4">
+              {callBrief.questions_to_ask?.length > 0 && (
                 <BriefSection title="Questions to Ask">
                   <div className="space-y-2.5 mt-1">
-                    {callBrief.questions_to_ask.map((q, i) => (
+                    {callBrief.questions_to_ask.map((q: { question: string; meddpicc_gap?: string | null }, i: number) => (
                       <div key={i} className="flex gap-2.5">
                         <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
                         <div>
-                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>"{q.question}"</p>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{q.question}&rdquo;</p>
                           {q.meddpicc_gap && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.1)", color: "#0C7489" }}>
                               → {q.meddpicc_gap}
@@ -1203,25 +1184,10 @@ export function DealDetailClient({
                   </div>
                 </BriefSection>
               )}
-
-              {/* Risks */}
-              {callBrief.risks_and_landmines.length > 0 && (
-                <BriefSection title="⚠ Risks">
-                  <div className="space-y-2 mt-1">
-                    {callBrief.risks_and_landmines.map((r, i) => (
-                      <div key={i} className="rounded-lg p-3" style={{ background: "rgba(212,168,67,0.06)", border: "1px solid rgba(212,168,67,0.2)" }}>
-                        <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{r.risk}</p>
-                        <p className="text-[12px] mt-0.5" style={{ color: "#8A8078" }}>{r.mitigation}</p>
-                      </div>
-                    ))}
-                  </div>
-                </BriefSection>
-              )}
-
             </div>
           </div>
 
-          {/* Full-width sections below the two-column grid */}
+          {/* Full-width sections below the grid */}
           <div className="px-5 pb-4 space-y-4">
             {/* Deal Fitness Insights */}
             {callBrief.deal_fitness_insights && (
@@ -1232,11 +1198,23 @@ export function DealDetailClient({
                   <div className="mb-2">
                     <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Buyer Behavior Gaps</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {callBrief.deal_fitness_insights.gaps.map((gap, i) => (
+                      {callBrief.deal_fitness_insights.gaps.map((gap: { event: string; coaching: string; fit_category?: string; matched_play?: { name: string; evidence: string } | null }, i: number) => (
                         <div key={i} className="rounded-lg p-3" style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)", border: "1px solid rgba(0,0,0,0.06)", borderLeftWidth: "3px", borderLeftColor: "#E07A5F" }}>
                           <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{gap.event}</p>
                           <p className="text-[12px] mt-0.5" style={{ color: "#3D3833" }}>{gap.coaching}</p>
-                          <p className="text-[11px] mt-0.5" style={{ color: "#8A8078" }}>{gap.relevance}</p>
+                          {gap.matched_play && (
+                            <div className="mt-1.5 flex items-start gap-1.5" style={{ paddingLeft: 8 }}>
+                              <span style={{ color: "#E07A5F", fontSize: 11 }}>✦</span>
+                              <div>
+                                <p className="text-[11px] font-semibold" style={{ color: "#E07A5F" }}>
+                                  Proven Play: {gap.matched_play.name}
+                                </p>
+                                <p className="text-[11px]" style={{ color: "#8A8078" }}>
+                                  {gap.matched_play.evidence}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1247,7 +1225,7 @@ export function DealDetailClient({
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Pending Buyer Commitments</p>
                     <div className="space-y-1.5">
-                      {callBrief.deal_fitness_insights.pending_commitments.map((c, i) => (
+                      {callBrief.deal_fitness_insights.pending_commitments.map((c: { promise: string; promised_by: string; suggested_follow_up: string }, i: number) => (
                         <div key={i} className="rounded-lg p-2.5" style={{ background: "#FAF9F6", border: "1px solid rgba(0,0,0,0.06)" }}>
                           <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{c.promise}&rdquo;</p>
                           <p className="text-[11px]" style={{ color: "#8A8078" }}>{c.promised_by}</p>
@@ -1257,20 +1235,34 @@ export function DealDetailClient({
                     </div>
                   </div>
                 )}
+
+                {(callBrief.deal_fitness_insights.active_experiments || []).length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Active Experiments</p>
+                    <div className="space-y-1.5">
+                      {(callBrief.deal_fitness_insights.active_experiments || []).map((exp: { name: string; application: string }, i: number) => (
+                        <div key={i} className="rounded-lg p-2.5 flex items-start gap-2" style={{ background: "rgba(224,122,95,0.04)", border: "1px dashed rgba(224,122,95,0.3)" }}>
+                          <span style={{ color: "#E07A5F", fontSize: 12 }}>✦</span>
+                          <div>
+                            <p className="text-[12.5px] font-medium" style={{ color: "#3D3833" }}>{exp.name}</p>
+                            <p className="text-[11px]" style={{ color: "#8A8078" }}>{exp.application}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </BriefSection>
             )}
 
-            {/* Suggested Resources */}
-            {callBrief.suggested_resources && callBrief.suggested_resources.length > 0 && (
-              <BriefSection title="Suggested Resources">
+            {/* Risks */}
+            {callBrief.risks_and_landmines?.length > 0 && (
+              <BriefSection title="⚠ Risks">
                 <div className="space-y-2 mt-1">
-                  {callBrief.suggested_resources.map((r, i) => (
-                    <div key={i} className="flex gap-2.5 items-start">
-                      <FileText className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#0C7489" }} />
-                      <div>
-                        <p className="text-[12.5px] font-medium" style={{ color: "#0C7489" }}>{r.title}</p>
-                        <p className="text-[11px]" style={{ color: "#8A8078" }}>{r.why}</p>
-                      </div>
+                  {callBrief.risks_and_landmines.map((r: { risk: string; mitigation: string }, i: number) => (
+                    <div key={i} className="rounded-lg p-3" style={{ background: "rgba(212,168,67,0.06)", border: "1px solid rgba(212,168,67,0.2)" }}>
+                      <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{r.risk}</p>
+                      <p className="text-[12px] mt-0.5" style={{ color: "#8A8078" }}>{r.mitigation}</p>
                     </div>
                   ))}
                 </div>
@@ -1278,17 +1270,98 @@ export function DealDetailClient({
             )}
 
             {/* Next Steps */}
-            {callBrief.suggested_next_steps.length > 0 && (
-              <BriefSection title="Suggested Close">
-                <div className="space-y-1 mt-1">
-                  {callBrief.suggested_next_steps.map((step, i) => (
-                    <div key={i} className="flex gap-2">
-                      <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
-                      <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
+            {(() => {
+              const nextSteps = callBrief.next_steps || callBrief.suggested_next_steps || [];
+              return nextSteps.length > 0 ? (
+                <BriefSection title="Next Steps">
+                  <div className="space-y-1 mt-1">
+                    {nextSteps.map((step: string, i: number) => (
+                      <div key={i} className="flex gap-2">
+                        <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
+                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              ) : null;
+            })()}
+          </div>
+
+          {/* Collapsible Context */}
+          <div className="px-5 pb-2">
+            <button
+              onClick={() => setContextExpanded(!contextExpanded)}
+              className="flex items-center gap-2 w-full py-2 text-left"
+              style={{ color: "#8A8078" }}
+            >
+              <ChevronRight
+                className="h-3.5 w-3.5 transition-transform"
+                style={{ transform: contextExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+              />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">
+                Context
+              </span>
+            </button>
+
+            {contextExpanded && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 pb-3 animate-[fadeSlideUp_0.2s_ease]">
+                {/* Deal Snapshot */}
+                {callBrief.deal_snapshot && (
+                  <BriefSection title="Deal Snapshot">
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-[13px]" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.stage}</span>
+                      <span className="text-[13px] font-semibold" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.value}</span>
+                      <span className="text-[13px]" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.days_in_stage}</span>
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{
+                          background: callBrief.deal_snapshot.health === "on_track" ? "rgba(45,138,78,0.1)" : callBrief.deal_snapshot.health === "at_risk" ? "rgba(212,168,67,0.1)" : "rgba(199,75,59,0.1)",
+                          color: callBrief.deal_snapshot.health === "on_track" ? "#2D8A4E" : callBrief.deal_snapshot.health === "at_risk" ? "#D4A843" : "#C74B3B",
+                        }}
+                      >
+                        {callBrief.deal_snapshot.health?.replace("_", " ")}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </BriefSection>
+                    <p className="text-[12px] mt-1" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.health_reason}</p>
+                  </BriefSection>
+                )}
+
+                {/* Stakeholders */}
+                {callBrief.stakeholders_in_play?.length > 0 && (
+                  <BriefSection title="Stakeholders">
+                    <div className="space-y-2 mt-1">
+                      {callBrief.stakeholders_in_play.map((s: { name: string; title: string; role: string; engagement: string; notes?: string }, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div
+                            className="h-6 w-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold"
+                            style={{
+                              background: s.engagement === "hot" ? "rgba(224,122,95,0.12)" : s.engagement === "warm" ? "rgba(212,168,67,0.12)" : "rgba(107,107,107,0.1)",
+                              color: s.engagement === "hot" ? "#E07A5F" : s.engagement === "warm" ? "#D4A843" : "#6B6B6B",
+                            }}
+                          >
+                            {s.name.split(" ").map((n: string) => n[0]).join("")}
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+                              {s.name} <span className="font-normal" style={{ color: "#8A8078" }}>· {s.role}</span>
+                            </p>
+                            <p className="text-[12px]" style={{ color: "#8A8078" }}>{s.title}</p>
+                            {s.notes && <p className="text-[12px] mt-0.5" style={{ color: "#6B6B6B" }}>{s.notes}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </BriefSection>
+                )}
+
+                {/* Competitive */}
+                {callBrief.competitive_context && (
+                  <div className="rounded-lg p-3" style={{ background: "rgba(199,75,59,0.05)", border: "1px solid rgba(199,75,59,0.15)" }}>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: "#C74B3B" }}>Competitive</p>
+                    <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{callBrief.competitive_context}</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
