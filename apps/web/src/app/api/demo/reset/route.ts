@@ -236,18 +236,8 @@ export async function POST() {
 // ── MEDDPICC Seed Reset ──────────────────────────────────────────────────────
 
 async function resetMeddpiccData() {
-  // Re-insert seed MEDDPICC for MedVista (Discovery — low confidence, early stage)
-  const [medvista] = await db
-    .select({ id: deals.id })
-    .from(deals)
-    .where(ilike(deals.name, '%MedVista%'))
-    .limit(1);
-  if (medvista) {
-    await db.execute(sql`
-      INSERT INTO meddpicc_fields (deal_id, metrics, metrics_confidence, economic_buyer, economic_buyer_confidence, decision_criteria, decision_criteria_confidence, decision_process, decision_process_confidence, identify_pain, identify_pain_confidence, champion, champion_confidence, competition, competition_confidence)
-      VALUES (${medvista.id}, '$800K/month documentation costs, $2.1M compliance exposure', 35, 'CFO — not yet engaged directly', 15, 'GDPR compliance, Epic EHR integration, clinical accuracy', 30, 'Unknown — early discovery', 10, 'Physicians spending 3+ hours/day on documentation, compliance risk from manual processes', 55, 'Henrik Larsson — IT Director, personally driving AI evaluation', 40, 'Microsoft DAX Copilot in early evaluation — no formal RFP yet', 45)
-    `);
-  }
+  // MedVista intentionally starts with empty MEDDPICC — the live demo transcript
+  // analysis is what fills it in. Do not re-seed MEDDPICC for MedVista here.
 
   // Re-insert seed MEDDPICC for NordicMed
   const [nordicmed] = await db

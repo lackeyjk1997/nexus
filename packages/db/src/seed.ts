@@ -238,7 +238,10 @@ async function seed() {
       });
 
       // MEDDPICC for deals beyond new_lead
-      if (deal.stage !== "new_lead") {
+      // MedVista intentionally starts with empty MEDDPICC — the live demo
+      // transcript analysis is what fills it in.
+      const isMedVista = entry.company.name.includes("MedVista");
+      if (deal.stage !== "new_lead" && !isMedVista) {
         const confidence = Math.min(deal.winProbability + 10, 100);
         await db.insert(schema.meddpiccFields).values({
           dealId,
