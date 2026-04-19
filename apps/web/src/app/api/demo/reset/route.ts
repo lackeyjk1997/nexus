@@ -4,8 +4,7 @@ import { sql, ilike, and, not } from "drizzle-orm";
 import { playbookIdeas, deals } from "@nexus/db";
 import { MEMBER_IDS, postDiscoveryEvidence, multiThreadedEvidence, twoDiscoEvidence, cisoEngagementEvidence, complianceDiscoveryEvidence, securityDocEvidence } from "@nexus/db/seed-data/playbook-evidence";
 import { getBaseExperiments } from "@nexus/db/seed-data/playbook-experiments";
-import { createClient } from "rivetkit/client";
-import type { Registry } from "@/actors/registry";
+import { nukeAllActors } from "@/lib/rivet-actor-cleanup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -166,54 +165,22 @@ export async function POST() {
     // 12. Mark all notifications as unread
     await db.execute(sql`UPDATE notifications SET is_read = false`);
 
-    // ── Phase 3: Destroy ALL Rivet actors ──────────────────────────────
+    // ── Phase 3: Destroy ALL Rivet actors via Engine REST API ──────────
+    // Uses the engine-level DELETE /actors/{id} so it works on crashed /
+    // orphaned actors too (the in-actor `destroyActor` action requires the
+    // actor to wake successfully, which zombies can't do).
     console.log('[Reset] Phase 3: Destroying all Rivet actors...');
 
     try {
-      const rivetEndpoint = process.env.RIVET_ENDPOINT || `${process.env.NEXT_PUBLIC_SITE_URL || `http://localhost:${process.env.PORT || 3000}`}/api/rivet`;
-      const rivetClient = createClient<Registry>(rivetEndpoint);
-
-      // Get ALL deal IDs from the database (not just a hardcoded list)
-      const allDeals = await db
-        .select({ id: deals.id })
-        .from(deals);
-      const dealIds = allDeals.map(d => d.id);
-
-      // Destroy deal agents for ALL deals
-      for (const dealId of dealIds) {
-        try {
-          const agent = rivetClient.dealAgent.getOrCreate([dealId]);
-          await agent.destroyActor();
-          console.log(`[Reset] Destroyed dealAgent: ${dealId}`);
-        } catch (e) {
-          console.log(`[Reset] dealAgent destroy failed for ${dealId}: ${(e as Error).message}`);
-        }
-      }
-
-      // Destroy transcript pipelines for ALL deals
-      for (const dealId of dealIds) {
-        try {
-          const pipeline = rivetClient.transcriptPipeline.getOrCreate([dealId]);
-          await pipeline.destroyActor();
-          console.log(`[Reset] Destroyed transcriptPipeline: ${dealId}`);
-        } catch (e) {
-          console.log(`[Reset] transcriptPipeline destroy failed for ${dealId}: ${(e as Error).message}`);
-        }
-      }
-
-      // Destroy intelligence coordinator (single actor, key: ["default"])
-      try {
-        const coordinator = rivetClient.intelligenceCoordinator.getOrCreate(["default"]);
-        await coordinator.destroyActor();
-        console.log('[Reset] Destroyed intelligenceCoordinator');
-      } catch (e) {
-        console.log(`[Reset] intelligenceCoordinator destroy failed: ${(e as Error).message}`);
-      }
-
-      console.log('[Reset] Phase 3 complete — all actors destroyed');
+      const summary = await nukeAllActors();
+      console.log(
+        `[Reset] Phase 3 complete — listed=${summary.totalListed} ` +
+        `destroyed=${summary.totalDestroyed} failed=${summary.totalFailed}`
+      );
     } catch (e) {
       console.error("Failed to destroy Rivet actors during demo reset:", e);
-      // Non-fatal — actors will be recreated fresh
+      // Non-fatal — a reset that skips Rivet cleanup is still better than
+      // one that crashes. New actors will spawn fresh on next use.
     }
 
     return NextResponse.json({

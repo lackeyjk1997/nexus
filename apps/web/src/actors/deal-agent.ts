@@ -118,7 +118,13 @@ export const dealAgent = actor({
         details?: string;
       }
     ) => {
-      c.broadcast("workflowProgress", data);
+      try {
+        c.broadcast("workflowProgress", data);
+      } catch (e) {
+        // Never let a broadcast failure crash the actor (no subscribers,
+        // serialization edge case, etc.) — drop the event silently.
+        console.log("[DealAgent] workflowProgress broadcast failed (non-fatal):", (e as Error).message);
+      }
     },
 
     // Allow destruction from reset
