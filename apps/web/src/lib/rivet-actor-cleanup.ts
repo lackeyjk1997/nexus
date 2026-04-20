@@ -100,13 +100,24 @@ function buildUrl(cfg: EngineConfig, path: string, extraQuery?: Record<string, s
   return url.toString();
 }
 
+/**
+ * Per-request timeout for engine API calls. The engine occasionally hangs
+ * on broken actors (e.g. unreachable runners, stuck destroy operations). A
+ * 5-second timeout means a single bad actor can't block the whole reset.
+ */
+const REQUEST_TIMEOUT_MS = 5_000;
+
 /** List all actors of a given type from the Rivet engine. */
 export async function listActorsByName(
   name: ActorName,
   cfg: EngineConfig = resolveEngineConfig()
 ): Promise<RivetActorSummary[]> {
   const url = buildUrl(cfg, "/actors", { name });
-  const res = await fetch(url, { method: "GET", headers: buildHeaders(cfg) });
+  const res = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(cfg),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`listActors(${name}) failed: ${res.status} ${body.slice(0, 200)}`);
@@ -137,12 +148,23 @@ export async function destroyActorById(
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   const url = buildUrl(cfg, `/actors/${encodeURIComponent(actorId)}`);
   try {
-    const res = await fetch(url, { method: "DELETE", headers: buildHeaders(cfg) });
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: buildHeaders(cfg),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (res.ok) return { ok: true, status: res.status };
     const body = await res.text().catch(() => "");
     return { ok: false, status: res.status, error: body.slice(0, 300) };
   } catch (e) {
-    return { ok: false, status: 0, error: (e as Error).message };
+    // AbortSignal.timeout throws DOMException("...", "TimeoutError") on timeout.
+    const err = e as Error;
+    const isTimeout = err.name === "TimeoutError" || err.name === "AbortError";
+    return {
+      ok: false,
+      status: 0,
+      error: isTimeout ? `timeout after ${REQUEST_TIMEOUT_MS}ms` : err.message,
+    };
   }
 }
 

@@ -14,9 +14,12 @@ export const MEMBER_IDS = {
   ELENA: "a9b8cf2c-ec9b-4abc-97f0-c7d6f6523298",
 } as const;
 
-// Deal IDs
+// Deal IDs.
+// MedVista's UUID can be rotated via the MEDVISTA_DEAL_ID env var so the
+// rotate-medvista script can swap in a fresh UUID without code changes.
+// Old value kept as fallback so existing demos work without the env var set.
 export const DEAL_IDS = {
-  MEDVISTA: "c0069b95-02dc-46db-bd04-aac69099ecfb",
+  MEDVISTA: process.env.MEDVISTA_DEAL_ID || "c0069b95-02dc-46db-bd04-aac69099ecfb",
   NORDICMED: "3848a398-1850-4a8c-a44e-46aec01b6a24",
   HEALTHFIRST: "f4fee3bc-b65c-49e8-a34f-0fab8b8724c9",
   ATLAS: "0d0f187f-ee15-4baf-8ff5-08f88341eb1c",

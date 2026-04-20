@@ -16,8 +16,10 @@ const JAMES = "0f98cede-0aab-44aa-964d-06d2c634019c";
 const ELENA = "a9b8cf2c-ec9b-4abc-97f0-c7d6f6523298";
 const MARCUS = "fcbfac19-88eb-4a34-8582-b1cdfa03055b";
 
-// Deal IDs for evidence
-const MEDVISTA_DEAL = "c0069b95-02dc-46db-bd04-aac69099ecfb";
+// Deal IDs for evidence.
+// MedVista's UUID can be rotated via the MEDVISTA_DEAL_ID env var (see
+// apps/web/scripts/rotate-medvista-uuid.ts). Old value kept as fallback.
+const MEDVISTA_DEAL = process.env.MEDVISTA_DEAL_ID || "c0069b95-02dc-46db-bd04-aac69099ecfb";
 const NORDICMED_DEAL = "3848a398-1850-4a8c-a44e-46aec01b6a24";
 const HEALTHFIRST_DEAL = "f4fee3bc-b65c-49e8-a34f-0fab8b8724c9";
 const ATLAS_DEAL = "0d0f187f-ee15-4baf-8ff5-08f88341eb1c";
