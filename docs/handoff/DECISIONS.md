@@ -112,8 +112,19 @@ The product's voice IS this pattern.
 - Agent interventions (health checks, risk flags)
 - 14-person demo org + support personas
 - Vertical-specific demo data (Healthcare, FinServ, Tech, Gov, Media)
-- Brand palette + Framework 21 conversational UI contract
+- Framework 21 conversational UI contract (interaction pattern, NOT color palette — see 3.1)
 - Three-act demo narrative
+
+### 1.10 Candidate Dead-Code Routes (LOCKED)
+
+Per Prompt 3 findings, the following routes have zero grep-findable callers in the codebase:
+- `/api/activities`
+- `/api/team-members`
+- `/api/observation-routing`
+- `/api/observations/clusters`
+- `/api/demo/prep-deal`
+
+Do not rebuild these in v2 unless a consumer is identified. If a consumer turns up during the critique or data-flow sessions, add it back.
 
 ---
 
@@ -168,6 +179,8 @@ Real column names (correcting CLAUDE.md's approximations):
 - `observations.ai_classification` (not `classification`)
 - `observations.linked_deal_ids uuid[]` (not `deal_id`)
 
+API routes use camelCase equivalents: `observerId`, `rawInput`, `aiClassification`, `linkedDealIds[]`.
+
 Any prompt or documentation going forward uses these real names.
 
 ### 2.5 Surfacing / "Not Overbearing" UX (OPEN — to resolve after Prompt 8)
@@ -214,9 +227,74 @@ Add **Prompt 7.5 — Context Assembly Audit** to the handoff sequence. Runs afte
 
 This is where demo quality lives. Architecture is plumbing; intelligence is prompts + context.
 
+### 2.9 Timeout / maxDuration Policy (LOCKED)
+
+Per Prompt 3 findings: 26 of 41 current routes rely on Vercel's default 10-second timeout. Any route that directly or transitively calls Claude will fail under real load.
+
+**Rule for v2:** Every route declares `maxDuration` explicitly. No route ships on the default. Routes grouped by role:
+- CRUD / read-only routes: 10s cap (fast fail preferred)
+- Routes calling Claude synchronously: minimum 60s, typically 300s
+- Routes that enqueue background work: 10s cap (enqueue is fast)
+- Routes that stream: use streaming with no hard cap instead of large maxDuration
+
+### 2.10 Single Write-Path per Domain Concept (LOCKED)
+
+Per Prompt 3 findings: `observations` has 6 write-paths with no service boundary — every route writes raw. `/api/deals/stage` writes full audit; `/api/deals/[id]/update` silently skips it. These asymmetries create silent audit gaps.
+
+**Rule for v2:**
+- For any domain concept with 2+ write sites (observations, deals, stage changes, activities), introduce a service function. All routes call the service; routes do not insert directly.
+- The service is the only code that writes the canonical audit trail (history, activity, linked observations).
+- No raw inserts from route handlers to tables with any downstream observer.
+
+### 2.11 No Trust Flags on User Input (LOCKED)
+
+Per Prompt 3 findings: `/api/observations` with `preClassified: true` bypasses the classifier. In a demo this is fine; in any multi-tenant context it is a critical vulnerability.
+
+**Rule for v2:** No client-provided flags control server-side trust decisions. The server decides what runs classification, what bypasses it, what's pre-verified. Internal-only code paths (e.g., the pipeline calling the observation service directly) bypass classification by invoking a different service method, not by setting a flag.
+
+### 2.12 Server-to-Server Work Uses Function Calls, Not HTTP (LOCKED)
+
+Per Prompt 3 findings: pipeline actor, MCP, call-prep, analyze/link all use `fetch()` to hit internal Next.js routes. Every call pays serverless cold-start + invocation latency.
+
+**Rule for v2:**
+- HTTP is for client-server boundaries only.
+- Server code that needs work from another server component calls it as a function, not an HTTP request.
+- Background jobs invoke services directly. The pipeline does not `fetch('/api/...')` to talk to itself.
+- Shared logic (classify observation, score MEDDPICC, draft email) lives in a `services/` layer that both routes and jobs import.
+
 ---
 
-## Part 3 — Remaining Conversations Required
+## Part 3 — Design System
+
+### 3.1 Visual Rebrand — Anthropic → OpenAI Aesthetic (LOCKED)
+
+**Context:** Current Nexus uses an Anthropic-flavored palette (sand `#E8DDD3`, coral `#E07A5F`, page bg `#FDFAF7`, DM Sans typography). Rebuild needs to move away from Anthropic brand cues given the build is now for OpenAI.
+
+**Approach:**
+- Design work happens in a **separate Claude chat**, not in Codex. Claude handles design; Codex handles build.
+- Aesthetic direction: "in the spirit of" OpenAI's visual language (calm, minimal, confident, restrained) without literally cloning ChatGPT's palette. Interviewer should recognize kinship, not photocopy.
+- Do NOT copy `#10A37F` (OpenAI's literal green). Use a distinct accent color that feels like it could belong in their ecosystem.
+
+**Deliverable:** `docs/handoff/DESIGN-SYSTEM.md` produced in a dedicated Claude chat, containing:
+- Color palette (primary, accent, text, backgrounds, borders, states)
+- Typography scale (font family, sizes, weights)
+- Component primitives (buttons, cards, inputs, chips) with all 5 visual states per Framework 6
+- Spacing and radius system
+- Shadow and elevation
+- Any patterns needed to re-skin Framework 21's conversational UI components
+
+**Timing:** Produce this between Codex Phase 1 (foundation) and Codex Phase 2 (UI work starts). Hand to Codex as input for Phase 2+.
+
+**What transfers vs. what changes:**
+- **Preserve:** Framework 21 interaction patterns — numbered chip cards, inline responses, sparkle header give-backs, research-interview framing. These are product IP.
+- **Change:** All color values. Typography family if needed. Component styling details. Brand voice if any.
+
+**Codex instruction when design system is ready:**
+> "Read `DESIGN-SYSTEM.md`. Apply this palette, typography, and component styling throughout. The interaction patterns from Framework 21 (in the handoff package) are preserved — only the visual skin changes."
+
+---
+
+## Part 4 — Remaining Conversations Required
 
 Before the future-state vision doc and rebuild plan can be written, these conversations must happen:
 
@@ -226,9 +304,11 @@ Before the future-state vision doc and rebuild plan can be written, these conver
 
 Resolve these in the planning chat after Prompt 8 completes, before writing Prompts 8.5, 8.75, 9, and 10.
 
+The design system (3.1) is produced in a separate chat on its own timeline — does not block the rebuild plan.
+
 ---
 
-## Part 4 — Guardrails for Codex
+## Part 5 — Guardrails for Codex
 
 When the rebuild plan hands off to Codex, enforce these non-negotiables:
 
@@ -242,3 +322,8 @@ When the rebuild plan hands off to Codex, enforce these non-negotiables:
 8. "Nexus Intelligence" is the voice. Never frame AI outputs as coming from a person (e.g., "Marcus is asking...").
 9. Inline rendering for all AI responses. No toasts for meaningful content.
 10. Cost is not a constraint in this phase. Build the heavy version. Optimize later.
+11. When `DESIGN-SYSTEM.md` is provided, treat it as authoritative for all visual decisions. Framework 21 interaction patterns remain; only visual skin changes.
+12. Every route declares `maxDuration` explicitly. No route ships on Vercel's default (per 2.9).
+13. Any domain concept with 2+ write sites goes through a service function. Routes never insert directly into tables with downstream observers (per 2.10).
+14. No client-controlled trust flags. Server decides what's verified, what runs classification, what's internal (per 2.11).
+15. Server-to-server work is a function call, not HTTP. Internal `fetch()` to your own routes is banned (per 2.12).
