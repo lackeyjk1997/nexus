@@ -57,15 +57,15 @@ Applies to: close-lost capture, observation capture, call prep feedback, any fut
 - Active experiments surface in call prep for assigned reps
 
 **Build (missing or broken):**
-- **POST /api/experiments route** — Prompt 7 finding: the PlaybookClient has proposal UI but no backend endpoint. v2 ships this as a first-class route through a service function (per 2.10).
+- **POST /api/experiments route** — Prompt 7 finding. v2 ships this through a service function (per 2.10).
 - **Attribution** on transcripts and emails (open-loop today).
 - **Applicability gating** (see 2.21).
 
 ### 1.4 Three Categories of Experiments (LOCKED)
 
-1. **In-conversation behaviors.** Attribution at transcript processing time.
-2. **Out-of-conversation actions.** Attribution at email/activity event time.
-3. **Implicit/approach experiments.** Rubric-based scoring with visible confidence.
+1. In-conversation behaviors. Attribution at transcript processing time.
+2. Out-of-conversation actions. Attribution at email/activity event time.
+3. Implicit/approach experiments. Rubric-based scoring with visible confidence.
 
 All three carry explicit applicability rules (see 2.21).
 
@@ -132,27 +132,25 @@ Zero grep-findable callers per Prompt 3:
 
 Per Prompt 6 findings, cut from v2: `observations-client.tsx`, `/agent-admin`, `/team`. v2 nav is a declarative registry; commented-out entries not allowed.
 
-### 1.13 Deal Creation as a First-Class Feature (LOCKED — from Prompt 7 findings)
+### 1.13 Deal Creation as a First-Class Feature (LOCKED)
 
 Current Nexus has no `POST /api/deals` route. Every deal comes from seed scripts.
 
-**v2 requirements:**
-- Deal creation is a first-class UI surface in Nexus (not a CRM page).
-- When a user creates a deal in Nexus, the adapter layer creates it in HubSpot AND initializes the Nexus intelligence shell (the first few `deal_events` — `DealCreated`, `StageSet`, etc.).
-- Create flow asks enough up-front to seed useful intelligence: name, amount, stage, close date, primary contact, company. Everything else can be filled in later.
-- MEDDPICC edit UI also ships in v2 — current Nexus has none. Users can mark M/E/D/D/P/I/C/C dimensions as the deal progresses.
+v2:
+- Deal creation is a first-class UI surface in Nexus
+- Adapter creates deal in HubSpot AND initializes Nexus intelligence shell (`DealCreated`, `StageSet` events)
+- Create flow captures: name, amount, stage, close date, primary contact, company
+- MEDDPICC edit UI ships in v2
 
-This changes Codex's Phase 2 (Core CRUD) scope — deal creation and MEDDPICC edit are Day-1 features, not future work.
+This changes Codex's Phase 2 scope.
 
-### 1.14 AgentIntervention Must Be Data-Driven (LOCKED — from Prompt 7 findings)
+### 1.14 AgentIntervention Must Be Data-Driven (LOCKED)
 
-Current `AgentIntervention` component hardcodes `deal.name.includes("nordicmed")` as its trigger. This is the most brittle demo scaffolding in current Nexus.
-
-**v2 requirements:**
-- No name-based demo scaffolding in production code.
-- Intervention triggers are structured rules (applicability metadata per 2.21).
-- Interventions surface via the same `DealIntelligence.getApplicable*()` pipeline as everything else.
-- Demo data is shaped so that real triggers fire for real reasons — if NordicMed is supposed to show an intervention, its deal events make it applicable (e.g., champion silence event + overdue close date event).
+Current `AgentIntervention` hardcodes `deal.name.includes("nordicmed")`. v2:
+- No name-based demo scaffolding in production code
+- Intervention triggers are structured rules (applicability metadata per 2.21)
+- Interventions surface via `DealIntelligence.getApplicable*()` pipeline
+- Demo data is shaped so real triggers fire for real reasons
 
 ---
 
@@ -182,7 +180,9 @@ Current `AgentIntervention` component hardcodes `deal.name.includes("nordicmed")
 
 ### 2.6 Infrastructure / Long-Running Workflows (RESOLVED)
 
-Rivet is REMOVED. New stack: Postgres `jobs` table + Next.js worker + `pg_cron` + Supabase Realtime.
+Rivet is REMOVED.
+
+New stack: Postgres `jobs` table + Next.js worker + `pg_cron` + Supabase Realtime.
 
 ### 2.7 Prompt Preservation (LOCKED)
 
@@ -190,7 +190,7 @@ Prompts preserved verbatim except those rewritten in `04C-PROMPT-REWRITES.md`.
 
 ### 2.8 Context Assembly Audit — New Prompt (LOCKED)
 
-Prompt 7.5 runs after Prompt 7.
+Prompt 7.5 ran after Prompt 7. Output: `07A-CONTEXT-AUDIT.md`.
 
 ### 2.9 Timeout / maxDuration Policy (LOCKED)
 
@@ -212,13 +212,13 @@ Shared logic lives in `services/`.
 
 One Claude client wrapper. Structured outputs via tool use. Explicit per-call temperature. One formatter module. Single signal-type enum. One transcript preprocessing pass. One email-drafting service. Prompts as `.md` files.
 
-### 2.14 Coordinator Synthesis Prompt Anomaly (OPEN)
+### 2.14 Coordinator Synthesis Prompt Anomaly (RESOLVED in 4.7)
 
-Prompt #25 uses `system: ""`. Flagged for Prompt 4.5a/b.
+Resolved via rewrite #4 (Coordinator Synthesis) in 04C-PROMPT-REWRITES.md — 937-word system prompt replacing the empty one.
 
-### 2.15 Prompt Analysis Phase (LOCKED)
+### 2.15 Prompt Analysis Phase (COMPLETED)
 
-Four sessions after Prompt 7.5: 4.5a, 4.5b, 4.6, 4.7.
+Four sessions after Prompt 7.5: 4.5a, 4.5b, 4.6, 4.7. Outputs in `04A-PROMPT-AUDIT.md`, `04B-PROMPT-DEPENDENCIES.md`, `04C-PROMPT-REWRITES.md`.
 
 ### 2.16 Intelligence Service Architecture (LOCKED)
 
@@ -228,11 +228,34 @@ Event-sourced state in `deal_events` (append-only). Snapshots in `deal_snapshots
 
 Scheduled (pg_cron) + on-demand (called by call-prep and close-lost). Same code path. Call prep MUST query the coordinator.
 
-**Prompt 7 follow-up:** Current Nexus coordinator writes to `coordinator_patterns` but call-prep reads from `dealAgentStates.coordinatedIntel` (which is never written). In v2, `coordinator_patterns` is the authoritative table. Call prep queries it directly. The misalignment disappears because the two-table pattern disappears.
+`coordinator_patterns` is the authoritative table in v2. Call prep queries it directly. Current Nexus's dual-table misalignment disappears.
 
-### 2.18 CRM Strategy — HubSpot Hybrid (LOCKED)
+### 2.18 CRM Strategy — HubSpot Starter Customer Platform Hybrid (LOCKED, UPDATED)
 
-HubSpot = data backend nobody logs into. Nexus = the UI users experience. Adapter pattern mandatory.
+**Tier:** HubSpot **Starter Customer Platform** (paid), not Free.
+
+**Pricing committed:** ~$9-15/month per seat. One seat for Jeff.
+
+**Why Starter over Free:** Free tier caps custom properties at 10 total across the entire account. v2's 07B design calls for 38 custom properties across Deal/Contact/Company. On Free, 07C would have needed a property-consolidation pattern (packed JSON blobs) that adds CrmAdapter complexity and makes HubSpot's UI less useful. On Starter, all 38 properties ship as first-class HubSpot fields.
+
+**What stays identical to the Free-tier plan:**
+- API rate limits (100 requests/10s, 250,000 daily) are the SAME on Starter and Free. All caching, batching, and rate-budget work in 07B Section 4 and 07C Section 7 stands unchanged.
+- Webhook availability identical
+- Auth model identical (private app, scopes)
+- Pipeline/stage model identical
+- Sync architecture identical
+
+**What changes:**
+- 07C Section 1 (Free Tier Constraints): replace with Starter-tier constraints
+- 07C Section 3 (Custom Property Specifications): REMOVE any property consolidation. All 38 properties ship as individual HubSpot properties per their natural types.
+- 07C Section 8 (Setup Playbook): account creation step is Starter signup, not Free signup. Any "skip/consolidate because of Free limit" notes are removed.
+
+**Architecture invariants (unchanged):**
+- HubSpot = data backend nobody logs into
+- Nexus = the UI users experience
+- Adapter pattern mandatory (`CrmAdapter` interface, `HubSpotAdapter` implementation)
+- Read-through cache so Nexus continues demoing against cached data if HubSpot is unavailable
+- No HubSpot-specific code outside the adapter
 
 ### 2.19 Data Boundary (LOCKED)
 
@@ -241,16 +264,17 @@ HubSpot = data backend nobody logs into. Nexus = the UI users experience. Adapte
 **Split:** stakeholders (identity in HubSpot, engagement analysis in Nexus events).
 **Sync:** HubSpot → Nexus via webhooks + periodic sync. Nexus → HubSpot write-back only for AI custom properties.
 
-### 2.20 New Extraction Prompts for HubSpot Planning (LOCKED)
+### 2.20 New Extraction Prompts for HubSpot Planning (COMPLETED)
 
-- Prompt 7.6 — CRM Data Boundary Mapping
-- Prompt 7.7 — HubSpot Property and Integration Design
+- Prompt 7.6 — CRM Data Boundary Mapping (`07B-CRM-BOUNDARY.md`)
+- Prompt 7.7 — HubSpot Property and Integration Design (`07C-HUBSPOT-SETUP.md`)
+- **Addendum to 7.7:** Sections 1, 3, 8 must be updated after 2.18 tier change. See separate prompt.
 
 ### 2.21 Deal-Context Applicability Gating (LOCKED)
 
 Every surface passes three gates: stage applicability, temporal applicability, precondition applicability.
 
-Experiments (and patterns, flags) carry structured `applicability` JSONB. `DealIntelligence` service exposes `getApplicable*()` methods. Every surfacing path runs through the gate. Close-lost hypotheses verified against event stream.
+Structured `applicability` JSONB on experiments, patterns, flags. `DealIntelligence` exposes `getApplicable*()` methods. Every surfacing path runs through the gate. Close-lost hypotheses verified against event stream.
 
 ### 2.22 UI Architecture for v2 (LOCKED)
 
@@ -264,27 +288,13 @@ Experiments (and patterns, flags) carry structured `applicability` JSONB. `DealI
 
 Zero-importer components, redirect-only shells, "Coming Soon" placeholders do not ship in v2.
 
-### 2.24 Pipeline Simplification — No "Backward Compat" Steps (LOCKED — from Prompt 7 findings)
+### 2.24 Pipeline Simplification (LOCKED)
 
-Current transcript pipeline has 12 steps, including Step 9 which is "~15 no-op RPCs kept for backward compat." This is dead-code theater.
+No "backward compat" placeholder steps. Pipeline expressed as sequential job rows. Each step does real work. Target ~6-8 steps.
 
-**v2 requirements:**
-- Pipeline is expressed as sequential job rows (per 2.6 infrastructure).
-- Each step does real work or doesn't exist.
-- No "kept for backward compat" placeholder steps.
-- Target pipeline: target ~6-8 steps, each with a clear single responsibility (preprocess transcript → extract entities → detect signals → score MEDDPICC → append deal events → synthesize learnings → trigger downstream jobs). Final count falls out of design; the ceiling is "every step earns its keep."
+### 2.25 Cross-Flow Debt to Eliminate in v2 (LOCKED)
 
-### 2.25 Cross-Flow Debt to Eliminate in v2 (LOCKED — from Prompt 7 findings)
-
-Prompt 7's cross-flow debt section identified:
-
-1. **Activity-type inconsistency** — resolved by 2.10 (single write-path) and migrating `getEffectiveType()` away.
-2. **Four copies of fuzzy deal resolution** — consolidated into a single `CrmAdapter.resolveDeal(...)` method (per 2.18).
-3. **Config auto-mutation with no approval** — flag for Prompt 4.5/4.6 deep dive. In v2, any AI-driven config mutation is an event-sourced proposal, not a direct write. Humans approve or the system requires explicit autonomy grants.
-4. **Coordinator one-missing-write blocker** — eliminated by 2.17 redesign.
-5. **No deal creation UX** — addressed by 1.13.
-6. **Close-lost short of spec** — addressed by continuous pre-analysis in 1.1.
-7. **Brief Ready browser-dependent** — addressed by 2.6 (jobs run server-side, UI subscribes via Supabase Realtime; browser presence not required).
+Activity-type inconsistency, four copies of fuzzy deal resolution, config auto-mutation with no approval (AI-driven config mutations are now proposals, humans approve), coordinator one-missing-write blocker, no deal creation UX, close-lost short of spec, Brief Ready browser-dependent — all addressed by the decisions above.
 
 ---
 
@@ -300,9 +310,9 @@ Deliverable: `docs/handoff/DESIGN-SYSTEM.md`. Timing: between Codex Phase 1 and 
 
 **Mode 1 (upfront foundation):** `DESIGN-SYSTEM.md` with tokens, primitives, Framework 21 re-skinned.
 
-**Mode 2 (per-feature sessions):** Claude designs hero pages in full artifacts before Codex implements. Pages include: close-lost analysis, intelligence dashboard, call prep brief rendering, observation capture, deal detail, close-lost comparison views.
+**Mode 2 (per-feature sessions):** Claude designs hero pages as full artifacts before Codex implements. Pages: close-lost analysis, intelligence dashboard, call prep brief rendering, observation capture, deal detail.
 
-Handoff: Mode 1 output → `DESIGN-SYSTEM.md`. Mode 2 output → `docs/design/<page-name>.md` + artifact. Codex reads both, doesn't improvise.
+Handoff: Mode 1 → `DESIGN-SYSTEM.md`. Mode 2 → `docs/design/<page-name>.md` + artifact. Codex reads both, doesn't improvise.
 
 ---
 
@@ -323,13 +333,14 @@ Handoff: Mode 1 output → `DESIGN-SYSTEM.md`. Mode 2 output → `docs/design/<p
 - ✅ Prompt 5 — Rivet Actors
 - ✅ Prompt 6 — UI Structure
 - ✅ Prompt 7 — Data Flows
-- ⏳ Prompt 7.5 — Context Assembly Audit (next)
-- Prompt 4.5a — Prompt Quality Audit (prompts 1-13)
-- Prompt 4.5b — Prompt Quality Audit (prompts 14-25)
-- Prompt 4.6 — Prompt Dependency Graph
-- Prompt 4.7 — Prompt Rewrites + Principles
-- Prompt 7.6 — CRM Data Boundary Mapping
-- Prompt 7.7 — HubSpot Property and Integration Design
+- ✅ Prompt 7.5 — Context Assembly Audit
+- ✅ Prompt 4.5a — Prompt Quality Audit (prompts 1-13)
+- ✅ Prompt 4.5b — Prompt Quality Audit (prompts 14-25)
+- ✅ Prompt 4.6 — Prompt Dependency Graph
+- ✅ Prompt 4.7 — Prompt Rewrites + Principles
+- ✅ Prompt 7.6 — CRM Data Boundary Mapping
+- ✅ Prompt 7.7 — HubSpot Property and Integration Design
+- ⏳ **Prompt 7.7 Addendum** — Update 07C Sections 1, 3, 8 for Starter tier (see separate prompt)
 - Prompt 8 — Source Copy
 - **[Planning chat: Surfacing Part B + resolve 2.1/2.2/2.3]**
 - Prompt 9 — Critique
@@ -340,17 +351,17 @@ Handoff: Mode 1 output → `DESIGN-SYSTEM.md`. Mode 2 output → `docs/design/<p
 
 ## Part 6 — Guardrails for Codex
 
-1. Prompts from 04-PROMPTS.md are preserved verbatim except those rewritten in 04C-PROMPT-REWRITES.md.
+1. Prompts from 04-PROMPTS.md preserved verbatim except those rewritten in 04C-PROMPT-REWRITES.md.
 2. Schema-first design. No workarounds. Migrate schema before code.
 3. Every capture moment is a research interview, not a form.
 4. No dual persistence except the explicit HubSpot/Nexus split defined in 2.19.
-5. Long-running operations are background jobs. UI polls or subscribes.
+5. Long-running operations are background jobs.
 6. oDeal and experiments share a data pipeline but present separate UI narratives.
 7. Soft-mode experiments only.
 8. "Nexus Intelligence" is the voice. Never frame AI outputs as coming from a person.
 9. Inline rendering for all AI responses. No toasts for meaningful content.
 10. Cost is not a constraint in this phase.
-11. `DESIGN-SYSTEM.md` authoritative for visual decisions. `docs/design/<page>.md` authoritative for page-specific design. No improvising visual decisions.
+11. `DESIGN-SYSTEM.md` authoritative for visual decisions. `docs/design/<page>.md` authoritative per-page.
 12. Every route declares `maxDuration` explicitly.
 13. Any domain concept with 2+ write sites goes through a service function.
 14. No client-controlled trust flags.
@@ -373,13 +384,14 @@ Handoff: Mode 1 output → `DESIGN-SYSTEM.md`. Mode 2 output → `docs/design/<p
 31. Nothing surfaces without passing the applicability gate (2.21).
 32. Applicability rules are structured data (JSONB), never prose.
 33. Close-lost hypothesis verified against event stream before surfacing.
-34. No inline hex colors, fonts, or backgrounds. All through design tokens.
+34. No inline hex colors, fonts, or backgrounds.
 35. Client component files hard-capped at ~400 LOC.
-36. Nav is a declarative route registry. Every shipped page has an entry.
-37. UI primitives from ONE library. No hand-built when primitive exists. No dead UI dependencies.
+36. Nav is a declarative route registry.
+37. UI primitives from ONE library. No hand-built when primitive exists.
 38. Fonts referenced in code must load.
 39. Zero-importer components, redirect-only shells, "Coming Soon" pages do not ship.
-40. Deal creation + MEDDPICC edit UI are Day-1 features in v2 (1.13).
-41. No name-based demo scaffolding. Interventions and triggers are data-driven (1.14).
-42. Pipeline steps do real work. No "backward compat" placeholders (2.24).
-43. AI-driven config mutations are proposals, not direct writes; humans approve or explicit autonomy grants are required (2.25).
+40. Deal creation + MEDDPICC edit UI are Day-1 features in v2.
+41. No name-based demo scaffolding. Interventions and triggers are data-driven.
+42. Pipeline steps do real work. No "backward compat" placeholders.
+43. AI-driven config mutations are proposals, not direct writes.
+44. HubSpot is on Starter Customer Platform tier (paid). Property consolidation patterns are NOT used — all custom properties ship as individual HubSpot properties per their natural types.
