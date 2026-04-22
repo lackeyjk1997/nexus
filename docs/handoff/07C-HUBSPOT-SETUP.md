@@ -11,102 +11,103 @@
 - **Jeff** — Section 8 steps that must be done manually (creating the HubSpot account, generating the private app token) call him out explicitly.
 - **Future developers** — Sections 1, 2, 7, 10 document why the workspace is shaped the way it is, so the next person understands the trade-offs.
 
-**Assumption baseline.** This document is written against HubSpot's free tier because that's what Anthropic's v2 demo is standing up on fresh. The free tier imposes hard constraints (especially the 10-custom-properties-total cap, Section 1) that force design choices this document makes explicit. A **recommendation to upgrade to Sales Hub Starter** is made in Section 1 and Section 10 — at ~$20/seat/month the upgrade cost is negligible relative to the demo value and unlocks 1,000 custom properties per object plus association labels. Both paths (free with consolidation, Starter without) are documented end-to-end.
+**Assumption baseline.** This document is written against HubSpot **Starter Customer Platform** (paid tier), per DECISIONS.md 2.18 (UPDATED). Jeff has committed to the ~$9/seat/month annual or $15/seat/month monthly pricing; one seat is sufficient for v2. The tier decision lifts the Free-tier 10-property-total cap that would otherwise force JSON-blob consolidation in Section 3, so all 38 custom properties from 07B Section 5 ship as first-class typed HubSpot fields. Rate limits, webhook availability, and auth model are identical to Free tier — all work in Sections 5, 6, 7 remains unchanged.
 
 **What this document does not cover.** The `CrmAdapter` TypeScript interface (07B Section 2), the `people` table schema (07B Section 3), per-table field mapping (07B Section 1). Those are locked. This document designs HubSpot's internal shape; 07B designs the boundary.
 
 ---
 
-## Section 1: HubSpot Free Tier Constraints and Confirmed Limits
+## Section 1: HubSpot Starter Customer Platform Constraints and Confirmed Limits
 
-Every design choice below rolls off one of these facts. Each limit is stated as: **our planned usage → the limit → headroom assessment**.
+Every design choice below rolls off one of these facts. Each limit is stated as: **our planned usage → the limit → headroom assessment**. All assessments below are against the Starter Customer Platform tier.
 
-### 1.1 Custom properties
+### 1.1 Pricing and seats
 
-**The dominant free-tier constraint.** On the free tier, HubSpot allows **10 custom properties total across the entire account** — not per-object. Starter and above lifts this to 1,000 per object. ([HubSpot Community: Limit of 10 custom properties](https://community.hubspot.com/t5/CRM/Limit-of-10-custom-properties/m-p/870544) ↗, [HubSpot Community: Custom property limits](https://community.hubspot.com/t5/Sales-Hub-Onboarding/Custom-property-limits/m-p/812492) ↗)
+**Starter Customer Platform** — HubSpot's entry paid tier that unifies Sales/Marketing/Service/CMS/Operations Hubs at Starter level. Pricing per seat:
+- **$9/seat/month** — annual commit, billed upfront.
+- **$15/seat/month** — month-to-month.
+- **One seat** provisioned for Jeff is sufficient for v2. Additional Nexus users read/write HubSpot through the private app token, not per-user HubSpot seats.
+
+**Overage policy.** HubSpot monitors consumption against tier limits; if usage trips a cap (e.g., contact count, email sends), HubSpot's documented behavior is to auto-upgrade the account or surface a billing upgrade prompt rather than hard-block. For v2's demo scope (18 companies, 22 contacts, 18 deals) no limit is anywhere near its ceiling, but we flag this as a latent risk for unmonitored growth (Section 10). ASSUMPTION: exact overage mechanics should be confirmed against HubSpot's current commercial policy when the account is provisioned.
+
+### 1.2 Custom properties
+
+**Starter significantly relaxes the Free tier's 10-property-total ceiling.** On Starter, HubSpot allows on the order of **hundreds-to-thousands of custom properties per object type** (per-object, not per-account). The exact Starter number should be confirmed when the account is provisioned — widely-cited community and secondary sources report **1,000 custom properties per object** on Starter and above. ASSUMPTION: confirm the precise Starter Customer Platform cap in HubSpot's current pricing documentation before seeding; if the number diverges significantly we may need to revisit.
 
 - **07B planned usage:** 38 custom properties (28 Deal + 5 Contact + 5 Company).
-- **Free tier limit:** 10 total.
-- **Headroom on free tier:** -28 — **over-limit by 3.8×**. This single constraint determines Sections 2, 3, and 10.
-- **Starter tier limit:** 1,000 per object (3,000 total).
-- **Headroom on Starter:** comfortable. 07B's 38 properties fit trivially.
-
-**Design consequence.** Section 3 ships two parallel property designs:
-- **Free-tier design** — 7 custom properties using JSON-packed text blobs (`nexus_deal_intelligence`, `nexus_contact_intelligence`, `nexus_company_intelligence`) to hold what was planned as ~30 individual scalars. HubSpot users lose per-field visibility; Nexus reads/writes the JSON. Three of 10 slots held in reserve for future use.
-- **Starter-tier design (recommended)** — 38 individual typed properties per 07B Section 5. HubSpot users see readable scores, velocity enums, close reasons directly on the deal record.
-
-**Recommendation.** Upgrade to Sales Hub Starter before executing Section 8. The $20/seat/month cost is trivial; the design payoff (typed properties, association labels per Section 4, native reporting on `nexus_fitness_score`) is large. Codex implements both paths; the tier choice gates which property list the seed script creates.
-
-### 1.2 Pipelines and stages
-
-**1 deal pipeline, unlimited stages on free.** ([EngageBay: Is HubSpot Free in 2026?](https://www.engagebay.com/blog/is-hubspot-free/) ↗, [HubSpot: Set up and manage object pipelines](https://knowledge.hubspot.com/object-settings/set-up-and-customize-pipelines) ↗)
-
-- **07B planned usage:** 1 pipeline ("Nexus Sales") with 9 stages.
-- **Free tier limit:** 1 pipeline; no documented stage cap.
-- **Headroom:** tight on pipelines (one is the cap), comfortable on stages.
-
-**Design consequence.** Section 2 defines one pipeline for all verticals. Vertical is a deal property (`nexus_vertical`), not a pipeline dimension.
+- **Starter limit (expected):** ~1,000 per object.
+- **Headroom:** comfortable. All 38 properties ship as first-class typed HubSpot fields per Section 3. No JSON-blob consolidation is required.
 
 ### 1.3 API rate limits
 
-**100 requests per 10 seconds (burst); 250,000 per day (steady-state)** for private apps on free and Starter tiers. ([HubSpot: API usage guidelines and limits](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines) ↗, [HubSpot: Increasing our API limits](https://developers.hubspot.com/changelog/increasing-our-api-limits) ↗)
+**IDENTICAL to Free tier.** The tier upgrade does not change the rate budget. **100 requests per 10-second rolling window (burst); 250,000 requests per 24-hour rolling window (daily).** ([HubSpot: API usage guidelines and limits](https://developers.hubspot.com/docs/developer-tooling/platform/usage-guidelines) ↗, [HubSpot: Increasing our API limits](https://developers.hubspot.com/changelog/increasing-our-api-limits) ↗)
 
 - **07B planned usage:**
   - Steady-state demo: ~350 calls/session (derived in Section 7.1).
-  - Full demo reset: ~170-520 calls (varies with seed size) within ~20 seconds → ~34/s peak, ~340/10s worst case.
-- **Free tier burst limit:** 100/10s.
-- **Headroom on burst:** **tight during reset**. Section 7 specifies batching and rate-aware queueing to stay under.
+  - Full demo reset: ~170-520 calls within ~20 seconds if issued naively; ~10 calls using batch endpoints (Section 7.5).
+- **Starter burst limit:** 100/10s.
+- **Headroom on burst:** tight during unbatched reset; **comfortable after batching** (Section 7.5).
 - **Daily limit:** 250k.
-- **Headroom on daily:** comfortable (5,000+ demo sessions/day possible before hitting).
+- **Headroom on daily:** comfortable (5,000+ demo sessions/day possible).
+
+All rate-budget calculations, batching logic, and cache TTLs in Section 7 carry over unchanged from the prior design.
 
 ### 1.4 Webhooks
 
-**Available on free tier via private apps.** ([HubSpot: Create and edit webhook subscriptions in private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/create-and-edit-webhook-subscriptions-in-private-apps) ↗, [HubSpot Community: Are Webhooks and contact API on free tier?](https://community.hubspot.com/t5/APIs-Integrations/Are-Webhooks-and-contact-API-on-free-tier/m-p/502050) ↗)
+**Available on Starter via private apps.** ([HubSpot: Create and edit webhook subscriptions in private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/create-and-edit-webhook-subscriptions-in-private-apps) ↗)
 
-- Webhooks via the **Webhooks API** (not the "Send a Webhook" workflow action — the latter requires Operations Hub Professional) work on free tier.
+- Webhooks via the **Webhooks API** (not the "Send a Webhook" workflow action — the latter requires Operations Hub Professional).
 - Supported subscription types cover `contact.*`, `company.*`, `deal.*`, `ticket.*`, `product.*`, `line_item.*`, `conversation.*`, plus `*.merge`, `*.restore`, `*.associationChange`. ([HubSpot: New subscription types for Webhooks](https://developers.hubspot.com/changelog/new-subscription-types-for-webhooks) ↗)
-- **07B planned usage:** ~12 subscriptions (detailed Section 5).
-- **Free tier limit:** no documented per-app subscription cap.
+- **07B planned usage:** ~12 subscriptions (detailed Section 5). Event set unchanged by the tier upgrade.
+- **Starter limit:** no documented per-app subscription cap.
 - **Headroom:** comfortable.
 
-### 1.5 Association labels
+### 1.5 Pipelines and stages
 
-**Custom association labels require Professional tier or above.** Free and Starter tiers have only HubSpot-defined default labels (most notably "Primary" for the contact↔company and contact↔deal relationships). ([HubSpot: Create and use association labels](https://knowledge.hubspot.com/object-settings/create-and-use-association-labels) ↗)
+**Starter allows multiple custom deal pipelines** (Free was limited to the default pipeline only). ([HubSpot: Set up and manage object pipelines](https://knowledge.hubspot.com/object-settings/set-up-and-customize-pipelines) ↗)
+
+- **07B planned usage:** 1 pipeline ("Nexus Sales") with 9 stages.
+- **Starter limit:** multiple pipelines allowed; no documented stage cap per pipeline.
+- **Headroom:** comfortable.
+
+**Design decision unchanged.** Section 2 still defines one pipeline for all verticals. Vertical is a deal property (`nexus_vertical`), not a pipeline dimension. Starter's capacity for additional pipelines is unused in v2 but available if a future vertical-specific process is introduced.
+
+### 1.6 Association labels
+
+**Custom association labels still require Professional tier or above** — not changed by the Starter upgrade. Starter has only HubSpot-defined default labels (most notably "Primary" for the contact↔company and contact↔deal relationships). ([HubSpot: Create and use association labels](https://knowledge.hubspot.com/object-settings/create-and-use-association-labels) ↗)
 
 - **07B planned usage:** custom labels for `champion`, `economic_buyer`, `technical_evaluator`, `end_user`, `blocker`, `coach` on deal↔contact (per DECISIONS.md 2.19 stakeholder split).
-- **Free/Starter tier limit:** primary-only; no custom labels.
-- **Headroom:** **over-limit**. Section 4 falls back to a Nexus-side `deal_contact_roles` join table for role assignment, preserves HubSpot's native "Primary" label for the primary-contact concept.
+- **Starter limit:** primary-only; no custom labels.
+- **Headroom:** **over-limit**. Section 4 keeps the Nexus-side `deal_contact_roles` join table for role assignment; HubSpot's native "Primary" label covers the primary-contact concept. No design change from the prior revision.
 
-### 1.6 Authentication model
+### 1.7 Authentication model
 
-**Private apps with access tokens available on free tier.** Super-admin access required to create. ([HubSpot: Legacy private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview) ↗, [SFAI Labs: How to Get Your HubSpot API Key (2026)](https://sfailabs.com/guides/how-to-get-hubspot-api-key) ↗)
+**Private apps with access tokens available on Starter.** Super-admin access required to create. ([HubSpot: Legacy private apps](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview) ↗, [SFAI Labs: How to Get Your HubSpot API Key (2026)](https://sfailabs.com/guides/how-to-get-hubspot-api-key) ↗)
 
 - Private apps auth-gate the Anthropic demo-org's HubSpot. No multi-tenant OAuth required.
 - Access token shown **once** at creation; Nexus stores it in env; rotation is a manual ops procedure.
 - **Design consequence.** Section 6 specifies the private-app model; no OAuth flow to build.
 
-### 1.7 Service Hub / tickets
+### 1.8 Service Hub / tickets
 
-**Basic ticketing on free tier, no workflow automation, 2-user cap.** ([Claritysoft: HubSpot Free Plan Limitations (2026)](https://claritysoft.com/hubspot-free-plan-limitations/) ↗, [HubSpot Service Hub pricing guide](https://blog.hubspot.com/service/hubspot-service-hub-pricing) ↗)
+**Starter Customer Platform includes Service Hub Starter**, but for inbound customer messages v2 still logs all messages as Email Engagements (not tickets) for consistency with DECISIONS.md 2.19 and to avoid dependence on ticket-pipeline configuration. Open question #10 resolution stands: engagements, not tickets.
 
-- 07B Section 1 (customer_messages entry) considered routing inbound messages to HubSpot Tickets. Free tier supports ticket objects via API but without the automation the post-sale book experience implies.
-- **Design decision.** Log all inbound customer messages as Email Engagements with a `nexus_message_status` semantic carried in Nexus, not Service Hub tickets. Resolves 07B open question #10.
+### 1.9 Constraints that do NOT apply
 
-### 1.8 Constraints that do NOT apply
+**Contacts, deals, engagements, companies** — generous limits on Starter (typically 1,000-15,000+ for contacts depending on marketing-contact status; unlimited non-marketing contacts). No object-count caps constrain the 18-deal + 22-contact + 18-company demo dataset.
 
-**Contacts, deals, engagements, companies** — unlimited on free tier. No object-count caps constrain the 18-deal + 22-contact + 18-company demo dataset.
+### 1.10 Ranked constraint summary
 
-**Ranked constraint summary:**
-
-| Constraint | Free tier | Our planned usage | Status on free | Status on Starter |
-|---|---|---|---|---|
-| Custom properties total | 10 | 38 planned → 7 consolidated | over → tight after consolidation | comfortable |
-| Deal pipelines | 1 | 1 | exactly fits | exactly fits |
-| API burst | 100 req/10s | ~34/s peak during reset | tight | tight |
-| API daily | 250k req/day | ~500/day | comfortable | comfortable |
-| Webhooks | available | 12 subscriptions | comfortable | comfortable |
-| Custom association labels | none | 6 planned | over → fallback to Nexus | over → fallback to Nexus |
-| Service Hub automation | none | unused | n/a | n/a |
+| Constraint | Starter limit | Our planned usage | Status |
+|---|---|---|---|
+| Custom properties (per object) | ~1,000 (ASSUMPTION; confirm) | 28 Deal / 5 Contact / 5 Company | comfortable |
+| Deal pipelines | multiple allowed | 1 | comfortable |
+| API burst | 100 req/10s | ~10 calls peak after batching | comfortable |
+| API daily | 250k req/day | ~500/day | comfortable |
+| Webhooks | no cap | 12 subscriptions | comfortable |
+| Custom association labels | none (Pro+ only) | 6 planned | over → Nexus `deal_contact_roles` fallback |
+| Service Hub automation | basic (Starter tier) | unused | n/a (engagements path) |
+| Seats | 1 purchased | 1 used | comfortable |
 
 ---
 
@@ -117,7 +118,6 @@ Every design choice below rolls off one of these facts. Each limit is stated as:
 Nexus v2 uses **one deal pipeline** named **Nexus Sales**, serving all verticals.
 
 **Why one pipeline.** Vertical is a property of the deal (`nexus_vertical`), not a structural dimension of the pipeline. Splitting by vertical would:
-- Exceed the free-tier single-pipeline cap.
 - Make cross-vertical pattern detection (coordinator service per DECISIONS.md 2.17) harder — coordinator currently queries deals regardless of pipeline.
 - Force maintenance of N identical stage definitions.
 - Add no demo value — the narrative is one org with deals in 5 verticals; one pipeline, filtered views.
@@ -205,116 +205,11 @@ All `CrmAdapter.updateDealStage(...)` calls go through this resolver. Nexus neve
 
 ## Section 3: Custom Property Specifications
 
-This section produces two complete property designs: **Free-tier (recommended only as fallback)** and **Starter-tier (recommended)**. Codex implements both; a single env flag `NEXUS_HUBSPOT_TIER=free|starter` gates which is created at seed time.
+All 38 custom properties from 07B Section 5 ship as individual first-class HubSpot properties per their natural types. No JSON-blob consolidation is required on Starter — the Free-tier consolidation pattern that would otherwise be forced by the 10-property cap is not used. Codex creates each property via the HubSpot Properties API on first deploy; a single seed definition file (`packages/seed-data/hubspot-properties.ts`) holds all 38 definitions.
 
-### 3.1 Free-tier design (7 custom properties, 3 slots reserved)
+The `nexus_internal_` prefix convention (per 07B Section 5) still applies to properties that should not surface in HubSpot UI (debugging, correlation IDs, sync state).
 
-On free tier we cannot afford per-field typed visibility in HubSpot. Intelligence writes pack into JSON blobs stored in multi-line text properties. HubSpot-native fields carry the operationally-critical scalars (stage, amount, closedate, owner). Nexus reads the JSON when it needs per-field values.
-
-#### On HubSpot Deal object (Free tier)
-
-| Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
-|---|---|---|---|---|---|---|
-| `nexus_vertical` | enumeration | select | Nexus-controlled vertical enum (healthcare, financial_services, manufacturing, retail, technology, general) | DealService.create, enrichment | Pipeline filtering, call prep, coordinator | visible |
-| `nexus_product` | enumeration | select | Product family (claude_api, claude_enterprise, claude_team) | DealService.create | Forecasting, call prep | visible |
-| `nexus_deal_intelligence` | string | multi_line_text | JSON blob — all AI-derived deal state: MEDDPICC scores (7), fitness_score, fitness_velocity, lead_score, primary_competitor, close reasons, win turning point, last_analysis_at, renewal_date, onboarding_complete, products_purchased, bdr/sa owner IDs | MeddpiccService, DealFitnessService, LeadScoreService, Close-analysis service, AccountHealthService | Nexus Deal detail page (parses JSON on read), HubSpot UI display (raw text) | visible |
-
-**Shape of the `nexus_deal_intelligence` blob:**
-
-```json
-{
-  "schemaVersion": 1,
-  "updatedAt": "2026-04-21T12:00:00Z",
-  "meddpicc": {
-    "metrics": 60, "economic_buyer": 40, "decision_criteria": 55,
-    "decision_process": 30, "identify_pain": 70, "champion": 65, "competition": 50,
-    "overall": 53
-  },
-  "fitness": { "score": 80, "velocity": "accelerating", "imbalance": true },
-  "leadScore": 72,
-  "primaryCompetitor": "Microsoft DAX Copilot",
-  "closeContext": {
-    "lossReason": null, "closeCompetitor": null, "closeNotes": null,
-    "closeImprovement": null, "winTurningPoint": null, "winReplicable": null,
-    "lastCloseAnalysisAt": null
-  },
-  "postSale": {
-    "renewalDate": null, "nextQbrDate": null, "onboardingComplete": false,
-    "productsPurchased": []
-  },
-  "ownership": { "bdrOwnerId": null, "saOwnerId": null },
-  "internal": { "eventCount": 42, "lastAnalysisAt": "2026-04-21T11:58:00Z" }
-}
-```
-
-**What was dropped/moved from 07B's 28-property Deal list:**
-
-| Original 07B property | Free-tier destination | Reason |
-|---|---|---|
-| `nexus_meddpicc_score` + 7 dimension scores | Packed into `nexus_deal_intelligence.meddpicc` | Property budget |
-| `nexus_fitness_score`, `nexus_fitness_velocity` | Packed into `nexus_deal_intelligence.fitness` | Property budget |
-| `nexus_lead_score` | Packed into `nexus_deal_intelligence.leadScore` | Property budget |
-| `nexus_primary_competitor`, `nexus_close_competitor` | Packed into `nexus_deal_intelligence` | Property budget |
-| `nexus_close_notes`, `nexus_close_improvement`, `nexus_win_turning_point`, `nexus_win_replicable` | Packed into `nexus_deal_intelligence.closeContext` | Property budget |
-| `nexus_renewal_date`, `nexus_next_qbr_date`, `nexus_onboarding_complete`, `nexus_products_purchased` | Packed into `nexus_deal_intelligence.postSale` | Property budget |
-| `nexus_bdr_owner_id`, `nexus_sa_owner_id` | Packed into `nexus_deal_intelligence.ownership` | Property budget |
-| `nexus_last_analysis_at`, `nexus_last_close_analysis_at`, `nexus_internal_event_count` | Packed into `nexus_deal_intelligence.internal` | Property budget |
-| `nexus_lead_source` | Use native HubSpot `hs_analytics_source` (native enum covers most cases) | Native field available |
-| `loss_reason` (mapped to native `closed_lost_reason`) | **Dropped on free tier.** `closed_lost_reason` is a HubSpot Sales Hub feature and may not exist in free portals. Packed into `nexus_deal_intelligence.closeContext.lossReason` instead | Free-tier portal configuration uncertain (07B open Q #9 resolved) |
-
-#### On HubSpot Contact object (Free tier)
-
-| Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
-|---|---|---|---|---|---|---|
-| `nexus_contact_intelligence` | string | multi_line_text | JSON blob — role_in_deal (per primary deal only — for multi-deal, see Section 4 fallback table), engagement_status, linkedin_url, first_observed_at, person_id | MEDDPICC edit UI, pipeline (stakeholder detection), AccountHealthService, PeopleService | Nexus Contact surfaces | visible |
-
-**Shape of the `nexus_contact_intelligence` blob:**
-
-```json
-{
-  "schemaVersion": 1,
-  "updatedAt": "2026-04-21T12:00:00Z",
-  "primaryDealRole": "champion",
-  "engagementStatus": "engaged",
-  "linkedinUrl": "https://linkedin.com/in/...",
-  "firstObservedAt": "2026-01-10T00:00:00Z",
-  "personId": "uuid-from-nexus-people-table"
-}
-```
-
-**Note on `primaryDealRole`.** Since free tier has no custom association labels (Section 4), per-deal role cannot live on the association. This blob's `primaryDealRole` is the role on the contact's **highest-value open deal** only — a convenience denormalization for the HubSpot UI. The authoritative per-deal roles live in Nexus `deal_contact_roles`.
-
-#### On HubSpot Company object (Free tier)
-
-| Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
-|---|---|---|---|---|---|---|
-| `nexus_vertical` | enumeration | select | Same enum as Deal `nexus_vertical`; company-level value cascades to its deals at create time | Enrichment service, user edit | Company list filtering, deal seed | visible |
-| `nexus_company_intelligence` | string | multi_line_text | JSON blob — tech_stack (comma-joined string inside), enrichment_source, account_health_score, company_intelligence_id (joins to Nexus `companies_intelligence`) | Enrichment service, AccountHealthService | Company record | visible |
-
-**Shape of the `nexus_company_intelligence` blob:**
-
-```json
-{
-  "schemaVersion": 1,
-  "updatedAt": "2026-04-21T12:00:00Z",
-  "techStack": ["Epic", "Dragon Medical", "PACS"],
-  "enrichmentSource": "simulated",
-  "accountHealthScore": 85,
-  "companyIntelligenceId": "uuid-from-companies-intelligence"
-}
-```
-
-#### Free-tier total
-
-**7 custom properties** — `nexus_vertical` (Deal), `nexus_product` (Deal), `nexus_deal_intelligence` (Deal), `nexus_contact_intelligence` (Contact), `nexus_vertical` (Company), `nexus_company_intelligence` (Company), and one reserved slot. Note: `nexus_vertical` on Deal and `nexus_vertical` on Company are counted as separate properties because HubSpot namespaces custom properties per object type, but free tier's 10-property limit is cross-object — so they do count as 2 toward the 10.
-
-**Budget:** 7 used, 3 reserved = **10/10 exactly, no headroom for extensions.** Any new intelligence field must be packed into an existing JSON blob or forces an upgrade.
-
-### 3.2 Starter-tier design (recommended — 38 custom properties)
-
-Starter lifts the property cap to 1,000 per object. The 38-property list from 07B Section 5 ships as originally specified, with a few refinements below.
-
-#### On HubSpot Deal object (Starter — 28 properties)
+### 3.1 On HubSpot Deal object (28 properties)
 
 | Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
 |---|---|---|---|---|---|---|
@@ -347,7 +242,7 @@ Starter lifts the property cap to 1,000 per object. The 38-property list from 07
 | `nexus_last_analysis_at` | datetime | datetime | Last transcript pipeline completion time | TranscriptPipelineService | Cache freshness badge | visible |
 | `nexus_internal_event_count` | number | number | Nexus deal_events count — used for debug/QA | DealIntelligence | Internal only | admin-only (`nexus_internal_` naming) |
 
-#### On HubSpot Contact object (Starter — 5 properties)
+### 3.2 On HubSpot Contact object (5 properties)
 
 | Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
 |---|---|---|---|---|---|---|
@@ -357,7 +252,7 @@ Starter lifts the property cap to 1,000 per object. The 38-property list from 07
 | `nexus_first_observed_in_nexus` | datetime | datetime | Timestamp of first Nexus-side sighting | First sync from HubSpot | Internal | visible |
 | `nexus_internal_person_id` | string | single_line_text | Nexus people.id UUID for cross-account identity | PeopleService.linkContact | Cross-account intelligence | admin-only |
 
-#### On HubSpot Company object (Starter — 5 properties)
+### 3.3 On HubSpot Company object (5 properties)
 
 | Property Name | HubSpot Type | Field Type | Description | Written By | Read By | Visibility |
 |---|---|---|---|---|---|---|
@@ -367,9 +262,11 @@ Starter lifts the property cap to 1,000 per object. The 38-property list from 07
 | `nexus_account_health_score` | number | number | 0-100 | AccountHealthService | Pipeline/book filtering | visible |
 | `nexus_internal_company_intelligence_id` | string | single_line_text | Joins to Nexus `companies_intelligence` | First Nexus enrichment | Internal | admin-only |
 
-**Starter-tier totals:** 28 Deal + 5 Contact + 5 Company = **38 properties**, well under the 1,000-per-object Starter ceiling.
+### 3.4 Final totals
 
-### 3.3 Enumeration value formats
+28 Deal custom properties + 5 Contact custom properties + 5 Company custom properties = **38 total**. Starter-tier custom property limits accommodate this comfortably. No consolidation is required; all properties ship as first-class HubSpot properties per their natural types.
+
+### 3.5 Enumeration value formats
 
 All `nexus_*` enumeration properties accept lowercase snake_case internal values matching the Nexus TypeScript enum definitions exactly:
 
@@ -383,7 +280,7 @@ All `nexus_*` enumeration properties accept lowercase snake_case internal values
 
 Display labels are title-cased by the property definition (`Healthcare`, `Financial Services`, etc.).
 
-### 3.4 API payload to create a single custom property
+### 3.6 API payload to create a single custom property
 
 Identical pattern for Deal, Contact, Company — swap the URL path.
 
@@ -424,7 +321,7 @@ POST /crm/v3/properties/deals
 }
 ```
 
-### 3.5 Property groups
+### 3.7 Property groups
 
 All `nexus_*` properties are grouped under a single custom group `nexus_intelligence` on each object. Creating the group is a one-time setup call per object:
 
@@ -439,21 +336,21 @@ This gives HubSpot users a single collapsible section in the deal sidebar labele
 
 ## Section 4: Association Labels
 
-### 4.1 What free tier supports
+### 4.1 What Starter supports
 
-HubSpot's associations v4 API lets private apps read/write associations between objects. Default HubSpot-defined labels (notably **Primary**) are available on all tiers. Custom association labels (e.g., "Champion") require Professional tier or above.
+HubSpot's associations v4 API lets private apps read/write associations between objects. Default HubSpot-defined labels (notably **Primary**) are available on all tiers including Starter. Custom association labels (e.g., "Champion") require Professional tier or above and are therefore not available on Starter.
 
 ### 4.2 Associations used by Nexus
 
 | Association | Labels used | Tier requirement | Nexus fallback |
 |---|---|---|---|
-| Deal ↔ Contact | Primary Contact (native) + role (champion/EB/etc.) | Primary: free; role labels: Professional+ | Role stored in Nexus `deal_contact_roles` (see 4.3) |
-| Deal ↔ Company | Primary Company (native) | free | n/a |
-| Contact ↔ Company | Primary Company (native) | free | n/a |
+| Deal ↔ Contact | Primary Contact (native) + role (champion/EB/etc.) | Primary: Starter; role labels: Professional+ | Role stored in Nexus `deal_contact_roles` (see 4.3) |
+| Deal ↔ Company | Primary Company (native) | Starter | n/a |
+| Contact ↔ Company | Primary Company (native) | Starter | n/a |
 
 ### 4.3 The `deal_contact_roles` fallback table
 
-On free/Starter tier, the per-deal contact role lives in Nexus, not HubSpot. Migration 0013 (Codex Phase 1) adds:
+Per-deal contact role lives in Nexus, not HubSpot (custom association labels remain a Pro-tier feature). Migration 0013 (Codex Phase 1) adds:
 
 ```sql
 CREATE TABLE deal_contact_roles (
@@ -478,7 +375,7 @@ CREATE INDEX deal_contact_roles_contact_idx ON deal_contact_roles (hubspot_conta
 
 ### 4.4 Primary association write payload
 
-Setting the primary contact association label (one of HubSpot's default labels, free-tier accessible):
+Setting the primary contact association label (one of HubSpot's default labels, accessible on Starter):
 
 ```http
 PUT /crm/v4/objects/deal/{dealId}/associations/default/contact/{contactId}
@@ -498,7 +395,7 @@ Content-Type: application/json
 
 `associationTypeId: 3` is HubSpot's default id for "Deal to primary contact" (verify at seed time via `GET /crm/v4/associations/deal/contact/labels`). Codex's seed script reads the labels endpoint once, stores the Primary typeId in `seed-data/hubspot-association-ids.json`, and uses that ID for all subsequent Primary writes.
 
-**07B open questions #3 and #6 resolution.** Per-deal contact roles → Nexus `deal_contact_roles` table (Section 4.3). Primary contact → HubSpot native Primary association label (Section 4.4). Both paths work on free tier.
+**07B open questions #3 and #6 resolution.** Per-deal contact roles → Nexus `deal_contact_roles` table (Section 4.3). Primary contact → HubSpot native Primary association label (Section 4.4). Both paths work on Starter.
 
 ---
 
@@ -506,7 +403,7 @@ Content-Type: application/json
 
 ### 5.1 Subscribed events
 
-Codex configures these 12 subscriptions in the Nexus private app. All available on free tier via the Webhooks API. ([HubSpot: Webhooks v3 API guide](https://developers.hubspot.com/docs/api-reference/legacy/webhooks/guide) ↗)
+Codex configures these 12 subscriptions in the Nexus private app. All available on Starter via the Webhooks API. ([HubSpot: Webhooks v3 API guide](https://developers.hubspot.com/docs/api-reference/legacy/webhooks/guide) ↗)
 
 | # | HubSpot event type | Fires when | Nexus handler action | Relevant deal_events emitted |
 |---|---|---|---|---|
@@ -515,7 +412,7 @@ Codex configures these 12 subscriptions in the Nexus private app. All available 
 | 3 | `deal.propertyChange` — `amount` | Amount changes | Update cache; append `amount_updated` event | `amount_updated` |
 | 4 | `deal.propertyChange` — `closedate` | Close-date changes | Update cache; append `close_date_updated` event | `close_date_updated` |
 | 5 | `deal.propertyChange` — `hubspot_owner_id` | Owner changes | Update cache; append `ownership_changed` | `ownership_changed` |
-| 6 | `deal.propertyChange` — `nexus_deal_intelligence` (free) or any `nexus_meddpicc_*` / `nexus_fitness_*` (Starter) | Nexus-written property changes | Update cache only (these are our own writes; we already know) | none |
+| 6 | `deal.propertyChange` — any `nexus_meddpicc_*` / `nexus_fitness_*` / other `nexus_*` | Nexus-written property changes | Update cache only (these are our own writes; we already know) | none |
 | 7 | `deal.deletion` | Deal deleted in HubSpot | Set `hubspot_cache.is_tombstoned = true`; append `deal_deleted_upstream` event; do NOT cascade-delete Nexus intelligence (retained for audit) | `deal_deleted_upstream` |
 | 8 | `contact.creation` | New contact | Upsert cache; run `PeopleService.resolveContact` to create/link `people` row | none (contact-level) |
 | 9 | `contact.propertyChange` — filtered to `email`, `firstname`, `lastname`, `jobtitle`, `nexus_role_in_deal` | Contact edits | Update cache; if email changed, re-run `PeopleService` resolution | none |
@@ -523,7 +420,7 @@ Codex configures these 12 subscriptions in the Nexus private app. All available 
 | 11 | `company.creation` | New company | Upsert cache | none |
 | 12 | `company.propertyChange` — filtered to `name`, `domain`, `nexus_vertical`, `numberofemployees` | Company edits | Update cache | none |
 
-**Deliberately NOT subscribed.** `engagement.creation` and `engagement.propertyChange` are skipped on free tier. Rationale: engagement creation in HubSpot typically flows FROM Nexus (Nexus writes emails/calls to HubSpot as engagements), so the webhook would cause feedback loops — the engagement we just wrote fires a webhook we then try to process. Engagements written in HubSpot directly by a rep using the HubSpot UI (out-of-band) are less common in v2's workflow, but are reconciled by the 15-minute periodic sync (Section 7.5). This resolves the part of open question #4 about engagement subscription scope.
+**Deliberately NOT subscribed.** `engagement.creation` and `engagement.propertyChange` are skipped. Rationale: engagement creation in HubSpot typically flows FROM Nexus (Nexus writes emails/calls to HubSpot as engagements), so the webhook would cause feedback loops — the engagement we just wrote fires a webhook we then try to process. Engagements written in HubSpot directly by a rep using the HubSpot UI (out-of-band) are less common in v2's workflow, but are reconciled by the 15-minute periodic sync (Section 7.5). This resolves the part of open question #4 about engagement subscription scope.
 
 ### 5.2 Webhook endpoint
 
@@ -573,9 +470,9 @@ Nexus's handler:
 
 Implementation resides in `CrmAdapter.parseWebhookPayload(body, signature)` (07B Section 2). Client secret stored as `NEXUS_HUBSPOT_WEBHOOK_SECRET` in Vercel env.
 
-### 5.6 Event types NOT available on free tier
+### 5.6 Event types NOT used
 
-None that block v2. HubSpot's `engagement.creation` etc. are available on free tier; we choose not to subscribe for the reasons in 5.1. Workflow-driven webhooks (Ops Hub Professional only) are not used — we drive background work from Nexus's own `jobs` table, not HubSpot workflows.
+None that block v2. HubSpot's `engagement.creation` etc. are available on Starter; we choose not to subscribe for the reasons in 5.1. Workflow-driven webhooks (Ops Hub Professional only) are not used — we drive background work from Nexus's own `jobs` table, not HubSpot workflows.
 
 ---
 
@@ -585,7 +482,7 @@ None that block v2. HubSpot's `engagement.creation` etc. are available on free t
 
 Nexus uses a HubSpot **private app** with access token. Justification:
 - Single-tenant (one Anthropic demo org). No OAuth multi-tenant flow needed.
-- Free tier supports private apps.
+- Starter supports private apps.
 - Access token is long-lived (no refresh flow to build).
 - Webhooks fire signed with the private app's client secret — same app identity end-to-end.
 
@@ -674,7 +571,7 @@ Per 07B Section 4 demo-resilience modes: if `CrmAdapter.healthCheck()` returns `
 |---|---|
 | Deal creation from Nexus UI | 1 (create deal) + 1 (associate primary contact) = **2** |
 | Stage change from Nexus UI | 1 (update dealstage) |
-| MEDDPICC edit (manual or pipeline) | 1 (update intelligence blob or 7 scores) |
+| MEDDPICC edit (manual or pipeline) | 1 (`updateDealCustomProperties` with all 7 dimension scores batched into one call) |
 | Fitness recompute | 1 (update fitness score + velocity) |
 | Lead score recompute | 1 |
 | Transcript pipeline run (per deal) | ~3 — MEDDPICC update + fitness update + lead score |
@@ -695,9 +592,9 @@ Per 07B Section 4 demo-resilience modes: if `CrmAdapter.healthCheck()` returns `
 
 **Peak webhook rate:** during demo reset, ~85 webhooks fire over ~20 seconds. Nexus handler returns 200 inside 300ms (cache write + `jobs` enqueue) so HubSpot's retry budget is never stressed.
 
-### 7.4 Rate budget vs. free-tier limit
+### 7.4 Rate budget vs. Starter limit
 
-**Free tier burst: 100 calls/10s.** **Free tier daily: 250,000/day.**
+**Starter burst: 100 calls/10s.** **Starter daily: 250,000/day.** (Identical to Free tier — unchanged by the upgrade.)
 
 | Scenario | Peak 10-s rate | Daily total |
 |---|---|---|
@@ -773,21 +670,16 @@ Per 07B Section 4 — the `Deal` type returned by `getDeal()` includes `_meta: {
 
 Execute top-to-bottom. Each step is commandable. "Jeff" = manual operator action; "Codex" = executed by the `seed-hubspot.ts` script. Assumes a fresh HubSpot workspace; idempotent where possible.
 
-### Step 1 — Create the HubSpot account (Jeff, manual, 5 min)
+### Step 1 — Sign up for HubSpot Starter Customer Platform (Jeff, manual, 5 min)
 
-1. Go to https://www.hubspot.com/products/get-started-crm-free
-2. Sign up using a personal email (easier to give over control later than a corp email).
-3. When prompted for role/company, enter "Founder / Anthropic Nexus Demo."
-4. Skip the import wizard — the v2 seed script creates all demo data.
-5. Capture the **Portal ID** from Settings → Account & Billing → Account Defaults. Save as `NEXUS_HUBSPOT_PORTAL_ID`.
+1. Go to https://www.hubspot.com/products/crm/starter.
+2. Select the **Starter Customer Platform** plan — annual commit ($9/month/seat, billed upfront) is recommended; monthly ($15/month/seat) is acceptable if preferred.
+3. One seat suffices. Sign up using a personal email if the business email is gated (easier to hand off control later than a corp SSO).
+4. When prompted for role/company, enter "Founder / Anthropic Nexus Demo."
+5. Skip the import wizard — the v2 seed script creates all demo data.
+6. Capture the **Portal ID** from Settings → Account & Billing → Account Defaults. Save as `NEXUS_HUBSPOT_PORTAL_ID`.
 
-### Step 2 — Decide on tier (Jeff, manual, 2 min)
-
-Read Section 1.1 and Section 10. Strongly recommend **Sales Hub Starter** ($20/seat/month) for the 1,000-properties-per-object headroom and the easier mental model. Free tier works but forces the JSON-blob consolidation in Section 3.1.
-
-Set `NEXUS_HUBSPOT_TIER=starter` or `NEXUS_HUBSPOT_TIER=free` as a Vercel env var before deploying.
-
-### Step 3 — Create the private app (Jeff, manual, 5 min)
+### Step 2 — Create the private app (Jeff, manual, 5 min)
 
 1. HubSpot → Settings (gear icon) → Integrations → Private Apps.
 2. Click **Create a private app**.
@@ -795,7 +687,7 @@ Set `NEXUS_HUBSPOT_TIER=starter` or `NEXUS_HUBSPOT_TIER=free` as a Vercel env va
    - Name: `Nexus`
    - Description: `Anthropic Nexus v2 integration. Reads/writes deals, contacts, companies, engagements.`
 4. **Scopes tab:** select every scope listed in Section 6.2.
-5. **Webhooks tab:** configure webhook target URL to `https://<your-vercel-domain>/api/hubspot/webhook`. Do NOT subscribe events here manually — Codex does that in step 6 via API (so the subscription set is version-controlled).
+5. **Webhooks tab:** configure webhook target URL to `https://<your-vercel-domain>/api/hubspot/webhook`. Do NOT subscribe events here manually — Codex does that in Step 6 via API (so the subscription set is version-controlled).
 6. Click **Create app** in the top right.
 7. **Copy the access token** immediately. Save to a password manager. HubSpot will not show it again.
 8. From the Auth tab, copy the **client secret**.
@@ -804,15 +696,14 @@ Set `NEXUS_HUBSPOT_TIER=starter` or `NEXUS_HUBSPOT_TIER=free` as a Vercel env va
    NEXUS_HUBSPOT_TOKEN=<access token>
    NEXUS_HUBSPOT_WEBHOOK_SECRET=<client secret>
    NEXUS_HUBSPOT_PORTAL_ID=<portal id from step 1>
-   NEXUS_HUBSPOT_TIER=starter|free
    NEXUS_HUBSPOT_PRIVATE_APP_ID=<private app id from the URL bar on the app settings page>
    ```
 
-### Step 4 — Deploy v2 code to Vercel (Jeff, manual, 5 min)
+### Step 3 — Deploy v2 code to Vercel (Jeff, manual, 5 min)
 
-Standard deploy. The webhook endpoint and the `CrmAdapter` must be reachable before step 5. If the private app is created before Vercel is deployed, webhook subscriptions in step 6 will target an endpoint that returns 404 — not harmful but generates HubSpot delivery errors in the logs.
+Standard deploy. The webhook endpoint and the `CrmAdapter` must be reachable before step 4. If the private app is created before Vercel is deployed, webhook subscriptions in step 5 will target an endpoint that returns 404 — not harmful but generates HubSpot delivery errors in the logs.
 
-### Step 5 — Create the deal pipeline (Codex, API, 2 s)
+### Step 4 — Create the deal pipeline (Codex, API, 2 s)
 
 `packages/db/src/seed-hubspot.ts` step `ensurePipeline()`:
 
@@ -830,7 +721,7 @@ return await adapter.createPipeline({
 
 Writes resolved pipeline ID + 9 stage IDs to `packages/db/src/seed-data/hubspot-pipeline-ids.json`. This file is checked into Git (even though IDs are portal-specific) so the team sees the mapping; production reads it at runtime via the adapter initializer.
 
-### Step 6 — Create the property group + custom properties (Codex, API, ~3 s)
+### Step 5 — Create the property group + custom properties (Codex, API, ~3 s)
 
 `ensurePropertyGroups()` then `ensureCustomProperties()`:
 
@@ -844,20 +735,18 @@ for (const objectType of ["deals", "contacts", "companies"]) {
   });
 }
 
-// 2. Pick the property set by tier
-const properties = NEXUS_HUBSPOT_TIER === "starter"
-  ? STARTER_PROPERTIES
-  : FREE_TIER_PROPERTIES;
-
-// 3. Create each property (skip if already exists)
-for (const prop of properties) {
+// 2. Create each of the 38 properties per Section 3 (28 Deal + 5 Contact + 5 Company).
+//    Definitions live in packages/seed-data/hubspot-properties.ts as an array of
+//    { objectType, definition } records, one entry per property. Each property is
+//    first-class and typed (no JSON-packing).
+for (const prop of HUBSPOT_CUSTOM_PROPERTIES) {
   await adapter.createOrSkipProperty(prop.objectType, prop.definition);
 }
 ```
 
-Both `STARTER_PROPERTIES` and `FREE_TIER_PROPERTIES` are plain arrays of property definitions living in `packages/seed-data/hubspot-properties.ts`. Re-runs are safe: `createOrSkipProperty()` 409s are caught.
+`HUBSPOT_CUSTOM_PROPERTIES` lives in `packages/seed-data/hubspot-properties.ts` and enumerates each property individually. Re-runs are safe: `createOrSkipProperty()` 409s are caught.
 
-### Step 7 — Create webhook subscriptions (Codex, API, ~1 s)
+### Step 6 — Create webhook subscriptions (Codex, API, ~1 s)
 
 `ensureWebhookSubscriptions()`:
 
@@ -868,7 +757,7 @@ const subscriptions = [
   { eventType: "deal.propertyChange", propertyName: "amount", active: true },
   { eventType: "deal.propertyChange", propertyName: "closedate", active: true },
   { eventType: "deal.propertyChange", propertyName: "hubspot_owner_id", active: true },
-  // nexus_* intelligence property changes (free: single prop; starter: filter-or-list)
+  // nexus_* intelligence property changes (subscribe per property or use a broad filter)
   { eventType: "deal.deletion", active: true },
   { eventType: "contact.creation", active: true },
   { eventType: "contact.propertyChange", propertyName: "email", active: true },
@@ -880,17 +769,17 @@ for (const sub of subscriptions) {
 }
 ```
 
-### Step 8 — Seed HubSpot data (Codex, API, ~20 s)
+### Step 7 — Seed HubSpot data (Codex, API, ~20 s)
 
-Runs `packages/db/src/seed.ts`, `seed-book.ts`, `seed-deal-fitness.ts`, using the `CrmAdapter` for all CRM entities. Writes captured HubSpot IDs back to a transient mapping used by step 9.
+Runs `packages/db/src/seed.ts`, `seed-book.ts`, `seed-deal-fitness.ts`, using the `CrmAdapter` for all CRM entities. Writes captured HubSpot IDs back to a transient mapping used by step 8.
 
 Per Section 7.5, uses batch endpoints: 3 batch calls for companies, 3 for contacts, 3 for deals, 2 for notes — ~10 API calls total. Well under the burst limit.
 
-### Step 9 — Seed Nexus data (Codex, DB, ~5 s)
+### Step 8 — Seed Nexus data (Codex, DB, ~5 s)
 
 Runs `seedNexusDirect(mapping)` — inserts `deal_events`, `observations`, `experiments`, `meddpicc_fields`, `account_health`, `knowledge_articles`, `manager_directives`, `system_intelligence`, `agent_configs`, `team_members`, `support_function_members`, etc. No HubSpot calls.
 
-### Step 10 — Pre-warm cache (Codex, API, ~5 s)
+### Step 9 — Pre-warm cache (Codex, API, ~5 s)
 
 ```typescript
 await adapter.bulkSyncDeals();
@@ -900,7 +789,7 @@ await adapter.bulkSyncCompanies();
 
 Populates `hubspot_cache` so the first browser request hits cache, not HubSpot.
 
-### Step 11 — Verify (Codex + Jeff)
+### Step 10 — Verify (Codex + Jeff)
 
 Codex emits a health check report:
 
@@ -908,7 +797,7 @@ Codex emits a health check report:
 Nexus HubSpot setup complete.
   Pipeline ID:             3214578901
   Stages created:          9/9
-  Custom properties:       7 (free-tier consolidated) OR 38 (starter)
+  Custom properties:       38 (28 Deal + 5 Contact + 5 Company)
   Webhook subscriptions:   12
   Seed companies:          18/18
   Seed contacts:           22/22
@@ -921,16 +810,16 @@ Nexus HubSpot setup complete.
 
 Jeff opens HubSpot → Sales → Deals, confirms the 18 seed deals appear in the Nexus Sales pipeline with correct stages and owners.
 
-### Step 12 — Smoke-test (Jeff, 2 min)
+### Step 11 — Smoke-test (Jeff, 2 min)
 
 1. Nexus dashboard → create a test deal.
 2. Confirm it appears in HubSpot within 5 seconds.
 3. In HubSpot, update the deal stage to Proposal.
 4. Confirm the change appears in Nexus within 15 seconds (via webhook).
 5. Run a transcript pipeline on the test deal from Nexus UI.
-6. Confirm `nexus_deal_intelligence` (or individual properties on Starter) populate in HubSpot.
+6. Confirm the Nexus-written properties (`nexus_meddpicc_score`, `nexus_fitness_score`, etc.) populate on the deal in HubSpot.
 
-### Step 13 — Enable `pg_cron` periodic sync (Codex)
+### Step 12 — Enable `pg_cron` periodic sync (Codex)
 
 Supabase SQL editor runs once:
 
@@ -958,7 +847,7 @@ Maps every current Nexus demo deal to its v2 HubSpot shape.
 | Current Nexus deal | HubSpot shape | Notes |
 |---|---|---|
 | **MedVista** (Sarah Chen, $2.4M, Discovery) | Company "MedVista Health" (vertical=healthcare, employeeCount=3200, techStack=[Epic, Dragon Medical, PACS]) · Contact "Dr. Marcus Chen" (primary) · Deal "MedVista Discovery" stage=discovery amount=2400000 closedate=today+55d owner=sarah.chen@... `nexus_vertical=healthcare` `nexus_product=claude_enterprise` | Transcript reference — `packages/db/src/seeds/seed-healthfirst-transcript.ts` re-keyed to the new HubSpot deal ID |
-| **HealthFirst** (Sarah, $3.2M, Closed Lost) | Company "HealthFirst Medical" · Contacts · Deal stage=closed_lost `nexus_vertical=healthcare` `nexus_deal_intelligence.closeContext.lossReason="Microsoft DAX Copilot won on bundled pricing"` | Transcript with Microsoft competitor for coordinator pattern demo |
+| **HealthFirst** (Sarah, $3.2M, Closed Lost) | Company "HealthFirst Medical" · Contacts · Deal stage=closed_lost `nexus_vertical=healthcare` `nexus_close_competitor="Microsoft DAX Copilot"` `nexus_close_notes="Lost on bundled pricing"` | Transcript with Microsoft competitor for coordinator pattern demo |
 | **TrustBank** (Sarah, $950K, Technical Validation) | Company "TrustBank Financial" (financial_services) · Contact "Jennifer Cross" (primary) · Deal stage=technical_validation closedate=today+60d | |
 | **NordicMed Group** (Ryan Foster, $1.6M, Proposal) | Company "NordicMed Group" · Contacts · Deal stage=proposal closedate=today+42d (intervention fires when close date < 70d) | Historically hardcoded-in-code; v2 uses applicability rules (DECISIONS.md 1.14) |
 | **Atlas Capital** (David Park, $580K, Negotiation) | Company "Atlas Capital" (financial_services) · Contacts · Deal stage=negotiation closedate=today+30d | |
@@ -998,7 +887,7 @@ From `seed-book.ts`. For each of the 18 accounts:
 - 1-2 contacts per company via `createContact()`.
 - Deal with `stage=closed_won`, `amount=ARR`, `closeDate` set to 3-18 months ago.
 - Nexus `account_health` row with full fields: `health_score`, `contract_status`, `renewal_date`, `contracted_use_cases`, `expansion_map`, `proactive_signals`, `similar_situations`, `recommended_resources`.
-- On Starter tier: `nexus_fitness_score`, `nexus_onboarding_complete`, `nexus_renewal_date` written back to HubSpot for rep visibility.
+- `nexus_fitness_score`, `nexus_onboarding_complete`, `nexus_renewal_date` written back to HubSpot for rep visibility.
 
 Full list (18 accounts, per CLAUDE.md Session 14): Meridian Health, Pacific Coast Medical, BrightPath Diagnostics, Cascadia Life Sciences, Summit Genomics (Healthcare); Redwood Capital, Harbor Compliance, Lighthouse Insurance, Apex Financial, Cornerstone Banking (FinServ); Vertex Pharma R&D, Pinnacle Biotech, GenePath Analytics (Technology/Life Sciences); Atlas Retail, Brightside Commerce, Metro Market, Cascade Supply Chain, Evolve Retail Tech (Retail).
 
@@ -1018,7 +907,7 @@ Pure Nexus (no HubSpot). Seeded to `experiments` table with applicability jsonb 
 
 Nexus `team_members` + `support_function_members`. HubSpot side: create 14 HubSpot Owners via the team-members API (requires super admin). Capture each `hubspot_owner_id` into `team_members.hubspot_owner_id`.
 
-**07B open question #8 resolution.** Provision all 14 as real HubSpot Owners. Free tier allows unlimited users in some capacities (admin roles free, paid seats for sales users) — for the demo org, provisioning real Owners is the clean path; it also keeps the pipeline filter-by-AE story working in HubSpot UI.
+**07B open question #8 resolution.** Provision all 14 as real HubSpot Owners. On Starter, paid seats are per-user (one seat purchased for Jeff); additional Owner records can be created without consuming seats when they're not assigned interactive login access — adequate for the demo-persona filter-by-AE story in HubSpot UI. If HubSpot's current seat policy requires all Owners to hold paid seats, fall back to provisioning a smaller set of real Owners and mapping multiple Nexus `team_members` rows to each (losing per-persona filtering in the HubSpot UI only; Nexus UI is unaffected).
 
 ### 9.7 Seed idempotency
 
@@ -1033,16 +922,18 @@ Re-runs are safe. The `hubspot-id-mapping.json` artifact is the linker — step 
 
 ## Section 10: Risks, Gotchas, and Open Items
 
-### 10.1 Free-tier cliffs that force decisions later
+### 10.1 Starter-tier limitations worth watching
 
-- **Custom property limit (10 total).** Already forces JSON-blob consolidation. Any future intelligence field added to Nexus that HubSpot users need to see forces either (a) adding to an existing blob (invisible per-field in HubSpot) or (b) an upgrade to Starter.
-- **No custom association labels.** The Nexus `deal_contact_roles` fallback works but means HubSpot UI cannot show per-contact role badges on the deal. Reps must open Nexus to see champion/EB assignments. On Starter this is still a limitation (requires Pro for custom labels); upgrading to Pro is probably not justified for this one feature alone.
+- **No custom association labels.** Custom association labels require Professional tier. The Nexus `deal_contact_roles` fallback works but means HubSpot UI cannot show per-contact role badges on the deal — reps must open Nexus to see champion/EB assignments. Upgrading to Pro purely for this is unlikely to be justified in v2.
+- **Custom property ceiling.** Starter's per-object property limit (ASSUMPTION: ~1,000 per object; verify against HubSpot's current documentation at provision time) is comfortable for v2 but not unbounded. If v2.x adds many more AI-derived properties, watch headroom.
+- **Seat economics if Nexus ever goes multi-user in HubSpot UI.** v2 uses one paid seat (Jeff). If multiple humans later need HubSpot UI access for read-only reasons, additional seats are $9-$15/month each. This is not a blocker but a recurring cost input for scaling.
+- **Auto-upgrade on overage.** HubSpot's documented behavior on hitting contact, email, or marketing-contact limits is to prompt or auto-upgrade billing rather than hard-block. For v2's demo scope no cap is anywhere near its ceiling, but unmonitored growth (e.g., if Nexus starts auto-creating hundreds of contacts from observations) could trigger unexpected tier escalation. Monitor contact counts quarterly.
 
 ### 10.2 Webhook reliability caveats
 
 - HubSpot retries failed webhook deliveries up to 10 times over 24 hours with exponential backoff. ([HubSpot Webhooks guide](https://developers.hubspot.com/docs/api-reference/legacy/webhooks/guide) ↗) If Nexus's webhook endpoint is down for > 24 hours, events are lost and the 15-min periodic sync reconciles.
 - Self-triggered webhook feedback loops — when Nexus writes `nexus_fitness_score`, HubSpot fires `deal.propertyChange` for that property and sends it back. Handler filters self-writes by checking the most recent `deal_events` within the last 5 seconds; if a `nexus_fitness_score_updated` event exists at or after the webhook timestamp, treat the webhook as echo and skip.
-- Free tier webhooks come with no formal SLA — Anthropic should monitor delivery latency.
+- HubSpot webhooks come with no formal delivery-latency SLA on Starter — Anthropic should monitor delivery latency.
 
 ### 10.3 API version stability
 
@@ -1058,7 +949,7 @@ Re-runs are safe. The `hubspot-id-mapping.json` artifact is the linker — step 
 - **Step 3:** private app creation + token capture (HubSpot shows once, not fetchable via API).
 - **Step 4:** Vercel deploy.
 - **Any token rotation** after 90 days.
-- **Any tier upgrade** (pricing page click-through).
+- **Any future tier upgrade** (pricing page click-through) — Starter → Pro only if custom association labels or Sequences integration become required.
 - **HubSpot Owner provisioning** — the admin step to add users requires the HubSpot UI (API route exists but requires additional admin scopes most private apps don't get).
 
 ### 10.5 Explicit deferrals to v2.1
@@ -1069,7 +960,7 @@ Re-runs are safe. The `hubspot-id-mapping.json` artifact is the linker — step 
 
 ### 10.6 Outstanding assumptions to verify
 
-- **`closed_lost_reason` native property.** Some HubSpot portals have it preset, others don't. Resolution: 07B open question #9 answered in Section 3.1 by **packing into `nexus_deal_intelligence.closeContext.lossReason` (free-tier)** and `nexus_close_notes` + `nexus_close_competitor` (Starter) rather than depending on portal defaults. Native `closed_lost_reason` is not used.
+- **`closed_lost_reason` native property.** Some HubSpot portals have it preset, others don't. Resolution: 07B open question #9 answered by using `nexus_close_notes` + `nexus_close_competitor` (Section 3.1) rather than depending on portal defaults. Native `closed_lost_reason` is not used.
 - **Batch endpoint rate limits.** Batch endpoints count toward the 100/10s burst as 1 call each per HubSpot's documentation, but verify during seeding. If a batch of 100 counts as >1, throttle the batcher.
 - **Per-app vs per-portal webhook delivery rate.** Documented behavior is per-portal; if HubSpot throttles our webhook endpoint under load, we learn this only by running. Mitigation: Nexus's webhook handler is under 300ms and returns 200 synchronously.
 - **Super admin requirement for private apps.** If Jeff's account ends up as non-super-admin, step 3 fails. Verify early.
@@ -1079,16 +970,16 @@ Re-runs are safe. The `hubspot-id-mapping.json` artifact is the linker — step 
 | # | Question | Resolution | Where |
 |---|---|---|---|
 | 1 | Pipeline stage names — keep Nexus names or align to HubSpot defaults? | Keep Nexus names verbatim (9 stages). No rename needed. | Section 2.2 |
-| 2 | Custom property counts and types — free tier accommodation? | Free tier CANNOT fit 38 properties (10-total cap). Two designs shipped: 7-property free-tier consolidation via JSON blobs, 38-property Starter recommended. | Section 1.1, Section 3.1, Section 3.2 |
-| 3 | Per-deal contact roles — association labels or fallback table? | Custom association labels require Pro. Free + Starter use Nexus `deal_contact_roles` join table. Primary contact still uses HubSpot's native Primary label. | Section 4.3 |
-| 4 | Webhook reliability and free-tier subscription scope? | Free tier supports all 12 planned subscriptions via Webhooks API. Engagement.* intentionally NOT subscribed (feedback-loop risk); reconciled via 15-min periodic sync. | Section 5.1, Section 5.6 |
-| 5 | Rate limit budget under demo load? | Steady-state ~20 calls/session well under daily 250k; peak ~90/10s during full reset requires batching via batch endpoints (Section 7.5). After batching, reset uses ~10 calls. | Section 7.4, Section 7.5 |
+| 2 | Custom property counts and types? | Starter tier accommodates all 38 properties comfortably (28 Deal + 5 Contact + 5 Company) as first-class typed fields. Free tier was ruled out per DECISIONS.md 2.18; this document ships the Starter design only. | Section 1.2, Section 3 |
+| 3 | Per-deal contact roles — association labels or fallback table? | Custom association labels require Pro, not available on Starter. Starter uses Nexus `deal_contact_roles` join table. Primary contact still uses HubSpot's native Primary label. | Section 4.3 |
+| 4 | Webhook reliability and Starter subscription scope? | Starter supports all 12 planned subscriptions via Webhooks API. Engagement.* intentionally NOT subscribed (feedback-loop risk); reconciled via 15-min periodic sync. | Section 5.1, Section 5.6 |
+| 5 | Rate limit budget under demo load? | Rate limits identical to Free (100/10s, 250k/day). Steady-state ~20 calls/session well under daily cap; peak ~90/10s during full reset requires batching via batch endpoints (Section 7.5). After batching, reset uses ~10 calls. | Section 7.4, Section 7.5 |
 | 6 | Primary-contact association label API access? | HubSpot-defined "Primary" label accessible on all tiers via `crm.associations.write` scope. | Section 4.4 |
 | 7 | Sequences integration? | Deferred to v2.1 (requires Sales Hub Pro). Email sequences remain in Nexus for v2. | Section 10.5 |
 | 8 | HubSpot Owner provisioning for 14 demo personas? | Provision real HubSpot Owners (14), link via `team_members.hubspot_owner_id`. | Section 9.6 |
-| 9 | `closed_lost_reason` native vs custom? | Do not use native (portal-dependent). Pack into `nexus_deal_intelligence.closeContext` (free) or `nexus_close_notes`/`nexus_close_competitor` (Starter). | Section 3.1, Section 10.6 |
-| 10 | Service Hub vs Engagement for customer messages? | Engagements (Email type) — free tier Service Hub too limited. `nexus_message_status` carried in Nexus only. | Section 1.7, Section 9.4 |
+| 9 | `closed_lost_reason` native vs custom? | Do not use native (portal-dependent). Use `nexus_close_notes` + `nexus_close_competitor` on Starter. | Section 3.1, Section 10.6 |
+| 10 | Service Hub vs Engagement for customer messages? | Engagements (Email type) — ticket-pipeline automation not used. `nexus_message_status` carried in Nexus only. | Section 1.8, Section 9.4 |
 
 ---
 
-**End of 07C.** Codex consumes Sections 2, 3, 5, 6, 7, 8 as the setup contract; Jeff executes Section 8 steps 1-4 manually; Section 9 seeds the demo environment; Section 10 flags the operational edges to watch during and after rollout.
+**End of 07C.** Codex consumes Sections 2, 3, 5, 6, 7, 8 as the setup contract; Jeff executes Section 8 steps 1-3 manually (sign up, create private app, deploy Vercel); Section 9 seeds the demo environment; Section 10 flags the operational edges to watch during and after rollout.
