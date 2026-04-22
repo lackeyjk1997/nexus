@@ -37,7 +37,7 @@
 **Taxonomy (four overlapping dimensions):**
 - Loss reason, Objection, Friction, Gap — each seeded at launch with reasonable values.
 - When hypotheses surface uncategorized reasons, flag as candidates.
-- If 3+ deals accumulate similar uncategorized reasons, surface to Jeff/Marcus: "This looks like a new pattern — name it?" Humans promote.
+- If 3+ deals accumulate similar uncategorized reasons, surface: "This looks like a new pattern — name it?" Humans promote.
 - **Current Nexus has hardcoded taxonomy in `StageChangeModal`** (Prompt 7 finding). No candidate-category promotion logic exists. v2 builds this.
 
 **Hypothesis validation requirement:** Close-lost hypotheses must be verified against the event stream before surfacing (see 2.21).
@@ -57,7 +57,7 @@ Applies to: close-lost capture, observation capture, call prep feedback, any fut
 - Active experiments surface in call prep for assigned reps
 
 **Build (missing or broken):**
-- **POST /api/experiments route** — Prompt 7 finding. v2 ships this through a service function (per 2.10).
+- **POST /api/experiments route** — Prompt 7 finding. v2 ships through a service function (per 2.10).
 - **Attribution** on transcripts and emails (open-loop today).
 - **Applicability gating** (see 2.21).
 
@@ -88,8 +88,7 @@ All three carry explicit applicability rules (see 2.21).
 ### 1.8 Out of Scope for Rebuild (LOCKED)
 
 - Role-based surfacing
-- User permissions / multi-tenancy
-- Real authentication (see 2.1)
+- Multi-tenancy
 - Guided tour
 
 ### 1.9 Features Preserved from Current Nexus (LOCKED)
@@ -106,7 +105,7 @@ All three carry explicit applicability rules (see 2.21).
 - Call prep generation
 - Follow-up email drafting
 - Agent memory / per-deal intelligence (event-sourced per 2.16)
-- Agent interventions — now data-driven via applicability gating, NOT hardcoded deal-name checks (Prompt 7 finding)
+- Agent interventions — data-driven via applicability gating, NOT hardcoded deal-name checks
 - 14-person demo org + support personas
 - Vertical-specific demo data
 - Framework 21 interaction patterns
@@ -130,53 +129,87 @@ Zero grep-findable callers per Prompt 3:
 
 ### 1.12 Dead Pages and Placeholder Routes (LOCKED)
 
-Per Prompt 6 findings, cut from v2: `observations-client.tsx`, `/agent-admin`, `/team`. v2 nav is a declarative registry; commented-out entries not allowed.
+Cut from v2: `observations-client.tsx`, `/agent-admin`, `/team`. v2 nav is a declarative registry.
 
 ### 1.13 Deal Creation as a First-Class Feature (LOCKED)
 
-Current Nexus has no `POST /api/deals` route. Every deal comes from seed scripts.
-
-v2:
 - Deal creation is a first-class UI surface in Nexus
 - Adapter creates deal in HubSpot AND initializes Nexus intelligence shell (`DealCreated`, `StageSet` events)
 - Create flow captures: name, amount, stage, close date, primary contact, company
 - MEDDPICC edit UI ships in v2
 
-This changes Codex's Phase 2 scope.
-
 ### 1.14 AgentIntervention Must Be Data-Driven (LOCKED)
 
-Current `AgentIntervention` hardcodes `deal.name.includes("nordicmed")`. v2:
-- No name-based demo scaffolding in production code
-- Intervention triggers are structured rules (applicability metadata per 2.21)
-- Interventions surface via `DealIntelligence.getApplicable*()` pipeline
-- Demo data is shaped so real triggers fire for real reasons
+No name-based demo scaffolding. Intervention triggers are structured rules (applicability metadata per 2.21). Surface via `DealIntelligence.getApplicable*()` pipeline.
 
 ---
 
 ## Part 2 — Architectural Decisions
 
-### 2.1 Authentication Strategy (PENDING INPUT)
+### 2.1 Authentication Strategy (RESOLVED — Option A)
 
-**Options:** (A) real auth, (B) persona switching. **Claude's recommendation:** (A).
+**Decision:** Real authentication from day one.
 
-### 2.2 Database Hygiene — Full Migration Scope (PENDING INPUT)
+**Stack:**
+- **Supabase Auth** as the identity provider (email + magic link primarily; Google OAuth optional)
+- **RLS policies enforced on every Nexus-owned table** (see 2.2 for table list)
+- **User session** binds to a row in `users` table (14-person demo org + any new users added)
+- **Rep identity flows to Claude prompts** — `DealIntelligence` operations carry the acting user's ID, and prompts requiring a rep's voice (call prep, email drafting, feedback) receive the rep's name and role
+- **Admin role** exists for debug/dev bypass during iteration; never used in demo flows
 
-**Options:** (A) full hygiene pass, (B) targeted pass. **Claude's recommendation:** (A).
+**What this replaces:** The persona-switching pattern in current Nexus is removed. No more `?persona=sarah` URL params. Each demo persona logs in with their own (seeded) email.
 
-### 2.3 Observation → Deal Relationship (PENDING INPUT)
+**Rationale:** Codex builds from scratch; retrofitting auth later is always more painful than building it in. Real auth unlocks: real observation attribution, real per-rep call prep feedback loops, real multi-user demo moments (e.g., Sarah reporting an observation that Marcus sees as a manager), and accurate audit trails.
 
-**Options:** (A) many-to-many join table, (B) one-to-one. **Claude's recommendation:** (A).
+**Day-1 implementation (Phase 1 Day 2):** Supabase Auth wired, RLS stubbed (filled as tables come online), seed script creates auth users for the 14-person demo org with known passwords (or magic-link-redeem flow for a demo).
+
+### 2.2 Database Hygiene — Full Migration Scope (RESOLVED — Option A)
+
+**Decision:** Full hygiene pass in v2. Every debt item from 02-SCHEMA.md findings gets resolved at v2 genesis.
+
+**Scope:**
+- **20+ text-shaped enum columns** → proper Postgres enums or lookup tables per column's semantics
+- **RLS enabled on every Nexus-owned table** (paired with 2.1). Policies written alongside each table's schema
+- **Indexes on every FK** — no FK column unindexed
+- **Explicit ON DELETE behavior on every FK** — CASCADE, RESTRICT, or SET NULL chosen per relationship's semantics, never defaulted
+- **Heterogeneous FKs split** — `field_queries.initiated_by` and `observation_routing.target_member_id` become two nullable columns (one per target type) with a discriminator, not a single polymorphic column
+- **uuid[] arrays → join tables** — `observations.linked_deal_ids[]`, `playbook.*`, `coordinator_patterns.*`, `knowledge_articles.*` all become proper FK join tables (see 2.3 for the observation case specifically)
+- **Schema typos corrected** — `readnessFitDetected` → `readinessFitDetected`, and any other misspellings surfaced during migration
+- **Dropped tables** (from 07B findings): `agent_actions_log`, `deal_agent_states`, `deal_stage_history` — these are Rivet-era or HubSpot-owned now
+- **Migration discipline:** every schema change is a numbered Drizzle migration; no manual DB edits
+
+**Codex execution path:** Phase 1 Day 2 applies the full v2 schema as migrations before any code is written against tables. No "we'll fix the schema later."
+
+### 2.3 Observation → Deal Relationship (RESOLVED — Option A)
+
+**Decision:** Many-to-many via proper `observation_deals` join table.
+
+**Schema:**
+```sql
+observation_deals (
+  observation_id uuid NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+  deal_id uuid NOT NULL REFERENCES deals_cache(id) ON DELETE CASCADE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  PRIMARY KEY (observation_id, deal_id)
+)
+```
+
+**Eliminates:** the `observations.linked_deal_ids uuid[]` array column. Enforcement of deal existence is now at the database level.
+
+**Enables:** the coordinator's core value — cross-deal pattern detection. An observation that touches 3 deals is naturally representable. Queries like "all observations on deal X" and "all deals affected by observation Y" are both trivial.
+
+**Related design:** `DealIntelligence` service queries observations for a deal via the join table. Observation ingestion may write 1+ rows into `observation_deals` based on classifier output (the classifier determines which deal(s) an observation applies to).
 
 ### 2.4 Column Naming Conventions (LOCKED)
 
-- `observations.observer_id`, `raw_input`, `ai_classification`, `linked_deal_ids uuid[]`
-- Routes use camelCase equivalents.
+- `observations.observer_id`, `raw_input`, `ai_classification`, and observation↔deal links via `observation_deals` join table (see 2.3 — the `linked_deal_ids uuid[]` column is gone in v2)
+- API routes use camelCase equivalents: `observerId`, `rawInput`, `aiClassification`
+- Any observation↔deal relationship references the join table, not an array column
 
 ### 2.5 Surfacing Strategy — Two-Part Problem (PARTIALLY RESOLVED)
 
 **Part A (applicability): RESOLVED via 2.21.**
-**Part B (prioritization/frequency): OPEN, queued for conversation after Prompt 8.**
+**Part B (prioritization/frequency): ACTIVE CONVERSATION NOW in planning chat.** Once resolved, this section updates to LOCKED.
 
 ### 2.6 Infrastructure / Long-Running Workflows (RESOLVED)
 
@@ -218,7 +251,7 @@ Resolved via rewrite #4 (Coordinator Synthesis) in 04C-PROMPT-REWRITES.md — 93
 
 ### 2.15 Prompt Analysis Phase (COMPLETED)
 
-Four sessions after Prompt 7.5: 4.5a, 4.5b, 4.6, 4.7. Outputs in `04A-PROMPT-AUDIT.md`, `04B-PROMPT-DEPENDENCIES.md`, `04C-PROMPT-REWRITES.md`.
+Four sessions after Prompt 7.5: 4.5a, 4.5b, 4.6, 4.7.
 
 ### 2.16 Intelligence Service Architecture (LOCKED)
 
@@ -228,47 +261,32 @@ Event-sourced state in `deal_events` (append-only). Snapshots in `deal_snapshots
 
 Scheduled (pg_cron) + on-demand (called by call-prep and close-lost). Same code path. Call prep MUST query the coordinator.
 
-`coordinator_patterns` is the authoritative table in v2. Call prep queries it directly. Current Nexus's dual-table misalignment disappears.
+### 2.18 CRM Strategy — HubSpot Starter Customer Platform Hybrid (LOCKED)
 
-### 2.18 CRM Strategy — HubSpot Starter Customer Platform Hybrid (LOCKED, UPDATED)
+**Tier:** HubSpot Starter Customer Platform (paid). $9-15/month per seat.
 
-**Tier:** HubSpot **Starter Customer Platform** (paid), not Free.
+**Why Starter over Free:** Free tier caps custom properties at 10 total across the account. v2 needs 38. Starter relaxes this; no property consolidation required.
 
-**Pricing committed:** ~$9-15/month per seat. One seat for Jeff.
+**What's identical to Free-tier plan:** API rate limits (100 req/10s, 250K daily), webhooks, auth, sync architecture.
 
-**Why Starter over Free:** Free tier caps custom properties at 10 total across the entire account. v2's 07B design calls for 38 custom properties across Deal/Contact/Company. On Free, 07C would have needed a property-consolidation pattern (packed JSON blobs) that adds CrmAdapter complexity and makes HubSpot's UI less useful. On Starter, all 38 properties ship as first-class HubSpot fields.
+**What changes:** Custom properties ship as first-class HubSpot fields (no packed-JSON consolidation).
 
-**What stays identical to the Free-tier plan:**
-- API rate limits (100 requests/10s, 250,000 daily) are the SAME on Starter and Free. All caching, batching, and rate-budget work in 07B Section 4 and 07C Section 7 stands unchanged.
-- Webhook availability identical
-- Auth model identical (private app, scopes)
-- Pipeline/stage model identical
-- Sync architecture identical
-
-**What changes:**
-- 07C Section 1 (Free Tier Constraints): replace with Starter-tier constraints
-- 07C Section 3 (Custom Property Specifications): REMOVE any property consolidation. All 38 properties ship as individual HubSpot properties per their natural types.
-- 07C Section 8 (Setup Playbook): account creation step is Starter signup, not Free signup. Any "skip/consolidate because of Free limit" notes are removed.
-
-**Architecture invariants (unchanged):**
+**Architecture invariants:**
 - HubSpot = data backend nobody logs into
 - Nexus = the UI users experience
-- Adapter pattern mandatory (`CrmAdapter` interface, `HubSpotAdapter` implementation)
-- Read-through cache so Nexus continues demoing against cached data if HubSpot is unavailable
-- No HubSpot-specific code outside the adapter
+- `CrmAdapter` interface mandatory, `HubSpotAdapter` implementation
+- Read-through cache for demo resilience
 
 ### 2.19 Data Boundary (LOCKED)
 
 **HubSpot:** deals, contacts, companies, native activities, stages, pipelines.
-**Nexus:** `deal_events`, `deal_snapshots`, `observations`, `coordinator_patterns`, `experiments`, `transcripts`, `meddpicc_scores`, `people` table, rep accounts.
+**Nexus:** `deal_events`, `deal_snapshots`, `observations`, `observation_deals` (2.3), `coordinator_patterns`, `experiments`, `transcripts`, `meddpicc_scores`, `people` table, rep/user accounts (2.1).
 **Split:** stakeholders (identity in HubSpot, engagement analysis in Nexus events).
 **Sync:** HubSpot → Nexus via webhooks + periodic sync. Nexus → HubSpot write-back only for AI custom properties.
 
 ### 2.20 New Extraction Prompts for HubSpot Planning (COMPLETED)
 
-- Prompt 7.6 — CRM Data Boundary Mapping (`07B-CRM-BOUNDARY.md`)
-- Prompt 7.7 — HubSpot Property and Integration Design (`07C-HUBSPOT-SETUP.md`)
-- **Addendum to 7.7:** Sections 1, 3, 8 must be updated after 2.18 tier change. See separate prompt.
+07B, 07C, and 7.7 Addendum all complete.
 
 ### 2.21 Deal-Context Applicability Gating (LOCKED)
 
@@ -318,31 +336,18 @@ Handoff: Mode 1 → `DESIGN-SYSTEM.md`. Mode 2 → `docs/design/<page-name>.md` 
 
 ## Part 4 — Remaining Conversations Required
 
-1. Surfacing prioritization / frequency (Part B of 2.5) — after Prompt 8.
-2. Resolve 2.1, 2.2, 2.3 PENDING items — same conversation.
+1. **Surfacing Part B (2.5)** — ACTIVE NOW in planning chat.
+
+All other PENDING items resolved.
 
 ---
 
 ## Part 5 — Updated Claude Code Prompt Sequence
 
-- ✅ Prompt 0 — Setup
-- ✅ Prompt 1 — Inventory
-- ✅ Prompt 2 — Schema
-- ✅ Prompt 3 — API Routes
-- ✅ Prompt 4 — Prompt Registry
-- ✅ Prompt 5 — Rivet Actors
-- ✅ Prompt 6 — UI Structure
-- ✅ Prompt 7 — Data Flows
-- ✅ Prompt 7.5 — Context Assembly Audit
-- ✅ Prompt 4.5a — Prompt Quality Audit (prompts 1-13)
-- ✅ Prompt 4.5b — Prompt Quality Audit (prompts 14-25)
-- ✅ Prompt 4.6 — Prompt Dependency Graph
-- ✅ Prompt 4.7 — Prompt Rewrites + Principles
-- ✅ Prompt 7.6 — CRM Data Boundary Mapping
-- ✅ Prompt 7.7 — HubSpot Property and Integration Design
-- ⏳ **Prompt 7.7 Addendum** — Update 07C Sections 1, 3, 8 for Starter tier (see separate prompt)
-- Prompt 8 — Source Copy
-- **[Planning chat: Surfacing Part B + resolve 2.1/2.2/2.3]**
+- ✅ Prompt 0 through Prompt 7.7 (extraction)
+- ✅ Prompt 7.7 Addendum (Starter tier)
+- ✅ Prompt 8 (Source Copy)
+- ⏳ **[Planning chat: Surfacing Part B — ACTIVE NOW]**
 - Prompt 9 — Critique
 - Prompt 10 — Rebuild Plan
 - Prompt 11 — Final Packaging
@@ -394,4 +399,7 @@ Handoff: Mode 1 → `DESIGN-SYSTEM.md`. Mode 2 → `docs/design/<page-name>.md` 
 41. No name-based demo scaffolding. Interventions and triggers are data-driven.
 42. Pipeline steps do real work. No "backward compat" placeholders.
 43. AI-driven config mutations are proposals, not direct writes.
-44. HubSpot is on Starter Customer Platform tier (paid). Property consolidation patterns are NOT used — all custom properties ship as individual HubSpot properties per their natural types.
+44. HubSpot is on Starter Customer Platform tier. Custom properties ship as first-class HubSpot fields (no packed-JSON consolidation).
+45. Real authentication from day one via Supabase Auth + RLS (per 2.1). No persona-switching demo pattern.
+46. Full database hygiene pass at v2 genesis: proper enums, indexed FKs, explicit ON DELETE, split heterogeneous FKs, join tables instead of uuid[] arrays (per 2.2).
+47. Observation↔deal relationship via `observation_deals` join table (per 2.3). No `linked_deal_ids uuid[]` column in v2.
