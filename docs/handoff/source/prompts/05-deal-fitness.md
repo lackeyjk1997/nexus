@@ -5,7 +5,7 @@ rewrite_source: 04C-PROMPT-REWRITES.md
 model: claude-sonnet-4-20250514
 temperature: 0.3
 max_tokens: 16000
-version: 1.0.0
+version: 1.1.0
 ---
 
 # System Prompt
@@ -288,7 +288,7 @@ Analyze per the discipline in the system prompt. Run all five reasoning passes. 
                 title: { type: ["string", "null"] },
                 first_appearance: { type: "string", description: "Call label or email date." },
                 introduced_by: { type: "string", description: "Name of the contact who introduced this person, or 'self' if buyer-initiated." },
-                role: { type: "string", description: "Champion | Economic Buyer | Technical Evaluator | End User | Procurement | CISO | other." },
+                role: { type: "string", enum: ["champion", "economic_buyer", "decision_maker", "technical_evaluator", "end_user", "procurement", "influencer", "blocker", "coach"] },
                 weeks_active: { type: "integer", minimum: 0 },
                 calls_joined: { type: "integer", minimum: 0 }
               },

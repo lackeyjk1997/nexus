@@ -1447,7 +1447,7 @@ Analyze per the discipline in the system prompt. Run all five reasoning passes. 
                 title: { type: ["string", "null"] },
                 first_appearance: { type: "string", description: "Call label or email date." },
                 introduced_by: { type: "string", description: "Name of the contact who introduced this person, or 'self' if buyer-initiated." },
-                role: { type: "string", description: "Champion | Economic Buyer | Technical Evaluator | End User | Procurement | CISO | other." },
+                role: { type: "string", enum: ["champion", "economic_buyer", "decision_maker", "technical_evaluator", "end_user", "procurement", "influencer", "blocker", "coach"] },
                 weeks_active: { type: "integer", minimum: 0 },
                 calls_joined: { type: "integer", minimum: 0 }
               },
@@ -2480,7 +2480,7 @@ Integrate per the discipline. Validate proven-plays deterministic check. Surface
             contact_id: { type: "string", description: "UUID of the contact for downstream linking." },
             name: { type: "string" },
             title: { type: "string" },
-            role: { type: "string", enum: ["champion", "economic_buyer", "technical_evaluator", "blocker", "end_user", "procurement", "ciso", "other"] },
+            role: { type: "string", enum: ["champion", "economic_buyer", "decision_maker", "technical_evaluator", "end_user", "procurement", "influencer", "blocker", "coach"] },
             engagement: { type: "string", enum: ["hot", "warm", "cold", "departed"] },
             last_contact: { type: ["string", "null"], description: "ISO date or null." },
             notes: { type: "string", description: "One sentence." }

@@ -5,7 +5,7 @@ rewrite_source: 04C-PROMPT-REWRITES.md
 model: claude-sonnet-4-20250514
 temperature: 0.3
 max_tokens: 4000
-version: 1.0.0
+version: 1.1.0
 ---
 
 # System Prompt
@@ -257,7 +257,7 @@ Each of these runs in parallel and feeds the orchestrator. Each gets its own `pr
             contact_id: { type: "string", description: "UUID of the contact for downstream linking." },
             name: { type: "string" },
             title: { type: "string" },
-            role: { type: "string", enum: ["champion", "economic_buyer", "technical_evaluator", "blocker", "end_user", "procurement", "ciso", "other"] },
+            role: { type: "string", enum: ["champion", "economic_buyer", "decision_maker", "technical_evaluator", "end_user", "procurement", "influencer", "blocker", "coach"] },
             engagement: { type: "string", enum: ["hot", "warm", "cold", "departed"] },
             last_contact: { type: ["string", "null"], description: "ISO date or null." },
             notes: { type: "string", description: "One sentence." }
