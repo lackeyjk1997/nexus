@@ -1,0 +1,2463 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Calendar,
+  Mail,
+  MessageSquare,
+  Clock,
+  Globe,
+  Building2,
+  Users,
+  MapPin,
+  Cpu,
+  FileText,
+  CheckCircle2,
+  Circle,
+  ShieldCheck,
+  Bot,
+  ChevronRight,
+  Phone,
+  Star,
+  AlertTriangle,
+  Trophy,
+  Banknote,
+  Target,
+  Swords,
+  Search,
+  UserCheck,
+  Sparkles,
+  X,
+  Copy,
+  Check,
+  ChevronDown,
+  Lightbulb,
+  RotateCcw,
+  Activity,
+} from "lucide-react";
+import { cn, formatCurrency, daysAgo, getHealthColor, getVerticalColor } from "@/lib/utils";
+import { STAGE_LABELS, PRODUCT_LABELS, type PipelineStage } from "@nexus/shared";
+import { ActivityFeed, type ActivityItem } from "@/components/activity-feed";
+import { StageChangeModal } from "@/components/stage-change-modal";
+import { AgentMemory } from "@/components/agent-memory";
+import { AgentIntervention } from "@/components/agent-intervention";
+import { WorkflowTracker } from "@/components/workflow-tracker";
+
+import { DealQuestionInput } from "@/components/deal-question-input";
+import { usePersona } from "@/components/providers";
+import { useActor } from "@/lib/rivet";
+
+// ── Types ──
+
+type Deal = {
+  id: string;
+  name: string;
+  stage: string;
+  dealValue: string | null;
+  currency: string | null;
+  closeDate: Date | null;
+  winProbability: number | null;
+  forecastCategory: string | null;
+  vertical: string;
+  product: string | null;
+  leadSource: string | null;
+  competitor: string | null;
+  lossReason: string | null;
+  closeCompetitor: string | null;
+  closeNotes: string | null;
+  closeImprovement: string | null;
+  winTurningPoint: string | null;
+  winReplicable: string | null;
+  closeAiAnalysis: unknown;
+  closeFactors: unknown;
+  winFactors: unknown;
+  closedAt: Date | null;
+  stageEnteredAt: Date | null;
+  createdAt: Date;
+  companyId: string;
+  companyName: string | null;
+  companyDomain: string | null;
+  companyIndustry: string | null;
+  companyEmployeeCount: number | null;
+  companyRevenue: string | null;
+  companyHq: string | null;
+  companyTechStack: string[] | null;
+  companyDescription: string | null;
+  aeName: string | null;
+  aeId: string | null;
+};
+
+type Meddpicc = {
+  id: string;
+  metrics: string | null;
+  metricsConfidence: number | null;
+  economicBuyer: string | null;
+  economicBuyerConfidence: number | null;
+  decisionCriteria: string | null;
+  decisionCriteriaConfidence: number | null;
+  decisionProcess: string | null;
+  decisionProcessConfidence: number | null;
+  identifyPain: string | null;
+  identifyPainConfidence: number | null;
+  champion: string | null;
+  championConfidence: number | null;
+  competition: string | null;
+  competitionConfidence: number | null;
+  aiExtracted: boolean | null;
+  aeConfirmed: boolean | null;
+} | null;
+
+type Milestone = {
+  id: string;
+  milestoneKey: string;
+  isCompleted: boolean | null;
+  completedAt: Date | null;
+  source: string | null;
+  evidence: string | null;
+};
+
+type Contact = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  roleInDeal: string | null;
+  isPrimary: boolean | null;
+};
+
+type Transcript = {
+  id: string;
+  title: string;
+  date: Date;
+  durationSeconds: number | null;
+  participants: unknown;
+  transcriptText: string | null;
+  status: string | null;
+  analysisSummary: string | null;
+  callQualityScore: number | null;
+  painPoints: unknown;
+  nextSteps: unknown;
+  talkRatio: unknown;
+  coachingInsights: unknown;
+  pipelineProcessed: boolean | null;
+};
+
+type StageHistoryItem = {
+  id: string;
+  fromStage: string | null;
+  toStage: string;
+  changedBy: string;
+  reason: string | null;
+  createdAt: Date;
+};
+
+type TabKey = "overview" | "meddpicc" | "stakeholders" | "activity" | "calls";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "meddpicc", label: "MEDDPICC" },
+  { key: "stakeholders", label: "Stakeholders" },
+  { key: "activity", label: "Activity" },
+  { key: "calls", label: "Calls" },
+];
+
+const STAGES_ORDER: PipelineStage[] = [
+  "new_lead", "qualified", "discovery", "technical_validation",
+  "proposal", "negotiation", "closing", "closed_won", "closed_lost",
+];
+
+// ── Call Brief Types ──
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type CallBrief = {
+  headline: string;
+  proven_plays?: Array<{ name: string; talking_point: string; close_action: string }>;
+  talking_points: Array<{ topic: string; why: string; approach: string }>;
+  questions_to_ask: Array<{ question: string; purpose: string; meddpicc_gap: string | null }>;
+  deal_fitness_insights?: {
+    summary: string;
+    gaps: Array<{ event: string; fit_category: string; coaching: string; matched_play?: { name: string; evidence: string } | null }>;
+    pending_commitments: Array<{ promise: string; promised_by: string; suggested_follow_up: string }>;
+    active_experiments?: Array<{ name: string; application: string }>;
+  } | null;
+  risks_and_landmines: Array<{ risk: string; source: string; mitigation: string }>;
+  next_steps?: string[];
+  deal_snapshot: { stage: string; value: string; days_in_stage: string; health: string; health_reason: string };
+  stakeholders_in_play: Array<{ name: string; title: string; role: string; engagement: string; last_contact: string | null; notes: string }>;
+  competitive_context: string | null;
+  system_intelligence?: string[];
+  manager_directives?: string[];
+  // Backward compat with old saved briefs
+  suggested_next_steps?: string[];
+  team_intelligence?: string[];
+  suggested_resources?: Array<{ title: string; type: string; why: string }>;
+  [key: string]: any;
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ── Collapsible Section ──
+
+function BriefSection({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between py-2"
+        style={{ color: "#3D3833" }}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">{title}</span>
+        <ChevronDown className={cn("h-3 w-3 transition-transform", open ? "rotate-180" : "")} style={{ color: "#8A8078" }} />
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+// ── Main Component ──
+
+type DealObservation = {
+  id: string;
+  rawInput: string;
+  status: string | null;
+  aiClassification: unknown;
+  arrImpact: unknown;
+  clusterId: string | null;
+  createdAt: Date;
+  observerName: string | null;
+};
+
+export function DealDetailClient({
+  deal,
+  meddpicc,
+  milestones,
+  contacts,
+  activities,
+  transcripts,
+  stageHistory,
+  dealObservations = [],
+}: {
+  deal: Deal;
+  meddpicc: Meddpicc;
+  milestones: Milestone[];
+  contacts: Contact[];
+  activities: ActivityItem[];
+  transcripts: Transcript[];
+  stageHistory: StageHistoryItem[];
+  dealObservations?: DealObservation[];
+}) {
+  // Merge observations into the activity list
+  const observationActivities: ActivityItem[] = dealObservations.map((obs) => {
+    const classification = obs.aiClassification as { signals?: Array<{ type: string }> } | null;
+    const signalType = classification?.signals?.[0]?.type || "field_intelligence";
+    const arrData = obs.arrImpact as { total_value?: number } | null;
+    const arrText = arrData?.total_value ? ` — €${(arrData.total_value / 1000).toFixed(0)}K at risk` : "";
+
+    return {
+      id: `obs-${obs.id}`,
+      type: "observation" as string,
+      subject: `Field Intel: ${obs.rawInput.slice(0, 80)}${obs.rawInput.length > 80 ? "…" : ""}`,
+      description: `Signal: ${signalType.replace(/_/g, " ")}${arrText}`,
+      createdAt: obs.createdAt,
+      teamMemberName: obs.observerName,
+    };
+  });
+
+  const mergedActivities = [...activities, ...observationActivities].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [stageModalOpen, setStageModalOpen] = useState(false);
+  const [callPrepPhase, setCallPrepPhase] = useState<"hidden" | "context" | "loading" | "result" | "error">("hidden");
+  const [callBrief, setCallBrief] = useState<CallBrief | null>(null);
+  const [callBriefProvenPlays, setCallBriefProvenPlays] = useState<string[]>([]);
+  const [callPrepSections, setCallPrepSections] = useState<Record<string, boolean>>({});
+  const [briefCopied, setBriefCopied] = useState(false);
+  const [briefSaved, setBriefSaved] = useState(false);
+  const [contextExpanded, setContextExpanded] = useState(false);
+  const [prepContext, setPrepContext] = useState("");
+  const [prepContextHighlight, setPrepContextHighlight] = useState(-1);
+  const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<string[]>([]);
+
+
+  // MEDDPICC data that can be refreshed after pipeline
+  const [meddpiccData, setMeddpiccData] = useState<Meddpicc>(meddpicc);
+  const [meddpiccUpdatedFromPipeline, setMeddpiccUpdatedFromPipeline] = useState(false);
+
+  // Close date state (editable)
+  const [closeDate, setCloseDate] = useState<string>(
+    deal.closeDate ? new Date(deal.closeDate).toISOString().split("T")[0] : ""
+  );
+  const [isEditingCloseDate, setIsEditingCloseDate] = useState(false);
+  const [closeDateError, setCloseDateError] = useState("");
+
+  // Email draft state
+  const [draftPhase, setDraftPhase] = useState<"hidden" | "loading" | "result" | "error">("hidden");
+  const [emailDraft, setEmailDraft] = useState<{ subject: string; body: string; to: string; notes_for_rep: string } | null>(null);
+  const [editedSubject, setEditedSubject] = useState("");
+  const [editedBody, setEditedBody] = useState("");
+  const [emailCopied, setEmailCopied] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+  const [draftContext, setDraftContext] = useState("");
+
+  // Agent memory refetch trigger
+  const [agentMemoryRefetchKey, setAgentMemoryRefetchKey] = useState(0);
+
+  // Guard: only trigger deal fitness analysis once per pipeline run
+  const fitnessTriggered = useRef(false);
+  const fitnessPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { currentUser } = usePersona();
+
+  // Deal agent actor for recording interactions
+  const dealActor = useActor({
+    name: "dealAgent",
+    key: [deal.id],
+  });
+
+  // No auto-brief generation — user clicks "Prep Call" manually
+
+  // Subscribe to workflow events from the deal agent actor (event relay only)
+  useEffect(() => {
+    if (!dealActor.connection) return;
+
+    const unsubWorkflow = dealActor.connection.on("workflowProgress", async (event: { step: string; status: string; details?: string }) => {
+      console.log("[DealDetail] workflowProgress event:", JSON.stringify(event));
+
+      // Refresh MEDDPICC after update_scores completes (pipeline sends "update_scores")
+      if (event.step === "update_scores" && event.status === "complete") {
+        try {
+          const res = await fetch(`/api/deals/${deal.id}/meddpicc`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data) {
+              setMeddpiccData(data);
+              setMeddpiccUpdatedFromPipeline(true);
+            }
+          }
+        } catch {}
+      }
+
+      // Fire deal fitness analysis + brief generation after pipeline completes
+      if (event.step === "finalize" && event.status === "complete") {
+        // Trigger fitness analysis
+        if (!fitnessTriggered.current) {
+          fitnessTriggered.current = true;
+          console.log("[DealDetail] Pipeline complete — triggering fitness analysis for deal:", deal.id);
+          fetch("/api/deal-fitness/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dealId: deal.id }),
+          })
+            .then((res) => res.ok ? res.json() : Promise.reject(res.status))
+            .then((result) => console.log(`[Deal Fitness] ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
+            .catch((err) => console.error("[Deal Fitness] Analysis error:", err));
+        }
+
+        // Refresh agent memory
+        setAgentMemoryRefetchKey((prev) => prev + 1);
+      }
+    });
+
+    return () => { unsubWorkflow(); if (fitnessPollRef.current) clearInterval(fitnessPollRef.current); };
+  }, [dealActor.connection, deal.id, currentUser]);
+
+  const daysInStage = deal.stageEnteredAt ? daysAgo(deal.stageEnteredAt) : 0;
+  const health = getHealthColor(daysInStage, deal.stage);
+  const vertColor = getVerticalColor(deal.vertical);
+  const winProb = deal.winProbability ?? 0;
+
+  // Smart default for meeting type based on deal stage
+  function getDefaultPrepContext(): string {
+    const stage = deal.stage;
+    if (stage === "discovery" || stage === "qualified") return "Discovery call";
+    if (stage === "technical_validation") return "Technical review / demo";
+    if (stage === "proposal") return "Executive / procurement meeting";
+    if (stage === "negotiation" || stage === "closing") return "Negotiation / pricing discussion";
+    return "";
+  }
+
+  const PREP_OPTIONS = [
+    "Discovery call",
+    "Technical review / demo",
+    "Executive / procurement meeting",
+    "Negotiation / pricing discussion",
+  ];
+
+  function handlePrepCall() {
+    if (!currentUser) return;
+
+    // Show context selector — start blank so user explicitly picks
+    setPrepContext("");
+    setPrepContextHighlight(-1);
+    // Pre-check primary contact
+    const primaryIds = contacts.filter((c) => c.isPrimary).map((c) => c.id);
+    setSelectedAttendeeIds(primaryIds.length > 0 ? primaryIds : contacts.length > 0 ? [contacts[0].id] : []);
+    setBriefSaved(false);
+    setCallPrepPhase("context");
+  }
+
+  async function generateCallPrep(ctx: string, attendees: string[]) {
+    if (!currentUser) return;
+    setPrepContext(ctx);
+    setCallPrepPhase("loading");
+    try {
+      const res = await fetch("/api/agent/call-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+          prepContext: ctx,
+          attendeeIds: attendees,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCallBrief(data.brief);
+        setCallBriefProvenPlays(data.provenPlayNames ?? []);
+        setCallPrepPhase("result");
+
+        // Record interaction is now handled by Supabase (no actor call needed)
+      } else {
+        setCallPrepPhase("error");
+      }
+    } catch {
+      setCallPrepPhase("error");
+    }
+  }
+
+  async function saveBriefToDeal() {
+    if (!currentUser || !callBrief || briefSaved) return;
+    const selectedAttendees = contacts
+      .filter((c) => selectedAttendeeIds.includes(c.id))
+      .map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName}`, title: c.title, role: c.roleInDeal }));
+    await fetch("/api/agent/save-to-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: deal.id,
+        memberId: currentUser.id,
+        activityType: "call_prep",
+        title: `AI Call Prep — ${prepContext || deal.companyName}`,
+        description: callBrief.headline,
+        fullMetadata: {
+          source: "call_prep",
+          prepContext,
+          attendees: selectedAttendees,
+          brief: callBrief,
+          generatedAt: new Date().toISOString(),
+        },
+      }),
+    }).catch(() => {});
+    setBriefSaved(true);
+  }
+
+  async function handleDraftFollowUp(additionalCtx?: string) {
+    if (!currentUser) return;
+    setDraftPhase("loading");
+    setEmailSaved(false);
+
+    // Build context from the most recent transcript analysis
+    const latestTranscript = transcripts[0];
+    const analysisContext = latestTranscript?.analysisSummary
+      ? `Call: ${latestTranscript.title}. Summary: ${latestTranscript.analysisSummary}. Pain points: ${JSON.stringify(latestTranscript.painPoints || [])}. Next steps: ${JSON.stringify(latestTranscript.nextSteps || [])}`
+      : undefined;
+
+    try {
+      const res = await fetch("/api/agent/draft-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "follow_up",
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+          additionalContext: [analysisContext, additionalCtx].filter(Boolean).join(". ") || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailDraft(data.draft);
+        setEditedSubject(data.draft.subject);
+        setEditedBody(data.draft.body);
+        setDraftPhase("result");
+        setDraftContext("");
+      } else {
+        setDraftPhase("error");
+      }
+    } catch {
+      setDraftPhase("error");
+    }
+  }
+
+  async function handleDraftForTranscript(transcript: Transcript) {
+    if (!currentUser) return;
+    setDraftPhase("loading");
+    setEmailSaved(false);
+
+    const analysisContext = transcript.analysisSummary
+      ? `Call: ${transcript.title}. Summary: ${transcript.analysisSummary}. Pain points: ${JSON.stringify(transcript.painPoints || [])}. Next steps: ${JSON.stringify(transcript.nextSteps || [])}`
+      : `Call: ${transcript.title}`;
+
+    try {
+      const res = await fetch("/api/agent/draft-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "follow_up",
+          dealId: deal.id,
+          accountId: deal.companyId,
+          memberId: currentUser.id,
+          additionalContext: analysisContext,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailDraft(data.draft);
+        setEditedSubject(data.draft.subject);
+        setEditedBody(data.draft.body);
+        setDraftPhase("result");
+        setDraftContext("");
+      } else {
+        setDraftPhase("error");
+      }
+    } catch {
+      setDraftPhase("error");
+    }
+  }
+
+  async function copyEmail() {
+    await navigator.clipboard.writeText(`Subject: ${editedSubject}\n\n${editedBody}`).catch(() => {});
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  }
+
+  async function saveEmailToDeal() {
+    if (!currentUser || !emailDraft || emailSaved) return;
+    await fetch("/api/agent/save-to-deal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: deal.id,
+        memberId: currentUser.id,
+        activityType: "email_draft",
+        title: `Follow-up email drafted${emailDraft.to ? ` for ${emailDraft.to}` : ""}`,
+        description: `Subject: ${editedSubject}`,
+        fullMetadata: {
+          source: "email_draft",
+          to: emailDraft.to,
+          subject: editedSubject,
+          body: editedBody,
+          notes: emailDraft.notes_for_rep,
+          generatedAt: new Date().toISOString(),
+        },
+      }),
+    }).catch(() => {});
+    setEmailSaved(true);
+  }
+
+  async function copyBrief() {
+    if (!callBrief) return;
+    const sections: string[] = [];
+    sections.push(`CALL BRIEF — ${deal.companyName}`);
+    sections.push(callBrief.headline);
+
+    const plays = callBrief.proven_plays || [];
+    if (plays.length > 0) {
+      sections.push(`\nPROVEN PLAYS\n${plays.map((p: { name: string }) => `📋 ${p.name}`).join("\n")}`);
+    }
+
+    const tps = callBrief.talking_points || [];
+    if (tps.length > 0) {
+      sections.push(`\nTALKING POINTS\n${tps.map((tp: { topic: string; approach: string }, i: number) => `${i + 1}. ${tp.topic}: ${tp.approach}`).join("\n")}`);
+    }
+
+    const qs = callBrief.questions_to_ask || [];
+    if (qs.length > 0) {
+      sections.push(`\nQUESTIONS TO ASK\n${qs.map((q: { question: string; meddpicc_gap?: string | null }, i: number) => `${i + 1}. ${q.question}${q.meddpicc_gap ? ` → ${q.meddpicc_gap}` : ""}`).join("\n")}`);
+    }
+
+    if (callBrief.deal_fitness_insights) {
+      const fi = callBrief.deal_fitness_insights;
+      let fitnessText = `\nDEAL FITNESS\n${fi.summary || ""}`;
+      const gaps = fi.gaps || [];
+      if (gaps.length > 0) {
+        fitnessText += `\n${gaps.map((g: { event: string; coaching: string; matched_play?: { name: string; evidence: string } | null }) => `⚠ ${g.event} — ${g.coaching}${g.matched_play ? `\n  ✦ Proven Play: ${g.matched_play.name} — ${g.matched_play.evidence}` : ""}`).join("\n")}`;
+      }
+      const commits = fi.pending_commitments || [];
+      if (commits.length > 0) {
+        fitnessText += `\n\nPending Commitments:\n${commits.map((c: { promise: string; promised_by: string; suggested_follow_up: string }) => `• "${c.promise}" — ${c.promised_by}. Follow up: ${c.suggested_follow_up}`).join("\n")}`;
+      }
+      sections.push(fitnessText);
+    }
+
+    const risks = callBrief.risks_and_landmines || [];
+    if (risks.length > 0) {
+      sections.push(`\nRISKS\n${risks.map((r: { risk: string; mitigation: string }) => `⚠ ${r.risk} — ${r.mitigation}`).join("\n")}`);
+    }
+
+    const nextSteps = callBrief.next_steps || callBrief.suggested_next_steps || [];
+    if (nextSteps.length > 0) {
+      sections.push(`\nNEXT STEPS\n${nextSteps.map((s: string) => `✓ ${s}`).join("\n")}`);
+    }
+
+    await navigator.clipboard.writeText(sections.join("\n\n")).catch(() => {});
+    setBriefCopied(true);
+    setTimeout(() => setBriefCopied(false), 2000);
+  }
+
+  return (
+    <div className="max-w-6xl space-y-6">
+      {/* Back button */}
+      <Link
+        href="/pipeline"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Pipeline
+      </Link>
+
+      {/* Header Card */}
+      <div className="bg-card rounded-xl border border-border p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-2xl font-semibold text-foreground">
+                {deal.companyName}
+              </h1>
+              <span
+                className="text-xs font-medium px-2.5 py-1 rounded-full"
+                style={{
+                  backgroundColor: vertColor + "15",
+                  color: vertColor,
+                }}
+              >
+                {deal.vertical.replace("_", " ")}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{deal.name}</p>
+
+            <div className="flex items-center gap-6 mt-4 flex-wrap">
+              {/* Deal Value */}
+              <div>
+                <p className="text-3xl font-bold text-primary">
+                  {formatCurrency(Number(deal.dealValue || 0), deal.currency || "EUR")}
+                </p>
+              </div>
+
+              {/* Stage Badge — clickable */}
+              <button
+                onClick={() => setStageModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-primary-light text-primary text-sm font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+              >
+                {STAGE_LABELS[deal.stage as PipelineStage] ?? deal.stage}
+              </button>
+
+              {/* Win Probability */}
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full border-2 flex items-center justify-center"
+                  style={{
+                    borderColor: winProb >= 70 ? "#2D8A4E" : winProb >= 40 ? "#D4A843" : "#C74B3B",
+                    color: winProb >= 70 ? "#2D8A4E" : winProb >= 40 ? "#D4A843" : "#C74B3B",
+                  }}
+                >
+                  <span className="text-xs font-bold">{winProb}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">Win %</span>
+              </div>
+
+              {/* Health */}
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    health === "success" && "bg-success",
+                    health === "warning" && "bg-warning",
+                    health === "danger" && "bg-danger"
+                  )}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {daysInStage}d in stage
+                </span>
+              </div>
+
+              {/* AE */}
+              {deal.aeName && (
+                <div className="flex items-center gap-1.5">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-[10px] font-medium text-primary">
+                      {deal.aeName.split(" ").map((n) => n[0]).join("")}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{deal.aeName}</span>
+                </div>
+              )}
+
+              {/* Close Date (editable) */}
+              {closeDate && (
+                <div className="flex items-center gap-1.5 group/close-date">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                  {isEditingCloseDate ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        autoFocus
+                        defaultValue={closeDate}
+                        className="text-xs border-none outline-none bg-transparent p-0"
+                        style={{ color: "#3D3833", fontFamily: "'DM Sans', sans-serif", width: 130 }}
+                        onBlur={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal && newVal !== closeDate) {
+                            setCloseDateError("");
+                            fetch(`/api/deals/${deal.id}/update`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ close_date: newVal }),
+                            }).then(res => {
+                              if (res.ok) {
+                                setCloseDate(newVal);
+                              } else {
+                                setCloseDateError("Failed to save");
+                                setTimeout(() => setCloseDateError(""), 3000);
+                              }
+                            }).catch(() => {
+                              setCloseDateError("Failed to save");
+                              setTimeout(() => setCloseDateError(""), 3000);
+                            });
+                          }
+                          setIsEditingCloseDate(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            setIsEditingCloseDate(false);
+                          } else if (e.key === "Enter") {
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <span
+                      className="text-xs text-muted-foreground cursor-pointer rounded px-1 -mx-1 transition-colors hover:bg-[#F3EDE7] flex items-center gap-1"
+                      onClick={() => setIsEditingCloseDate(true)}
+                    >
+                      Close{" "}
+                      {new Date(closeDate + "T00:00:00").toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                      <svg className="h-2.5 w-2.5 opacity-0 group-hover/close-date:opacity-60 transition-opacity" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8.5 1.5L10.5 3.5M1 11L1.5 8.5L9.5 0.5L11.5 2.5L3.5 10.5L1 11Z" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                  )}
+                  {closeDateError && (
+                    <span className="text-[10px] text-red-500">{closeDateError}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="flex items-center gap-2 shrink-0 ml-4">
+            <button
+              data-tour="prep-call"
+              onClick={handlePrepCall}
+              disabled={callPrepPhase === "loading"}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: callPrepPhase === "error" ? "rgba(199,75,59,0.1)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: callPrepPhase === "error" ? "#C74B3B" : callPrepPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (callPrepPhase === "error" ? "rgba(199,75,59,0.3)" : callPrepPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+              }}
+            >
+              {callPrepPhase === "loading" ? (
+                <>
+                  <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
+                  Prepping…
+                </>
+              ) : callPrepPhase === "error" ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Failed — try again
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Prep Call
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                if (transcripts.length === 0) return;
+                handleDraftFollowUp();
+              }}
+              disabled={draftPhase === "loading" || transcripts.length === 0}
+              title={transcripts.length === 0 ? "No recent calls to reference" : "Draft a follow-up email"}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+              style={{
+                background: draftPhase === "error" ? "rgba(199,75,59,0.1)" : draftPhase !== "hidden" ? "rgba(224,122,95,0.12)" : "#F3EDE7",
+                color: transcripts.length === 0 ? "#C4BDB5" : draftPhase === "error" ? "#C74B3B" : draftPhase !== "hidden" ? "#E07A5F" : "#8A8078",
+                border: "1px solid " + (draftPhase === "error" ? "rgba(199,75,59,0.3)" : draftPhase !== "hidden" ? "rgba(224,122,95,0.3)" : "#E8E5E0"),
+                cursor: transcripts.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              {draftPhase === "loading" ? (
+                <>
+                  <span className="h-3.5 w-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#E07A5F" }} />
+                  Drafting…
+                </>
+              ) : draftPhase === "error" ? (
+                <>
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Failed — try again
+                </>
+              ) : (
+                <>
+                  <Mail className="h-3.5 w-3.5" />
+                  Draft Follow-Up
+                </>
+              )}
+            </button>
+            {[
+              { icon: Calendar, label: "Schedule Meeting" },
+              { icon: MessageSquare, label: "Add Note" },
+            ].map((action) => (
+              <button
+                key={action.label}
+                title={action.label}
+                className="h-9 w-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
+              >
+                <action.icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stage Progress Bar */}
+        <div className="mt-6 flex items-center gap-1">
+          {STAGES_ORDER.filter((s) => s !== "closed_lost").map((stage) => {
+            const currentIdx = STAGES_ORDER.indexOf(deal.stage as PipelineStage);
+            const stageIdx = STAGES_ORDER.indexOf(stage);
+            const isActive = stageIdx <= currentIdx;
+            const isCurrent = stage === deal.stage;
+            return (
+              <div key={stage} className="flex-1 relative group">
+                <div
+                  className={cn(
+                    "h-1.5 rounded-full transition-colors",
+                    isCurrent
+                      ? "bg-primary"
+                      : isActive
+                        ? "bg-primary/40"
+                        : "bg-border"
+                  )}
+                />
+                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                  {STAGE_LABELS[stage]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Agent Memory */}
+        <AgentMemory
+          dealId={deal.id}
+          triggerRefetch={agentMemoryRefetchKey}
+        />
+
+        <AgentIntervention
+          dealId={deal.id}
+          deal={{ closeDate: closeDate || null, stage: deal.stage, name: deal.name }}
+          onCloseDateChange={(newDate) => setCloseDate(newDate)}
+        />
+
+        <WorkflowTracker dealId={deal.id} />
+
+        {/* Deal Fitness Link */}
+        <Link
+          href={`/deal-fitness`}
+          className="flex items-center gap-2 px-4 py-3 rounded-lg border transition-colors hover:bg-[#F5F3EF]"
+          style={{ borderColor: "rgba(0,0,0,0.06)", color: "#3D3833" }}
+        >
+          <Activity size={16} style={{ color: "#E07A5F" }} />
+          <span className="text-sm font-medium">View Deal Fitness</span>
+          <span className="text-xs ml-auto" style={{ color: "#8A8078" }}>oDeal Buyer Analysis</span>
+          <ChevronRight size={14} style={{ color: "#8A8078" }} />
+        </Link>
+      </div>
+
+      {/* Manager Deal Question Input */}
+      {currentUser?.role === "MANAGER" && (
+        <DealQuestionInput
+          deal={{
+            id: deal.id,
+            name: deal.name,
+            competitor: deal.competitor,
+            stage: deal.stage,
+            stageEnteredAt: deal.stageEnteredAt,
+          }}
+          meddpicc={meddpiccData ? {
+            economicBuyerConfidence: meddpiccData.economicBuyerConfidence,
+            championConfidence: meddpiccData.championConfidence,
+            decisionProcessConfidence: meddpiccData.decisionProcessConfidence,
+            metricsConfidence: meddpiccData.metricsConfidence,
+          } : null}
+        />
+      )}
+
+      {/* Call Prep Context Selector */}
+      {callPrepPhase === "context" && (
+        <div
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              What are you prepping for?
+            </span>
+            <button
+              onClick={() => setCallPrepPhase("hidden")}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Meeting type options */}
+          <div className="px-2 pt-2 pb-1">
+            {PREP_OPTIONS.map((option, i) => {
+              const isSelected = prepContext === option;
+              const isHovered = prepContextHighlight === i && !isSelected;
+              return (
+                <button
+                  key={option}
+                  onClick={() => {
+                    setPrepContext(option);
+                    setPrepContextHighlight(i);
+                  }}
+                  onMouseEnter={() => setPrepContextHighlight(i)}
+                  onMouseLeave={() => setPrepContextHighlight(-1)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150"
+                  style={{
+                    background: isSelected ? "#3D3833" : isHovered ? "#F3EDE7" : "transparent",
+                  }}
+                >
+                  <span
+                    className="flex items-center justify-center shrink-0 text-[12px] font-semibold transition-all duration-150"
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "6px",
+                      border: `1.5px solid ${isSelected ? "rgba(255,255,255,0.4)" : isHovered ? "#E07A5F" : "#D4C9BD"}`,
+                      color: isSelected ? "white" : isHovered ? "#E07A5F" : "#8A8078",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="text-[14px] flex-1 text-left" style={{ color: isSelected ? "white" : "#3D3833" }}>
+                    {option}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Free text input for custom context */}
+          <div className="mx-5" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+          <div className="flex items-center gap-2 px-3 py-2">
+            <input
+              type="text"
+              value={PREP_OPTIONS.includes(prepContext) ? "" : prepContext}
+              onChange={(e) => {
+                setPrepContext(e.target.value);
+                setPrepContextHighlight(-1);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && prepContext.trim()) {
+                  generateCallPrep(prepContext, selectedAttendeeIds);
+                }
+              }}
+              placeholder="Or describe it..."
+              className="flex-1 bg-transparent border-none outline-none text-[13px] placeholder:text-[#8A8078]/60"
+              style={{ color: "#3D3833" }}
+            />
+          </div>
+
+          {/* Attendee selection */}
+          {contacts.length > 0 && (
+            <>
+              <div className="mx-5 mt-1" style={{ height: "1px", background: "rgba(0,0,0,0.06)" }} />
+              <div className="px-5 pt-3 pb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: "#8A8078" }}>
+                  Who&apos;s attending from their side?
+                </p>
+                <div className="space-y-1.5">
+                  {contacts.map((contact) => {
+                    const isChecked = selectedAttendeeIds.includes(contact.id);
+                    return (
+                      <button
+                        key={contact.id}
+                        onClick={() =>
+                          setSelectedAttendeeIds((prev) =>
+                            isChecked ? prev.filter((id) => id !== contact.id) : [...prev, contact.id]
+                          )
+                        }
+                        className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors hover:bg-[#F3EDE7]/60"
+                      >
+                        <div
+                          className="h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors"
+                          style={{
+                            borderColor: isChecked ? "#E07A5F" : "#D4C9BD",
+                            background: isChecked ? "#E07A5F" : "transparent",
+                          }}
+                        >
+                          {isChecked && <Check className="h-2.5 w-2.5 text-white" />}
+                        </div>
+                        <div className="flex-1 text-left">
+                          <span className="text-[13px]" style={{ color: "#3D3833" }}>
+                            {contact.firstName} {contact.lastName}
+                          </span>
+                          {contact.title && (
+                            <span className="text-[12px] ml-1.5" style={{ color: "#8A8078" }}>
+                              · {contact.title}
+                            </span>
+                          )}
+                          {contact.roleInDeal && (
+                            <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.08)", color: "#0C7489" }}>
+                              {contact.roleInDeal}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Generate button */}
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={() => generateCallPrep(prepContext, selectedAttendeeIds)}
+              disabled={!prepContext.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium transition-all"
+              style={{
+                background: prepContext.trim() ? "#E07A5F" : "#E8E5E0",
+                color: prepContext.trim() ? "white" : "#8A8078",
+                cursor: prepContext.trim() ? "pointer" : "not-allowed",
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Generate Brief
+            </button>
+            <p className="text-[11px]" style={{ color: "rgba(138,128,120,0.5)" }}>
+              1-4 select · enter confirm
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Call Prep Panel */}
+      {callPrepPhase === "result" && callBrief && (
+        <div
+          data-tour="call-brief"
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          {/* Header */}
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Call Brief — {deal.companyName}
+            </span>
+            <button
+              onClick={() => { setCallPrepPhase("hidden"); setCallBrief(null); }}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Headline */}
+          <div
+            className="mx-5 mt-4 px-4 py-3 rounded-lg"
+            style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)" }}
+          >
+            <p className="text-sm font-medium leading-[1.5]" style={{ color: "#3D3833" }}>
+              {callBrief.headline}
+            </p>
+          </div>
+
+          {/* Proven Play Badge */}
+          {callBriefProvenPlays.length > 0 && (
+            <div
+              className="mx-5 mt-2"
+              style={{
+                background: "rgba(74,124,89,0.08)",
+                borderLeft: "3px solid #4A7C59",
+                borderRadius: "0 8px 8px 0",
+                padding: "10px 14px",
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span style={{ fontSize: 12 }}>📋</span>
+                <span className="text-[11px] font-semibold tracking-[0.05em] uppercase" style={{ color: "#4A7C59" }}>
+                  Proven Play
+                </span>
+              </div>
+              {callBriefProvenPlays.map((name, i) => (
+                <p key={i} className="text-[13px]" style={{ color: "#3D3833" }}>
+                  <span className="font-semibold">&ldquo;{name}&rdquo;</span>
+                  <span style={{ color: "#8A8078" }}> — Applied to this prep</span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Two-column grid: Talking Points (left) + Questions to Ask (right) */}
+          <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left column — Talking Points */}
+            <div className="space-y-4">
+              {callBrief.talking_points?.length > 0 && (
+                <BriefSection title="Talking Points">
+                  <div className="space-y-2.5 mt-1">
+                    {callBrief.talking_points.map((tp: { topic: string; approach: string }, i: number) => (
+                      <div key={i} className="flex gap-2.5">
+                        <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{tp.topic}</p>
+                          <p className="text-[12px]" style={{ color: "#8A8078" }}>{tp.approach}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+            </div>
+            {/* Right column — Questions to Ask */}
+            <div className="space-y-4">
+              {callBrief.questions_to_ask?.length > 0 && (
+                <BriefSection title="Questions to Ask">
+                  <div className="space-y-2.5 mt-1">
+                    {callBrief.questions_to_ask.map((q: { question: string; meddpicc_gap?: string | null }, i: number) => (
+                      <div key={i} className="flex gap-2.5">
+                        <span className="text-[12px] font-semibold shrink-0 mt-0.5" style={{ color: "#E07A5F" }}>{i + 1}.</span>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{q.question}&rdquo;</p>
+                          {q.meddpicc_gap && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(12,116,137,0.1)", color: "#0C7489" }}>
+                              → {q.meddpicc_gap}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              )}
+            </div>
+          </div>
+
+          {/* Full-width sections below the grid */}
+          <div className="px-5 pb-4 space-y-4">
+            {/* Deal Fitness Insights */}
+            {callBrief.deal_fitness_insights && (
+              <BriefSection title="Deal Fitness Insights">
+                <p className="text-[12.5px] leading-[1.5] mb-2" style={{ color: "#3D3833" }}>{callBrief.deal_fitness_insights.summary}</p>
+
+                {callBrief.deal_fitness_insights.gaps?.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Buyer Behavior Gaps</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {callBrief.deal_fitness_insights.gaps.map((gap: { event: string; coaching: string; fit_category?: string; matched_play?: { name: string; evidence: string } | null }, i: number) => (
+                        <div key={i} className="rounded-lg p-3" style={{ borderLeft: "3px solid #E07A5F", background: "rgba(224,122,95,0.04)", border: "1px solid rgba(0,0,0,0.06)", borderLeftWidth: "3px", borderLeftColor: "#E07A5F" }}>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{gap.event}</p>
+                          <p className="text-[12px] mt-0.5" style={{ color: "#3D3833" }}>{gap.coaching}</p>
+                          {gap.matched_play && (
+                            <div className="mt-1.5 flex items-start gap-1.5" style={{ paddingLeft: 8 }}>
+                              <span style={{ color: "#E07A5F", fontSize: 11 }}>✦</span>
+                              <div>
+                                <p className="text-[11px] font-semibold" style={{ color: "#E07A5F" }}>
+                                  Proven Play: {gap.matched_play.name}
+                                </p>
+                                <p className="text-[11px]" style={{ color: "#8A8078" }}>
+                                  {gap.matched_play.evidence}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {callBrief.deal_fitness_insights.pending_commitments?.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Pending Buyer Commitments</p>
+                    <div className="space-y-1.5">
+                      {callBrief.deal_fitness_insights.pending_commitments.map((c: { promise: string; promised_by: string; suggested_follow_up: string }, i: number) => (
+                        <div key={i} className="rounded-lg p-2.5" style={{ background: "#FAF9F6", border: "1px solid rgba(0,0,0,0.06)" }}>
+                          <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>&ldquo;{c.promise}&rdquo;</p>
+                          <p className="text-[11px]" style={{ color: "#8A8078" }}>{c.promised_by}</p>
+                          <p className="text-[12px] mt-0.5" style={{ color: "#0C7489" }}>{c.suggested_follow_up}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(callBrief.deal_fitness_insights.active_experiments || []).length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#8A8078" }}>Active Experiments</p>
+                    <div className="space-y-1.5">
+                      {(callBrief.deal_fitness_insights.active_experiments || []).map((exp: { name: string; application: string }, i: number) => (
+                        <div key={i} className="rounded-lg p-2.5 flex items-start gap-2" style={{ background: "rgba(224,122,95,0.04)", border: "1px dashed rgba(224,122,95,0.3)" }}>
+                          <span style={{ color: "#E07A5F", fontSize: 12 }}>✦</span>
+                          <div>
+                            <p className="text-[12.5px] font-medium" style={{ color: "#3D3833" }}>{exp.name}</p>
+                            <p className="text-[11px]" style={{ color: "#8A8078" }}>{exp.application}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </BriefSection>
+            )}
+
+            {/* Risks */}
+            {callBrief.risks_and_landmines?.length > 0 && (
+              <BriefSection title="⚠ Risks">
+                <div className="space-y-2 mt-1">
+                  {callBrief.risks_and_landmines.map((r: { risk: string; mitigation: string }, i: number) => (
+                    <div key={i} className="rounded-lg p-3" style={{ background: "rgba(212,168,67,0.06)", border: "1px solid rgba(212,168,67,0.2)" }}>
+                      <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>{r.risk}</p>
+                      <p className="text-[12px] mt-0.5" style={{ color: "#8A8078" }}>{r.mitigation}</p>
+                    </div>
+                  ))}
+                </div>
+              </BriefSection>
+            )}
+
+            {/* Next Steps */}
+            {(() => {
+              const nextSteps = callBrief.next_steps || callBrief.suggested_next_steps || [];
+              return nextSteps.length > 0 ? (
+                <BriefSection title="Next Steps">
+                  <div className="space-y-1 mt-1">
+                    {nextSteps.map((step: string, i: number) => (
+                      <div key={i} className="flex gap-2">
+                        <Check className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#2D8A4E" }} />
+                        <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </BriefSection>
+              ) : null;
+            })()}
+          </div>
+
+          {/* Collapsible Context */}
+          <div className="px-5 pb-2">
+            <button
+              onClick={() => setContextExpanded(!contextExpanded)}
+              className="flex items-center gap-2 w-full py-2 text-left"
+              style={{ color: "#8A8078" }}
+            >
+              <ChevronRight
+                className="h-3.5 w-3.5 transition-transform"
+                style={{ transform: contextExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+              />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em]">
+                Context
+              </span>
+            </button>
+
+            {contextExpanded && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 pb-3 animate-[fadeSlideUp_0.2s_ease]">
+                {/* Deal Snapshot */}
+                {callBrief.deal_snapshot && (
+                  <BriefSection title="Deal Snapshot">
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-[13px]" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.stage}</span>
+                      <span className="text-[13px] font-semibold" style={{ color: "#3D3833" }}>{callBrief.deal_snapshot.value}</span>
+                      <span className="text-[13px]" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.days_in_stage}</span>
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{
+                          background: callBrief.deal_snapshot.health === "on_track" ? "rgba(45,138,78,0.1)" : callBrief.deal_snapshot.health === "at_risk" ? "rgba(212,168,67,0.1)" : "rgba(199,75,59,0.1)",
+                          color: callBrief.deal_snapshot.health === "on_track" ? "#2D8A4E" : callBrief.deal_snapshot.health === "at_risk" ? "#D4A843" : "#C74B3B",
+                        }}
+                      >
+                        {callBrief.deal_snapshot.health?.replace("_", " ")}
+                      </span>
+                    </div>
+                    <p className="text-[12px] mt-1" style={{ color: "#8A8078" }}>{callBrief.deal_snapshot.health_reason}</p>
+                  </BriefSection>
+                )}
+
+                {/* Stakeholders */}
+                {callBrief.stakeholders_in_play?.length > 0 && (
+                  <BriefSection title="Stakeholders">
+                    <div className="space-y-2 mt-1">
+                      {callBrief.stakeholders_in_play.map((s: { name: string; title: string; role: string; engagement: string; notes?: string }, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div
+                            className="h-6 w-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold"
+                            style={{
+                              background: s.engagement === "hot" ? "rgba(224,122,95,0.12)" : s.engagement === "warm" ? "rgba(212,168,67,0.12)" : "rgba(107,107,107,0.1)",
+                              color: s.engagement === "hot" ? "#E07A5F" : s.engagement === "warm" ? "#D4A843" : "#6B6B6B",
+                            }}
+                          >
+                            {s.name.split(" ").map((n: string) => n[0]).join("")}
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-medium" style={{ color: "#3D3833" }}>
+                              {s.name} <span className="font-normal" style={{ color: "#8A8078" }}>· {s.role}</span>
+                            </p>
+                            <p className="text-[12px]" style={{ color: "#8A8078" }}>{s.title}</p>
+                            {s.notes && <p className="text-[12px] mt-0.5" style={{ color: "#6B6B6B" }}>{s.notes}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </BriefSection>
+                )}
+
+                {/* Competitive */}
+                {callBrief.competitive_context && (
+                  <div className="rounded-lg p-3" style={{ background: "rgba(199,75,59,0.05)", border: "1px solid rgba(199,75,59,0.15)" }}>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: "#C74B3B" }}>Competitive</p>
+                    <p className="text-[12.5px] leading-[1.5]" style={{ color: "#3D3833" }}>{callBrief.competitive_context}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={copyBrief}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: briefCopied ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: briefCopied ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {briefCopied ? "Copied!" : "Copy brief"}
+            </button>
+            <button
+              onClick={saveBriefToDeal}
+              disabled={briefSaved}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: briefSaved ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: briefSaved ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Check className="h-3 w-3" />
+              {briefSaved ? "Saved ✓" : "Save to timeline"}
+            </button>
+            <button
+              onClick={() => generateCallPrep(prepContext, selectedAttendeeIds)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-colors"
+              style={{ color: "#8A8078" }}
+            >
+              <RotateCcw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Email Draft Panel */}
+      {draftPhase === "result" && emailDraft && (
+        <div
+          className="bg-card rounded-xl border overflow-hidden animate-[fadeSlideUp_0.35s_ease]"
+          style={{ borderColor: "rgba(224,122,95,0.2)" }}
+        >
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(224,122,95,0.12)", background: "rgba(224,122,95,0.04)" }}
+          >
+            <Mail className="h-4 w-4 shrink-0" style={{ color: "#E07A5F" }} />
+            <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+              Draft Follow-Up{emailDraft.to ? ` — ${emailDraft.to}` : ""}
+            </span>
+            <button
+              onClick={() => { setDraftPhase("hidden"); setEmailDraft(null); }}
+              className="ml-auto p-0.5 hover:opacity-70"
+              style={{ color: "#8A8078" }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="px-5 pt-4 pb-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] w-14 shrink-0" style={{ color: "#8A8078" }}>To</span>
+              <span className="text-[13px]" style={{ color: "#3D3833" }}>{emailDraft.to}</span>
+            </div>
+            <div className="h-px" style={{ background: "rgba(0,0,0,0.06)" }} />
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] w-14 shrink-0" style={{ color: "#8A8078" }}>Subject</span>
+              <input
+                type="text"
+                value={editedSubject}
+                onChange={(e) => setEditedSubject(e.target.value)}
+                className="flex-1 bg-transparent border-none outline-none text-[13px]"
+                style={{ color: "#3D3833" }}
+              />
+            </div>
+            <div className="h-px" style={{ background: "rgba(0,0,0,0.06)" }} />
+            <textarea
+              value={editedBody}
+              onChange={(e) => setEditedBody(e.target.value)}
+              rows={8}
+              className="w-full bg-transparent border-none outline-none text-[13px] leading-[1.6] resize-none"
+              style={{ color: "#3D3833" }}
+            />
+          </div>
+
+          {emailDraft.notes_for_rep && (
+            <div
+              className="mx-5 mb-3 px-3 py-2 rounded-lg flex items-start gap-2"
+              style={{ background: "rgba(224,122,95,0.05)", border: "1px solid rgba(224,122,95,0.15)" }}
+            >
+              <Lightbulb className="h-3 w-3 shrink-0 mt-0.5" style={{ color: "#E07A5F" }} />
+              <p className="text-[11.5px] leading-[1.5]" style={{ color: "#8A8078" }}>{emailDraft.notes_for_rep}</p>
+            </div>
+          )}
+
+          {/* Context input for regeneration */}
+          <div className="mx-5 mb-3">
+            <input
+              type="text"
+              value={draftContext}
+              onChange={(e) => setDraftContext(e.target.value)}
+              placeholder="e.g., mention the security review Tuesday, include the ROI calculator, softer tone..."
+              className="w-full px-3 py-2 rounded-lg text-[12px] outline-none"
+              style={{ background: "#F9F7F4", border: "1px solid rgba(0,0,0,0.06)", color: "#3D3833" }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && draftContext.trim()) {
+                  handleDraftFollowUp(draftContext.trim());
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <button
+              onClick={copyEmail}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: emailCopied ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: emailCopied ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {emailCopied ? "Copied!" : "Copy email"}
+            </button>
+            <button
+              onClick={() => handleDraftFollowUp(draftContext.trim() || undefined)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{ background: "#F3EDE7", color: "#8A8078" }}
+            >
+              <RotateCcw className="h-3 w-3" />
+              {draftContext.trim() ? "Regenerate with context" : "Regenerate"}
+            </button>
+            <button
+              onClick={saveEmailToDeal}
+              disabled={emailSaved}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+              style={{
+                background: emailSaved ? "rgba(45,138,78,0.1)" : "#F3EDE7",
+                color: emailSaved ? "#2D8A4E" : "#8A8078",
+              }}
+            >
+              <Check className="h-3 w-3" />
+              {emailSaved ? "Saved ✓" : "Save to deal"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div data-tour="deal-tabs" className="border-b border-border">
+        <div className="flex items-center gap-6">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                "pb-3 text-sm font-medium border-b-2 transition-colors",
+                activeTab === tab.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.label}
+              {tab.key === "activity" && activities.length > 0 && (
+                <span className="ml-1.5 text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                  {activities.length}
+                </span>
+              )}
+              {tab.key === "calls" && transcripts.length > 0 && (
+                <span className="ml-1.5 text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                  {transcripts.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === "overview" && (
+        <>
+          {/* Sentiment Trajectory */}
+          {transcripts.filter(t => t.callQualityScore != null).length > 0 && (
+            <SentimentTrajectory transcripts={transcripts} />
+          )}
+          {/* Close Analysis for closed deals */}
+          {(deal.stage === "closed_won" || deal.stage === "closed_lost") && deal.closeAiAnalysis && (
+            <CloseAnalysisCard deal={deal} meddpicc={meddpiccData} contacts={contacts} />
+          )}
+          <OverviewTab deal={deal} milestones={milestones} />
+        </>
+      )}
+      {activeTab === "meddpicc" && (
+        <div>
+          {meddpiccUpdatedFromPipeline && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(12,116,137,0.06)", border: "1px solid rgba(12,116,137,0.15)" }}>
+              <span style={{ color: "#0C7489", fontSize: 13 }}>{"\u2726"}</span>
+              <span className="text-xs" style={{ color: "#0C7489", fontFamily: "'DM Sans', sans-serif" }}>Scores updated from transcript analysis</span>
+            </div>
+          )}
+          <MeddpiccTab meddpicc={meddpiccData} />
+        </div>
+      )}
+      {activeTab === "stakeholders" && <StakeholdersTab contacts={contacts} />}
+      {activeTab === "activity" && (
+        <div className="bg-card rounded-xl border border-border p-5">
+          <ActivityFeed activities={mergedActivities} showFilters maxItems={50} />
+        </div>
+      )}
+      {activeTab === "calls" && <CallsTab transcripts={transcripts} dealId={deal.id} onDraftFollowUp={handleDraftForTranscript} onProcessStart={() => {
+        fitnessTriggered.current = false;
+        // Polling fallback: check deal agent state every 15s to detect pipeline completion
+        if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+        const startTime = Date.now();
+        fitnessPollRef.current = setInterval(async () => {
+          if (Date.now() - startTime > 180000 || fitnessTriggered.current) {
+            if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+            fitnessPollRef.current = null;
+            return;
+          }
+          try {
+            const stateRes = await fetch(`/api/deal-agent-state?dealId=${deal.id}`);
+            if (stateRes.ok) {
+              const data = await stateRes.json();
+              // Check if pipeline completed but event was missed
+              if (data.state?.pipelineStatus === "complete" && !fitnessTriggered.current) {
+                fitnessTriggered.current = true;
+                if (fitnessPollRef.current) clearInterval(fitnessPollRef.current);
+                fitnessPollRef.current = null;
+                console.log("[DealDetail] Poll fallback detected pipeline complete — triggering fitness");
+                fetch("/api/deal-fitness/analyze", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ dealId: deal.id }),
+                })
+                  .then((res) => res.ok ? res.json() : Promise.reject(res.status))
+                  .then((result) => console.log(`[Deal Fitness] Poll fallback: ${result.eventsDetected}/${result.eventsTotal} events, overall ${result.scores?.overall}%`))
+                  .catch((err) => console.error("[Deal Fitness] Poll fallback error:", err));
+                // Also refresh agent memory
+                setAgentMemoryRefetchKey((prev) => prev + 1);
+              }
+            }
+          } catch {}
+        }, 15000);
+      }} />}
+
+      {/* Stage Change Modal */}
+      <StageChangeModal
+        open={stageModalOpen}
+        onClose={() => setStageModalOpen(false)}
+        dealId={deal.id}
+        companyName={deal.companyName || ""}
+        currentStage={deal.stage as PipelineStage}
+      />
+
+    </div>
+  );
+}
+
+// ── Sentiment Trajectory ──
+
+function SentimentTrajectory({ transcripts }: { transcripts: Transcript[] }) {
+  const scored = transcripts
+    .filter((t) => t.callQualityScore != null)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (scored.length === 0) return null;
+
+  const first = scored[0]!.callQualityScore!;
+  const last = scored[scored.length - 1]!.callQualityScore!;
+  const delta = last - first;
+  const trend = scored.length > 1
+    ? delta > 5 ? "improving" : delta < -5 ? "declining" : "stable"
+    : null;
+
+  function getScoreColor(score: number): string {
+    if (score >= 80) return "#2D8A4E";
+    if (score >= 60) return "#D4A843";
+    return "#C74B3B";
+  }
+
+  function getSentimentLabel(score: number): string {
+    if (score >= 85) return "Committed";
+    if (score >= 75) return "Engaged";
+    if (score >= 65) return "Interested";
+    if (score >= 55) return "Cautious";
+    return "Uncertain";
+  }
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-5" style={{ boxShadow: "0 4px 24px rgba(107,79,57,0.08)" }}>
+      <p className="text-sm font-semibold mb-3" style={{ color: "#3D3833" }}>
+        Prospect Engagement
+      </p>
+      <div className="space-y-2.5">
+        {scored.map((t, i) => {
+          const score = t.callQualityScore!;
+          const color = getScoreColor(score);
+          const label = getSentimentLabel(score);
+          const dateStr = new Date(t.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+          return (
+            <div key={t.id} className="flex items-center gap-3">
+              <span className="text-xs shrink-0 w-16" style={{ color: "#8A8078" }}>
+                Call {i + 1} ({dateStr})
+              </span>
+              <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: "#F3EDE7" }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${score}%`, background: color }}
+                />
+              </div>
+              <span className="text-sm font-semibold shrink-0 w-8 text-right" style={{ color }}>
+                {score}
+              </span>
+              <span className="text-xs shrink-0 w-20" style={{ color: "#8A8078" }}>
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {trend && scored.length > 1 && (
+        <p className="text-xs mt-3 pt-2" style={{ color: "#8A8078", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+          Trend: {trend === "improving" ? "↑" : trend === "declining" ? "↓" : "→"}{" "}
+          {trend === "improving" ? "Improving" : trend === "declining" ? "Declining" : "Stable"}
+          {" "}({delta > 0 ? "+" : ""}{delta} pts across {scored.length} calls)
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Close Analysis Card ──
+
+function CloseAnalysisCard({ deal, meddpicc, contacts }: { deal: Deal; meddpicc: Meddpicc; contacts: Contact[] }) {
+  const isWon = deal.stage === "closed_won";
+  const aiAnalysis = deal.closeAiAnalysis as { summary?: string; key_factors?: string[] } | null;
+  const factors = (isWon ? deal.winFactors : deal.closeFactors) as string[] | null;
+
+  const IMPROVEMENT_LABELS: Record<string, string> = {
+    addressed_pricing_earlier: "Addressed pricing earlier",
+    engaged_exec_sooner: "Engaged exec sponsor sooner",
+    started_security_earlier: "Started security review earlier",
+    better_competitive_positioning: "Better competitive positioning",
+  };
+  const TURNING_POINT_LABELS: Record<string, string> = {
+    champion_sold_internally: "Champion sold internally",
+    compliance_advantage: "Compliance advantage",
+    technical_win: "Technical superiority",
+    executive_sponsorship: "Executive sponsorship",
+  };
+
+  return (
+    <div
+      className="rounded-xl border p-5 mb-4"
+      style={{
+        borderColor: isWon ? "rgba(45,138,78,0.2)" : "rgba(199,75,59,0.2)",
+        background: isWon ? "rgba(45,138,78,0.03)" : "rgba(199,75,59,0.03)",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="h-4 w-4" style={{ color: isWon ? "#2D8A4E" : "#E07A5F" }} />
+        <span className="text-sm font-semibold" style={{ color: "#3D3833" }}>
+          Close Analysis — {deal.companyName || deal.name.split(" — ")[0]}
+        </span>
+        {deal.closedAt && (
+          <span className="text-xs" style={{ color: "#8A8078" }}>
+            {new Date(deal.closedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+        )}
+      </div>
+
+      {/* AI Summary */}
+      {aiAnalysis?.summary && (
+        <p className="text-sm leading-relaxed mb-4" style={{ color: "#3D3833" }}>
+          {aiAnalysis.summary}
+        </p>
+      )}
+
+      {/* Key Factors */}
+      {factors && factors.length > 0 && (
+        <div className="mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            Key Factors
+          </p>
+          <div className="space-y-1.5">
+            {factors.map((factor, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm" style={{ color: "#3D3833" }}>
+                <span style={{ color: isWon ? "#2D8A4E" : "#C74B3B" }}>{isWon ? "✓" : "✕"}</span>
+                <span>{typeof factor === "string" ? factor : JSON.stringify(factor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Loss-specific info */}
+      {!isWon && (
+        <div className="space-y-2 mb-4">
+          {deal.lossReason && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ background: "rgba(199,75,59,0.1)", color: "#C74B3B" }}>
+                {deal.lossReason.replace(/_/g, " ")}
+              </span>
+              {deal.closeCompetitor && (
+                <span style={{ color: "#8A8078" }}>Lost to {deal.closeCompetitor}</span>
+              )}
+            </div>
+          )}
+          {deal.closeImprovement && (
+            <p className="text-xs" style={{ color: "#8A8078" }}>
+              Improvement: {IMPROVEMENT_LABELS[deal.closeImprovement] || deal.closeImprovement}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Win-specific info */}
+      {isWon && (
+        <div className="space-y-2 mb-4">
+          {deal.winTurningPoint && (
+            <div className="flex items-center gap-2 text-sm">
+              <Trophy className="h-3.5 w-3.5" style={{ color: "#2D8A4E" }} />
+              <span style={{ color: "#3D3833" }}>
+                Turning point: {TURNING_POINT_LABELS[deal.winTurningPoint] || deal.winTurningPoint}
+              </span>
+            </div>
+          )}
+          {deal.winReplicable && (
+            <p className="text-xs leading-relaxed" style={{ color: "#8A8078" }}>
+              {deal.winReplicable}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* MEDDPICC Gaps at Close */}
+      {meddpicc && (
+        <div className="pt-3 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            MEDDPICC at Close
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: "Economic Buyer", val: meddpicc.economicBuyerConfidence },
+              { label: "Champion", val: meddpicc.championConfidence },
+              { label: "Decision Process", val: meddpicc.decisionProcessConfidence },
+              { label: "Metrics", val: meddpicc.metricsConfidence },
+              { label: "Pain", val: meddpicc.identifyPainConfidence },
+            ].map((field) => (
+              <span key={field.label} className="text-xs" style={{ color: (field.val ?? 0) < 50 ? "#C74B3B" : "#8A8078" }}>
+                {field.label}: {field.val ?? 0}%
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stakeholder Flags */}
+      {contacts.length > 0 && (
+        <div className="pt-3 mt-3 border-t" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#8A8078" }}>
+            Key Stakeholders
+          </p>
+          <div className="space-y-1">
+            {contacts.filter((c) => c.roleInDeal === "champion" || c.roleInDeal === "economic_buyer" || c.roleInDeal === "blocker").map((c) => (
+              <div key={c.id} className="flex items-center gap-2 text-xs" style={{ color: "#3D3833" }}>
+                <span style={{ color: c.roleInDeal === "blocker" ? "#C74B3B" : c.roleInDeal === "champion" ? "#2D8A4E" : "#D4A843" }}>
+                  {c.roleInDeal === "blocker" ? "⚠" : c.roleInDeal === "champion" ? "★" : "●"}
+                </span>
+                {c.firstName} {c.lastName} ({c.title}) — {c.roleInDeal?.replace("_", " ")}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Overview Tab ──
+
+function OverviewTab({ deal, milestones }: { deal: Deal; milestones: Milestone[] }) {
+  const MILESTONE_LABELS: Record<string, string> = {
+    initial_meeting: "Initial Meeting",
+    pain_identified: "Pain Identified",
+    champion_identified: "Champion Identified",
+    technical_demo: "Technical Demo",
+    security_review: "Security Review",
+    proposal_sent: "Proposal Sent",
+    contract_negotiation: "Contract Negotiation",
+  };
+
+  const SOURCE_COLORS: Record<string, string> = {
+    manual: "bg-muted text-muted-foreground",
+    transcript: "bg-violet-50 text-violet-600",
+    email: "bg-blue-50 text-blue-600",
+    ai_detected: "bg-primary-light text-primary",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-6">
+        {/* Company Details */}
+        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            Company Details
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <InfoRow icon={Globe} label="Domain" value={deal.companyDomain} />
+            <InfoRow icon={Building2} label="Industry" value={deal.companyIndustry?.replace("_", " ")} />
+            <InfoRow icon={Users} label="Employees" value={deal.companyEmployeeCount?.toLocaleString()} />
+            <InfoRow icon={Banknote} label="Revenue" value={deal.companyRevenue} />
+            <InfoRow icon={MapPin} label="HQ" value={deal.companyHq} />
+          </div>
+          {deal.companyTechStack && deal.companyTechStack.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Tech Stack</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {deal.companyTechStack.map((tech) => (
+                  <span key={tech} className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {tech}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {deal.companyDescription && (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {deal.companyDescription}
+            </p>
+          )}
+        </div>
+
+        {/* Deal Details */}
+        <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Deal Details
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <InfoRow
+              icon={Target}
+              label="Product"
+              value={deal.product ? PRODUCT_LABELS[deal.product as keyof typeof PRODUCT_LABELS] : null}
+            />
+            <InfoRow icon={Search} label="Lead Source" value={deal.leadSource?.replace("_", " ")} />
+            <InfoRow icon={Swords} label="Competitor" value={deal.competitor || "None identified"} />
+            <InfoRow icon={Target} label="Forecast" value={deal.forecastCategory} />
+            <InfoRow icon={Banknote} label="Currency" value={deal.currency} />
+            <InfoRow
+              icon={Calendar}
+              label="Created"
+              value={new Date(deal.createdAt).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Milestones — hidden, may be rebuilt as a real feature later */}
+    </div>
+  );
+}
+
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <Icon className="h-3 w-3 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <p className="text-sm font-medium text-foreground capitalize">
+        {value || "—"}
+      </p>
+    </div>
+  );
+}
+
+// ── MEDDPICC Tab ──
+
+const MEDDPICC_FIELDS = [
+  { key: "metrics", confKey: "metricsConfidence", label: "Metrics", icon: Target, description: "Quantifiable measures of the customer's desired business outcome" },
+  { key: "economicBuyer", confKey: "economicBuyerConfidence", label: "Economic Buyer", icon: UserCheck, description: "The person with the authority to approve spending" },
+  { key: "decisionCriteria", confKey: "decisionCriteriaConfidence", label: "Decision Criteria", icon: FileText, description: "The formal criteria used to evaluate and compare solutions" },
+  { key: "decisionProcess", confKey: "decisionProcessConfidence", label: "Decision Process", icon: ArrowLeft, description: "The process the organization uses to make a buying decision" },
+  { key: "identifyPain", confKey: "identifyPainConfidence", label: "Identify Pain", icon: AlertTriangle, description: "The primary business pain driving the evaluation" },
+  { key: "champion", confKey: "championConfidence", label: "Champion", icon: Star, description: "Internal advocate who sells on your behalf" },
+  { key: "competition", confKey: "competitionConfidence", label: "Competition", icon: Swords, description: "Competitive landscape and positioning" },
+] as const;
+
+function MeddpiccTab({ meddpicc }: { meddpicc: Meddpicc }) {
+  if (!meddpicc) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-8 text-center">
+        <p className="text-muted-foreground">No MEDDPICC data for this deal yet.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          MEDDPICC fields will be populated as the deal progresses through discovery.
+        </p>
+      </div>
+    );
+  }
+
+  const filledCount = MEDDPICC_FIELDS.filter(
+    (f) => meddpicc[f.key as keyof typeof meddpicc]
+  ).length;
+  const avgConfidence = Math.round(
+    MEDDPICC_FIELDS.reduce(
+      (sum, f) => sum + Number(meddpicc[f.confKey as keyof typeof meddpicc] || 0),
+      0
+    ) / MEDDPICC_FIELDS.length
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <div>
+            <p className="text-xs text-muted-foreground">Fields Completed</p>
+            <p className="text-lg font-bold text-foreground">{filledCount}/7</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Avg Confidence</p>
+            <p className="text-lg font-bold text-foreground">{avgConfidence}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Status</p>
+            <span
+              className={cn(
+                "text-xs font-medium px-2 py-0.5 rounded-full inline-flex items-center gap-1",
+                meddpicc.aeConfirmed
+                  ? "bg-emerald-50 text-success"
+                  : "bg-primary-light text-primary"
+              )}
+            >
+              {meddpicc.aeConfirmed ? (
+                <>
+                  <ShieldCheck className="h-3 w-3" /> AE Confirmed
+                </>
+              ) : (
+                <>
+                  <Bot className="h-3 w-3" /> AI Extracted
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div className="space-y-3">
+        {MEDDPICC_FIELDS.map((field) => {
+          const value = meddpicc[field.key as keyof typeof meddpicc] as string | null;
+          const confidence = Number(meddpicc[field.confKey as keyof typeof meddpicc] || 0);
+          const Icon = field.icon;
+          const isLow = confidence > 0 && confidence < 50;
+
+          return (
+            <div
+              key={field.key}
+              className={cn(
+                "bg-card rounded-xl border p-4",
+                isLow ? "border-warning/40 bg-amber-50/20" : "border-border"
+              )}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {field.label}
+                  </h4>
+                  {isLow && (
+                    <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {confidence}%
+                  </span>
+                  <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        confidence >= 70
+                          ? "bg-success"
+                          : confidence >= 40
+                            ? "bg-warning"
+                            : "bg-danger"
+                      )}
+                      style={{ width: `${confidence}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+              {value ? (
+                <p className="text-sm text-foreground leading-relaxed">{value}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  Not yet captured — {field.description.toLowerCase()}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Stakeholders Tab ──
+
+const ROLE_COLORS: Record<string, string> = {
+  champion: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  economic_buyer: "bg-violet-50 text-violet-700 border-violet-200",
+  technical_evaluator: "bg-blue-50 text-blue-700 border-blue-200",
+  end_user: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  blocker: "bg-red-50 text-red-700 border-red-200",
+  coach: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  champion: "Champion",
+  economic_buyer: "Economic Buyer",
+  technical_evaluator: "Technical Evaluator",
+  end_user: "End User",
+  blocker: "Blocker",
+  coach: "Coach",
+};
+
+function StakeholdersTab({ contacts }: { contacts: Contact[] }) {
+  const grouped: Record<string, Contact[]> = {};
+  contacts.forEach((c) => {
+    const role = c.roleInDeal || "unknown";
+    if (!grouped[role]) grouped[role] = [];
+    grouped[role]!.push(c);
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {contacts.map((contact) => (
+          <div
+            key={contact.id}
+            className={cn(
+              "bg-card rounded-xl border p-4",
+              contact.isPrimary ? "border-primary/40 ring-1 ring-primary/10" : "border-border"
+            )}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-medium text-primary">
+                    {contact.firstName[0]}{contact.lastName[0]}
+                  </span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">
+                      {contact.firstName} {contact.lastName}
+                    </p>
+                    {contact.isPrimary && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary-light text-primary">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{contact.title}</p>
+                </div>
+              </div>
+              {contact.roleInDeal && (
+                <span
+                  className={cn(
+                    "text-[10px] font-medium px-2 py-0.5 rounded-full border",
+                    ROLE_COLORS[contact.roleInDeal] || "bg-muted text-muted-foreground border-border"
+                  )}
+                >
+                  {ROLE_LABELS[contact.roleInDeal] || contact.roleInDeal}
+                </span>
+              )}
+            </div>
+            <div className="mt-3 space-y-1">
+              {contact.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">{contact.email}</span>
+                </div>
+              )}
+              {contact.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">{contact.phone}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Calls Tab ──
+
+function CallsTab({ transcripts, dealId, onDraftFollowUp, onProcessStart }: { transcripts: Transcript[]; dealId: string; onDraftFollowUp: (t: Transcript) => void; onProcessStart?: () => void }) {
+  const [processingIds, setProcessingIds] = useState<Record<string, "processing" | "done">>({});
+  const [processingAll, setProcessingAll] = useState(false);
+  const [currentProcessing, setCurrentProcessing] = useState(0);
+  const [totalToProcess, setTotalToProcess] = useState(0);
+
+  const unprocessedTranscripts = transcripts.filter(t => !t.pipelineProcessed && !processingIds[t.id] && t.transcriptText);
+
+  async function handleProcessTranscript(t: Transcript) {
+    if (!t.transcriptText) return;
+    // Reset fitness trigger so it can fire again for this pipeline run
+    onProcessStart?.();
+    setProcessingIds((prev) => ({ ...prev, [t.id]: "processing" }));
+    try {
+      const res = await fetch("/api/transcript-pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId,
+          transcriptText: t.transcriptText,
+          transcriptId: t.id,
+        }),
+      });
+      console.log("[CallsTab] Pipeline trigger response:", res.status);
+      // Pipeline is running — deal agent events will drive the WorkflowTracker
+      // Mark as done after a short delay to indicate the request was sent
+      setTimeout(() => {
+        setProcessingIds((prev) => ({ ...prev, [t.id]: "done" }));
+      }, 2000);
+    } catch (err) {
+      console.error("[CallsTab] Pipeline trigger error:", err);
+      setProcessingIds((prev) => {
+        const next = { ...prev };
+        delete next[t.id];
+        return next;
+      });
+    }
+  }
+
+  async function handleProcessAll() {
+    if (processingAll) return;
+    const toProcess = [...unprocessedTranscripts];
+    setTotalToProcess(toProcess.length);
+    setProcessingAll(true);
+    onProcessStart?.();
+    for (let i = 0; i < toProcess.length; i++) {
+      setCurrentProcessing(i + 1);
+      const transcript = toProcess[i];
+      setProcessingIds((prev) => ({ ...prev, [transcript.id]: "processing" }));
+
+      try {
+        await fetch("/api/transcript-pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dealId,
+            transcriptText: transcript.transcriptText,
+            transcriptId: transcript.id,
+          }),
+        });
+
+        // Wait for pipeline to complete before processing next
+        let attempts = 0;
+        while (attempts < 60) { // Max 5 minutes per transcript
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const check = await fetch(`/api/deal-agent-state?dealId=${dealId}`);
+            if (check.ok) {
+              const data = await check.json();
+              if (data.state?.pipelineStatus === "complete" || data.state?.pipelineStatus === "idle") {
+                break;
+              }
+            }
+          } catch {}
+          attempts++;
+        }
+
+        setProcessingIds((prev) => ({ ...prev, [transcript.id]: "done" }));
+
+        // Reset pipeline status for next transcript
+        try {
+          await fetch("/api/deal-agent-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dealId,
+              updates: { pipelineStatus: "idle" },
+            }),
+          });
+        } catch {}
+      } catch (e) {
+        console.error(`[ProcessAll] Failed transcript ${i + 1}:`, e);
+        setProcessingIds((prev) => ({ ...prev, [transcript.id]: "done" }));
+      }
+    }
+
+    // After ALL transcripts processed, trigger one fitness analysis
+    try {
+      await fetch("/api/deal-fitness/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId }),
+      });
+      console.log("[ProcessAll] Final fitness analysis complete");
+    } catch (e) {
+      console.error("[ProcessAll] Fitness analysis failed:", e);
+    }
+
+    setProcessingAll(false);
+    setCurrentProcessing(0);
+    window.location.reload();
+  }
+
+  if (transcripts.length === 0) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-8 text-center">
+        <Phone className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+        <p className="text-muted-foreground">No call transcripts for this deal yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {unprocessedTranscripts.length >= 2 && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleProcessAll}
+            disabled={processingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
+            style={{
+              background: processingAll ? "#F3EDE7" : "rgba(12,116,137,0.08)",
+              color: processingAll ? "#8A8078" : "#0C7489",
+              border: "1px solid " + (processingAll ? "#D4C9BD" : "rgba(12,116,137,0.2)"),
+            }}
+          >
+            {processingAll ? (
+              <>
+                <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
+                Processing {currentProcessing}/{totalToProcess}...
+              </>
+            ) : (
+              <>
+                <Bot className="h-3 w-3" />
+                Process All ({unprocessedTranscripts.length})
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      {transcripts.map((t) => {
+        const duration = t.durationSeconds
+          ? `${Math.floor(t.durationSeconds / 60)}m ${t.durationSeconds % 60}s`
+          : "—";
+        const participants = (t.participants as { name: string; role: string }[]) || [];
+        const painPoints = (t.painPoints as string[]) || [];
+        const nextSteps = (t.nextSteps as string[]) || [];
+        const talkRatio = t.talkRatio as { ae?: number; prospect?: number } | null;
+        const coaching = (t.coachingInsights as string[]) || [];
+
+        return (
+          <div key={t.id} className="bg-card rounded-xl border border-border overflow-hidden">
+            {/* Call Header */}
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">{t.title}</h4>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(t.date).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {duration}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {participants.map((p, i) => (
+                        <span key={i} className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                          {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {t.callQualityScore != null && (
+                    <div
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-sm font-bold",
+                        t.callQualityScore >= 80
+                          ? "bg-emerald-50 text-success"
+                          : t.callQualityScore >= 60
+                            ? "bg-amber-50 text-warning"
+                            : "bg-red-50 text-danger"
+                      )}
+                    >
+                      {t.callQualityScore}
+                    </div>
+                  )}
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded-full",
+                      t.status === "complete"
+                        ? "bg-emerald-50 text-success"
+                        : "bg-amber-50 text-warning"
+                    )}
+                  >
+                    {t.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            {t.transcriptText && (
+              <div className="px-4 pb-4">
+                <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                  <button
+                    onClick={() => onDraftFollowUp(t)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors"
+                    style={{ background: "rgba(224,122,95,0.08)", color: "#E07A5F", border: "1px solid rgba(224,122,95,0.2)" }}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Draft Follow-Up
+                  </button>
+                  {(() => {
+                    const isProcessed = t.pipelineProcessed || processingIds[t.id] === "done";
+                    const isProcessing = processingIds[t.id] === "processing";
+                    return (
+                      <button
+                        onClick={() => handleProcessTranscript(t)}
+                        disabled={isProcessing}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-60"
+                        style={isProcessed && !isProcessing ? {
+                          background: "#F3EDE7",
+                          color: "#8A8078",
+                          border: "1px solid #D4C9BD",
+                        } : {
+                          background: "rgba(12,116,137,0.08)",
+                          color: "#0C7489",
+                          border: "1px solid rgba(12,116,137,0.2)",
+                        }}
+                        title={isProcessed ? "Click to re-process" : undefined}
+                      >
+                        {isProcessing ? (
+                          <>
+                            <span className="h-3 w-3 rounded-full border-2 animate-spin" style={{ borderColor: "#D4C9BD", borderTopColor: "#0C7489" }} />
+                            Processing...
+                          </>
+                        ) : isProcessed ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            Processed
+                          </>
+                        ) : (
+                          <>
+                            <Bot className="h-3 w-3" />
+                            Process Transcript
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
