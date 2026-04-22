@@ -219,7 +219,7 @@ Any prompt or documentation going forward uses these real names.
 
 ### 2.7 Prompt Preservation (LOCKED)
 
-The prompts from `04-PROMPTS.md` are the product. They get ported faithfully in v2, not rewritten from scratch. Codex may refactor the code around them freely but must preserve the prompt text verbatim. Iteration on prompts happens post-migration based on demo output quality.
+The prompts from `04-PROMPTS.md` are the product. They get ported faithfully in v2, not rewritten from scratch **except where the Prompt 4.5–4.7 analysis phase explicitly produces improved versions**. Codex may refactor the code around prompts freely but must preserve the prompt text verbatim for any prompt not flagged for rewrite.
 
 ### 2.8 Context Assembly Audit — New Prompt (LOCKED)
 
@@ -261,6 +261,55 @@ Per Prompt 3 findings: pipeline actor, MCP, call-prep, analyze/link all use `fet
 - Server code that needs work from another server component calls it as a function, not an HTTP request.
 - Background jobs invoke services directly. The pipeline does not `fetch('/api/...')` to talk to itself.
 - Shared logic (classify observation, score MEDDPICC, draft email) lives in a `services/` layer that both routes and jobs import.
+
+### 2.13 Unified Claude Integration Layer (LOCKED)
+
+Per Prompt 4 findings, the Claude integration is inconsistent across 25 call sites: 4 different fence-strip regex patterns, temperature unset everywhere (defaults to 1.0), transcript truncation varies 8K-15K across pipeline steps, signal-type enum drift (9 vs 7), currency symbol mixing ($/€), parallel email-drafting paths with different schemas, retry asymmetry (7 actor-side retry, 18 SDK-side don't), and every response is JSON-in-text that requires regex parsing.
+
+**Rules for v2:**
+
+**One Claude client wrapper.** All call sites use it. Built-in:
+- Retry policy (429/5xx handling)
+- Telemetry (per-call duration, tokens, cost, task name)
+- Error classification (transient vs. permanent)
+- Model pinning (one env var, not 25 string literals)
+
+**Structured outputs via tool use.** Every prompt expecting structured output defines a tool schema. Model invokes the tool. Response comes back as typed JSON. No regex, no fence stripping, no `try/catch JSON.parse` ladders. (Exception: truly free-form generation like email body text — those return plain text.)
+
+**Temperature set explicitly per call, chosen by task type:**
+- Classification / extraction / scoring: 0.2
+- Analysis / hypothesis generation: 0.3-0.4
+- Creative drafting (email, hypothesis prose): 0.6-0.7
+- Never leave it unset.
+
+**One formatter module.** Currency, dates, deal stages, percentages, names formatted through shared utilities. Prompts consume pre-formatted strings, not raw fields.
+
+**Single source-of-truth enum for signal types.** One TypeScript enum, referenced by every prompt that mentions signal types. No drift.
+
+**One transcript preprocessing pass.** At ingestion, a transcript is normalized into a canonical analyzed-transcript object (full text, segments, speaker turns, extracted entities, token counts). Every downstream prompt reads from this object. No ad-hoc truncation per step. The "analyzed transcript" is itself cached / stored so re-analysis is cheap.
+
+**One email-drafting service.** Current prompts #12 and #24 emit different shapes. v2 has one service, one prompt, one output schema. Both consumers (agent draft-email route, pipeline actor) call the service.
+
+**Prompts live as `.md` files in `prompts/` directory** (already Guardrail #4). Loaded at runtime, not string literals in routes.
+
+### 2.14 Coordinator Synthesis Prompt Anomaly (OPEN)
+
+Per Prompt 4 findings: prompt #25 (intelligence coordinator synthesis) uses `system: ""` while all other 24 prompts set a system prompt. The coordinator is arguably the prompt that needs the strongest system framing because it's doing cross-deal pattern synthesis.
+
+This is likely a root cause of "the intelligence coordinator feels weak" — a known product issue from CLAUDE.md.
+
+**Action:** Flag for deep dive in Prompt 4.5a or 4.5b. The rewrite in Prompt 4.7 is a strong candidate for a full system-prompt redesign.
+
+### 2.15 Prompt Analysis Phase — Added to Handoff Sequence (LOCKED)
+
+Insert a new analysis block after Prompt 7.5 (Context Assembly Audit) and before Prompt 8 (Source Copy). Four sessions, three deliverables:
+
+- **Prompt 4.5a:** Deep quality audit on prompts 1-13 of 25. Output: `04A-PROMPT-AUDIT.md` (created).
+- **Prompt 4.5b:** Deep quality audit on prompts 14-25. Appends to `04A-PROMPT-AUDIT.md`.
+- **Prompt 4.6:** Prompt dependency graph + blast-radius ranking. Output: `04B-PROMPT-DEPENDENCIES.md`.
+- **Prompt 4.7:** Full rewrites for top 8 prompts by blast radius + "Prompt Principles for Codex" section. Output: `04C-PROMPT-REWRITES.md`.
+
+Sequencing rationale: run 5, 6, 7, 7.5 first (mechanical extraction) so the quality audit has full context when it runs.
 
 ---
 
@@ -312,7 +361,7 @@ The design system (3.1) is produced in a separate chat on its own timeline — d
 
 When the rebuild plan hands off to Codex, enforce these non-negotiables:
 
-1. Prompts from 04-PROMPTS.md are preserved verbatim. Refactor code around them freely.
+1. Prompts from 04-PROMPTS.md are preserved verbatim except those explicitly rewritten in 04C-PROMPT-REWRITES.md.
 2. Schema-first design. No workarounds like `getEffectiveType()`. If the schema needs to change, migrate first.
 3. Every capture moment is a research interview, not a form.
 4. No dual persistence. One source of truth per data type.
@@ -327,3 +376,10 @@ When the rebuild plan hands off to Codex, enforce these non-negotiables:
 13. Any domain concept with 2+ write sites goes through a service function. Routes never insert directly into tables with downstream observers (per 2.10).
 14. No client-controlled trust flags. Server decides what's verified, what runs classification, what's internal (per 2.11).
 15. Server-to-server work is a function call, not HTTP. Internal `fetch()` to your own routes is banned (per 2.12).
+16. All Claude calls go through the unified client wrapper. No direct SDK calls anywhere outside that wrapper (per 2.13).
+17. Structured outputs use tool use, not JSON-in-text regex parsing (per 2.13).
+18. Temperature is set explicitly per call based on task type; never unset (per 2.13).
+19. Prompts live as `.md` files loaded at runtime, not string literals inline in routes.
+20. One formatter module for currency/dates/names/stages. Prompts never see raw fields.
+21. One transcript preprocessing pass produces the canonical analyzed-transcript object. All downstream prompts read from it.
+22. Single source-of-truth enum for signal types, referenced everywhere.
