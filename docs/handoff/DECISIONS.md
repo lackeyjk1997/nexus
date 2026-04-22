@@ -41,15 +41,13 @@
 
 Seeded at launch with reasonable values. When hypotheses surface uncategorized reasons, flag as candidates. If 3+ deals accumulate similar uncategorized reasons, surface to Jeff/Marcus: "This looks like a new pattern — name it?" Humans promote.
 
+**Hypothesis validation requirement:** Close-lost hypotheses must be verified against the event stream before surfacing. If the AI hypothesizes "we lost because we didn't send a demo early" but `deal_events` shows a demo was sent, the hypothesis is suppressed or rewritten. See 2.21.
+
 ### 1.2 Research-Interview Pattern (LOCKED)
 
 Every capture moment uses the same pattern: AI reads full context → generates an argument → asks user to react to it. Not forms.
 
-Applies to:
-- Close-lost capture
-- Observation capture
-- Call prep feedback
-- Any future capture surface
+Applies to: close-lost capture, observation capture, call prep feedback, any future capture surface.
 
 The product's voice IS this pattern.
 
@@ -63,12 +61,15 @@ The product's voice IS this pattern.
 
 **Build (missing):**
 - **Attribution.** When a transcript lands or email sends, analyze whether the rep actually did the experiment behavior. Currently runs open-loop.
+- **Applicability gating.** Experiments only surface on deals where they're actually applicable given stage, timing, and preconditions. See 2.21.
 
 ### 1.4 Three Categories of Experiments (LOCKED)
 
 1. **In-conversation behaviors** ("mention SOC 2 in discovery"). Attribution: Claude reads transcript + experiment description, returns yes/no/partial with quoted evidence.
 2. **Out-of-conversation actions** ("send follow-up email within 24h with security one-pager"). Attribution: detect email event in window with artifact reference.
 3. **Implicit/approach experiments** ("lead with discovery, not product pitch"). Attribution: rubric-based scoring with visible confidence.
+
+All three categories carry explicit applicability rules (see 2.21). An experiment is only presented to a rep or tracked against a deal when those rules pass.
 
 ### 1.5 Experiment Lifecycle and Mode (LOCKED)
 
@@ -97,7 +98,7 @@ The product's voice IS this pattern.
 
 ### 1.9 Features Preserved from Current Nexus (LOCKED)
 
-- Pipeline (kanban/table/forecast)
+- Pipeline (kanban/table/forecast) — now reads from HubSpot via adapter (see 2.18)
 - Deal details with MEDDPICC tabs
 - Stakeholder maps
 - Activity feeds
@@ -108,7 +109,7 @@ The product's voice IS this pattern.
 - Playbook / experiments UI
 - Call prep generation
 - Follow-up email drafting
-- Agent memory / per-deal accumulated learnings
+- Agent memory / per-deal accumulated intelligence (now event-sourced, see 2.16)
 - Agent interventions (health checks, risk flags)
 - 14-person demo org + support personas
 - Vertical-specific demo data (Healthcare, FinServ, Tech, Gov, Media)
@@ -124,7 +125,22 @@ Per Prompt 3 findings, the following routes have zero grep-findable callers in t
 - `/api/observations/clusters`
 - `/api/demo/prep-deal`
 
-Do not rebuild these in v2 unless a consumer is identified. If a consumer turns up during the critique or data-flow sessions, add it back.
+Do not rebuild these in v2 unless a consumer is identified.
+
+### 1.11 Future State Capabilities — Designed-For, Not Built-For (LOCKED)
+
+The v2 architecture must be designed so these capabilities are feasible to add later without rewiring core systems. They are NOT scoped for v1 build, but v1 architecture decisions must not close the door on them.
+
+1. **Deal simulation.** Fork a deal's intelligence state, inject hypothetical events, project forward via Claude. Enabled by event-sourced state.
+2. **Rep coaching replay.** Replay intelligence object week-by-week for any historical deal. Enabled by event-sourced state with stable timestamps.
+3. **Proactive outreach prioritization.** "Which of my 12 open deals should I act on today, and what action?" Enabled by coordinator + intelligence + applicability gating.
+4. **Real-time competitive intelligence.** During a live call or session, query coordinator for latest positioning. Enabled by on-demand coordinator mode.
+5. **Cross-account intelligence.** Link buyers across deals and companies. Enabled by dedicated `people` table (see 2.19).
+6. **Automatic playbook generation.** Synthesize new playbooks from win-pattern analysis across deals. Enabled by consistent signal vocabulary and queryable intelligence.
+7. **Defensible forecasting.** Compute forecasts with per-deal reasoning, not just stage-weighted averages. Enabled by event-sourced intelligence and pattern data.
+8. **Experiment evidence compounding.** Experiments reference prior learnings via the same intelligence store. Enabled by unified data pipeline.
+
+Codex's rebuild plan should explicitly note these as "designed-for outcomes" and reject architectural choices that preclude them.
 
 ---
 
@@ -136,180 +152,187 @@ Do not rebuild these in v2 unless a consumer is identified. If a consumer turns 
 - (A) Real auth from day one (Supabase Auth or Clerk) with RLS enforcement
 - (B) Preserve persona-switching demo pattern, skip auth entirely
 
-**Claude's recommendation:** (A). Codex will build it cleaner starting fresh than retrofitting later. Real auth enables future features (multi-user demos, real observation attribution).
+**Claude's recommendation:** (A).
 
 **Jeff's call needed.**
 
 ### 2.2 Database Hygiene — Full Migration Scope (PENDING INPUT)
 
-**Findings from Prompt 2:**
-- 20+ "enum-shaped" text columns
-- No RLS policies (every table `isRLSEnabled: false`)
-- Only 4 indexes exist (all unique, on 1:1 FKs); no FK columns otherwise indexed
-- No `ON DELETE` behavior set on any FK (demo reset relies on manual ordering — fragile)
-- Heterogeneous FKs (`field_queries.initiated_by`, `observation_routing.target_member_id`) with no enforcement
-- Loose `uuid[]` arrays without FK (observations, playbook, coordinator_patterns, knowledge_articles)
-- Typo: `readnessFitDetected` (schema.ts:998, missing the "i")
+Per Prompt 2 findings.
 
 **Options:**
-- (A) Full hygiene pass in v2: real Postgres enums or lookup tables, indexes on every FK, explicit ON DELETE, join tables instead of uuid[], split FKs instead of polymorphic
-- (B) Targeted pass: only migrate what's actively breaking
+- (A) Full hygiene pass in v2
+- (B) Targeted pass, only migrate what's actively breaking
 
-**Claude's recommendation:** (A). Codex builds from scratch, so doing it right is the same cost as doing it wrong. The `getEffectiveType()` pattern exists today precisely because someone chose (B) once.
+**Claude's recommendation:** (A).
 
 **Jeff's call needed.**
 
 ### 2.3 Observation → Deal Relationship (PENDING INPUT)
 
-**Current schema:** `observations.linked_deal_ids uuid[]` — one observation can touch many deals. Array column, no FK enforcement.
-
 **Options:**
-- (A) Keep many-to-many via proper join table (`observation_deals` with FKs both sides)
-- (B) Restrict to strictly one deal per observation (`observations.deal_id uuid`)
+- (A) Many-to-many via proper join table (`observation_deals` with FKs)
+- (B) One-to-one (`observations.deal_id uuid`)
 
-**Claude's recommendation:** (A). The many-to-many pattern is what makes the intelligence coordinator's job possible — patterns that span multiple deals are the point. Proper join table gives you the semantics you want plus FK enforcement.
+**Claude's recommendation:** (A).
 
 **Jeff's call needed.**
 
 ### 2.4 Column Naming Conventions (LOCKED)
 
-Real column names (correcting CLAUDE.md's approximations):
-- `observations.observer_id` (not `reporter_id`)
-- `observations.raw_input` (not `content`)
-- `observations.ai_classification` (not `classification`)
-- `observations.linked_deal_ids uuid[]` (not `deal_id`)
+- `observations.observer_id`, `observations.raw_input`, `observations.ai_classification`, `observations.linked_deal_ids uuid[]`
+- API routes use camelCase: `observerId`, `rawInput`, `aiClassification`, `linkedDealIds[]`
 
-API routes use camelCase equivalents: `observerId`, `rawInput`, `aiClassification`, `linkedDealIds[]`.
+### 2.5 Surfacing Strategy — Two-Part Problem (PARTIALLY RESOLVED)
 
-Any prompt or documentation going forward uses these real names.
+The "surfacing without being overbearing" problem has two parts:
 
-### 2.5 Surfacing / "Not Overbearing" UX (OPEN — to resolve after Prompt 8)
+**Part A: Applicability — RESOLVED via 2.21.** What's applicable to surface right now given deal stage, timing, and preconditions? Handled mechanically by the applicability gate.
 
-**Constraints:**
-- Everyone sees everything (no role-based gating in v1)
-- Must not feel surveillant
-- Must not be noisy
-- Should proactively surface what matters, stay quiet when nothing matters
-- Continuous pre-analysis generates huge volume of data; most not worth surfacing
+**Part B: Prioritization and frequency — OPEN, queued for conversation after Prompt 8.** Of the set that IS applicable, what's worth actually surfacing vs. silently accumulating? Thresholds, prioritization, cadence, dismissal semantics, when the system says nothing.
 
-**Questions to resolve:**
-- Threshold for surfacing to a rep vs. silent accumulation?
-- Threshold for surfacing to leadership?
-- Inline vs. notification vs. scheduled digest?
-- How does a user dismiss / mute / engage with a surfaced insight?
-- When does the system say nothing?
+Part A materially simplifies Part B because the candidate set is already filtered.
 
-### 2.6 Infrastructure / Long-Running Workflows (OPEN — to resolve after 2.5)
+### 2.6 Infrastructure / Long-Running Workflows (RESOLVED)
 
-**Candidates:**
-- Rivet (current)
-- Cloudflare Durable Objects
-- Supabase + Inngest
-- Supabase + Trigger.dev
-- Postgres + Vercel Cron + a simple job table
+Rivet is REMOVED. Current integration has been silently dismantled in place.
 
-**Decision depends on runtime requirements from:**
-- Continuous pre-analysis on every transcript/email (heavy, frequent Claude calls)
-- Durable long-running workflows (transcript pipeline)
-- Scheduled jobs (deal health checks, graduation decisions)
-- Real-time UI updates (brief ready, intervention cards)
-- Whatever surfacing mechanism 2.5 lands on
-
-**Deferred until after 2.5 is resolved.**
+**New stack (LOCKED):**
+- **Long-running jobs:** Postgres `jobs` table + Next.js worker endpoint. Jobs are rows with `type`, `payload jsonb`, `status`, `attempts`, `run_after`, `completed_at`, `error`.
+- **Scheduling:** `pg_cron`.
+- **Real-time UI updates:** Supabase Realtime.
+- **Durable workflows:** Sequential job rows with `parent_job_id`.
 
 ### 2.7 Prompt Preservation (LOCKED)
 
-The prompts from `04-PROMPTS.md` are the product. They get ported faithfully in v2, not rewritten from scratch **except where the Prompt 4.5–4.7 analysis phase explicitly produces improved versions**. Codex may refactor the code around prompts freely but must preserve the prompt text verbatim for any prompt not flagged for rewrite.
+Prompts from `04-PROMPTS.md` are preserved verbatim EXCEPT those explicitly rewritten in `04C-PROMPT-REWRITES.md`.
 
 ### 2.8 Context Assembly Audit — New Prompt (LOCKED)
 
-Add **Prompt 7.5 — Context Assembly Audit** to the handoff sequence. Runs after 07-DATA-FLOWS.md. For every Claude API call: what data does it currently access? What data should it access? Where are the gaps?
-
-This is where demo quality lives. Architecture is plumbing; intelligence is prompts + context.
+Prompt 7.5 runs after 07-DATA-FLOWS.
 
 ### 2.9 Timeout / maxDuration Policy (LOCKED)
 
-Per Prompt 3 findings: 26 of 41 current routes rely on Vercel's default 10-second timeout. Any route that directly or transitively calls Claude will fail under real load.
-
-**Rule for v2:** Every route declares `maxDuration` explicitly. No route ships on the default. Routes grouped by role:
-- CRUD / read-only routes: 10s cap (fast fail preferred)
-- Routes calling Claude synchronously: minimum 60s, typically 300s
-- Routes that enqueue background work: 10s cap (enqueue is fast)
-- Routes that stream: use streaming with no hard cap instead of large maxDuration
+Every route declares `maxDuration` explicitly.
 
 ### 2.10 Single Write-Path per Domain Concept (LOCKED)
 
-Per Prompt 3 findings: `observations` has 6 write-paths with no service boundary — every route writes raw. `/api/deals/stage` writes full audit; `/api/deals/[id]/update` silently skips it. These asymmetries create silent audit gaps.
-
-**Rule for v2:**
-- For any domain concept with 2+ write sites (observations, deals, stage changes, activities), introduce a service function. All routes call the service; routes do not insert directly.
-- The service is the only code that writes the canonical audit trail (history, activity, linked observations).
-- No raw inserts from route handlers to tables with any downstream observer.
+Any domain concept with 2+ write sites goes through a service function.
 
 ### 2.11 No Trust Flags on User Input (LOCKED)
 
-Per Prompt 3 findings: `/api/observations` with `preClassified: true` bypasses the classifier. In a demo this is fine; in any multi-tenant context it is a critical vulnerability.
-
-**Rule for v2:** No client-provided flags control server-side trust decisions. The server decides what runs classification, what bypasses it, what's pre-verified. Internal-only code paths (e.g., the pipeline calling the observation service directly) bypass classification by invoking a different service method, not by setting a flag.
+No client-controlled flags gate server-side trust decisions.
 
 ### 2.12 Server-to-Server Work Uses Function Calls, Not HTTP (LOCKED)
 
-Per Prompt 3 findings: pipeline actor, MCP, call-prep, analyze/link all use `fetch()` to hit internal Next.js routes. Every call pays serverless cold-start + invocation latency.
-
-**Rule for v2:**
-- HTTP is for client-server boundaries only.
-- Server code that needs work from another server component calls it as a function, not an HTTP request.
-- Background jobs invoke services directly. The pipeline does not `fetch('/api/...')` to talk to itself.
-- Shared logic (classify observation, score MEDDPICC, draft email) lives in a `services/` layer that both routes and jobs import.
+Shared logic lives in `services/`.
 
 ### 2.13 Unified Claude Integration Layer (LOCKED)
 
-Per Prompt 4 findings, the Claude integration is inconsistent across 25 call sites: 4 different fence-strip regex patterns, temperature unset everywhere (defaults to 1.0), transcript truncation varies 8K-15K across pipeline steps, signal-type enum drift (9 vs 7), currency symbol mixing ($/€), parallel email-drafting paths with different schemas, retry asymmetry (7 actor-side retry, 18 SDK-side don't), and every response is JSON-in-text that requires regex parsing.
-
-**Rules for v2:**
-
-**One Claude client wrapper.** All call sites use it. Built-in:
-- Retry policy (429/5xx handling)
-- Telemetry (per-call duration, tokens, cost, task name)
-- Error classification (transient vs. permanent)
-- Model pinning (one env var, not 25 string literals)
-
-**Structured outputs via tool use.** Every prompt expecting structured output defines a tool schema. Model invokes the tool. Response comes back as typed JSON. No regex, no fence stripping, no `try/catch JSON.parse` ladders. (Exception: truly free-form generation like email body text — those return plain text.)
-
-**Temperature set explicitly per call, chosen by task type:**
-- Classification / extraction / scoring: 0.2
-- Analysis / hypothesis generation: 0.3-0.4
-- Creative drafting (email, hypothesis prose): 0.6-0.7
-- Never leave it unset.
-
-**One formatter module.** Currency, dates, deal stages, percentages, names formatted through shared utilities. Prompts consume pre-formatted strings, not raw fields.
-
-**Single source-of-truth enum for signal types.** One TypeScript enum, referenced by every prompt that mentions signal types. No drift.
-
-**One transcript preprocessing pass.** At ingestion, a transcript is normalized into a canonical analyzed-transcript object (full text, segments, speaker turns, extracted entities, token counts). Every downstream prompt reads from this object. No ad-hoc truncation per step. The "analyzed transcript" is itself cached / stored so re-analysis is cheap.
-
-**One email-drafting service.** Current prompts #12 and #24 emit different shapes. v2 has one service, one prompt, one output schema. Both consumers (agent draft-email route, pipeline actor) call the service.
-
-**Prompts live as `.md` files in `prompts/` directory** (already Guardrail #4). Loaded at runtime, not string literals in routes.
+- One Claude client wrapper (retry, telemetry, model pinning, error classification)
+- Structured outputs via tool use
+- Temperature set explicitly per task type
+- One formatter module
+- Single source-of-truth enum for signal types
+- One transcript preprocessing pass
+- One email-drafting service
+- Prompts as `.md` files in `prompts/` directory
 
 ### 2.14 Coordinator Synthesis Prompt Anomaly (OPEN)
 
-Per Prompt 4 findings: prompt #25 (intelligence coordinator synthesis) uses `system: ""` while all other 24 prompts set a system prompt. The coordinator is arguably the prompt that needs the strongest system framing because it's doing cross-deal pattern synthesis.
+Prompt #25 uses `system: ""`. Flagged for deep dive in Prompt 4.5a/b. Strong candidate for full system-prompt redesign in Prompt 4.7.
 
-This is likely a root cause of "the intelligence coordinator feels weak" — a known product issue from CLAUDE.md.
+### 2.15 Prompt Analysis Phase (LOCKED)
 
-**Action:** Flag for deep dive in Prompt 4.5a or 4.5b. The rewrite in Prompt 4.7 is a strong candidate for a full system-prompt redesign.
+Four sessions inserted after Prompt 7.5: 4.5a, 4.5b, 4.6, 4.7.
 
-### 2.15 Prompt Analysis Phase — Added to Handoff Sequence (LOCKED)
+### 2.16 Intelligence Service Architecture (LOCKED)
 
-Insert a new analysis block after Prompt 7.5 (Context Assembly Audit) and before Prompt 8 (Source Copy). Four sessions, three deliverables:
+Stateless service backed by event-sourced storage.
 
-- **Prompt 4.5a:** Deep quality audit on prompts 1-13 of 25. Output: `04A-PROMPT-AUDIT.md` (created).
-- **Prompt 4.5b:** Deep quality audit on prompts 14-25. Appends to `04A-PROMPT-AUDIT.md`.
-- **Prompt 4.6:** Prompt dependency graph + blast-radius ranking. Output: `04B-PROMPT-DEPENDENCIES.md`.
-- **Prompt 4.7:** Full rewrites for top 8 prompts by blast radius + "Prompt Principles for Codex" section. Output: `04C-PROMPT-REWRITES.md`.
+1. **Event-sourced state.** `deal_events` table. Append-only. Each event: `deal_id`, `event_type`, `payload jsonb`, `source`, `reason`, `created_at`. Deletion is soft (tombstone events).
+2. **Snapshots.** `deal_snapshots` table caches computed state. Current state = latest snapshot + events since snapshot.
+3. **DealIntelligence service.** Stateless TypeScript. Methods: `getCurrentState`, `getStateAsOf`, `appendEvent`, `getHealthScore`, `getRiskSignals`, `getCompetitiveContext`, `getStakeholderEngagement`, `getLearnings`, and the applicability methods from 2.21.
+4. **Queryable across deals.** `deal_event_signals` view/index for cross-deal queries.
+5. **Signals link to people, not just stakeholders.** `person_id` where relevant (see 2.19).
+6. **No actors, no daemons.** Service loads from Postgres per call; snapshots keep it fast.
+7. **Snapshots are diagnostic.** Debug UI can inspect.
+8. **Stable interface.** Callers use service methods. Never direct table access.
 
-Sequencing rationale: run 5, 6, 7, 7.5 first (mechanical extraction) so the quality audit has full context when it runs.
+### 2.17 Coordinator Architecture (LOCKED)
+
+**Mode 1 — Scheduled:** pg_cron triggered; queries recent events; synthesizes via Claude; writes to `coordinator_patterns`.
+
+**Mode 2 — On-demand:** invoked by call prep and close-lost; queries cached patterns + runs targeted synthesis for this deal; returns top N; read-only.
+
+Call prep MUST query the coordinator. Zero results is a valid return, not an error. Coordinator patterns carry provenance (contributing event IDs and deal IDs).
+
+### 2.18 CRM Strategy — HubSpot Hybrid (LOCKED)
+
+HubSpot free CRM = system of record for deal/contact/company data. Nexus owns intelligence data in its own Postgres.
+
+**Adapter pattern mandatory.** `CrmAdapter` interface; `HubSpotAdapter` is v1 implementation. No HubSpot-specific code outside the adapter.
+
+**Failure mode:** read-through cache on adapter layer. Nexus continues to demo against cached data if HubSpot is unavailable.
+
+### 2.19 Data Boundary (LOCKED)
+
+**HubSpot:** deals, contacts, companies, native CRM activities, stages, pipelines.
+
+**Nexus:** `deal_events`, `deal_snapshots`, `observations`, `coordinator_patterns`, `experiments`, `transcripts`, `meddpicc_scores`, oDeal fitness, `people` table, rep accounts, clusters, classifications, interventions.
+
+**Split:** stakeholders (identity → HubSpot contacts; engagement analysis → Nexus `deal_events` keyed by HubSpot contact id). Basic deal metadata cached in Nexus; source of truth HubSpot.
+
+**Sync:** HubSpot → Nexus one-way via webhooks + periodic full sync. Nexus → HubSpot write-back only for specific AI values as custom properties. HubSpot wins CRM fields; Nexus wins Nexus fields.
+
+### 2.20 New Extraction Prompts for HubSpot Planning (LOCKED)
+
+- **Prompt 7.6** — CRM Data Boundary Mapping. Output: `07B-CRM-BOUNDARY.md`.
+- **Prompt 7.7** — HubSpot Property and Integration Design. Output: `07C-HUBSPOT-SETUP.md`.
+
+### 2.21 Deal-Context Applicability Gating (LOCKED)
+
+Every piece of surfaced intelligence — experiments, recommendations, coordinator patterns, risk flags, intervention cards, call-prep content — must be gated by deal context before surfacing. Without gating, the system fires noise regardless of whether the insight applies to this deal right now.
+
+**The three gates every candidate surface must pass:**
+
+1. **Stage applicability.** Does this surface make sense for deals in this stage? A "send a working demo" experiment is not applicable to a deal in negotiate-and-review. A pattern about "deals losing to Microsoft when CFO isn't engaged by Stage 3" is noise on a deal at Stage 1 with no Microsoft mention.
+
+2. **Temporal applicability.** Is the timing right? "Send a working demo within 3 hours of a discovery call" is relevant only in the 3-hour window after a discovery call event. "Champion silence" is concerning at Stage 5, expected at Stage 1.
+
+3. **Precondition applicability.** Have prerequisite events happened? Have excluded events NOT happened? "Send a demo" is not applicable if a demo has already been sent. "Push on decision criteria" is not applicable if decision criteria are already documented in MEDDPICC.
+
+**Where this is built:**
+
+**(a) Structured applicability on every surfaceable entity.**
+
+For experiments, a required `applicability` JSONB column with a defined schema:
+- `applicable_stages: string[]`
+- `triggering_event_types: string[]`
+- `time_window_after_trigger_hours: number | null`
+- `preconditions: { event_types_required: string[]; event_types_excluded: string[] }`
+
+Coordinator patterns, risk flags, and intervention definitions carry equivalent applicability metadata appropriate to their type.
+
+Applicability rules are structured data, never prose buried in a description. Claude Code and Codex both enforce: no experiment or pattern ships without structured applicability.
+
+**(b) Applicability engine in DealIntelligence service.**
+
+The `DealIntelligence` service (see 2.16) exposes:
+- `getApplicableExperiments(dealId, candidateExperiments[]): Experiment[]`
+- `getApplicablePatterns(dealId, candidatePatterns[]): Pattern[]`
+- `getApplicableRiskFlags(dealId, candidateFlags[]): Flag[]`
+- `isApplicable(dealId, applicabilityRules): { applicable: boolean, reasons: string[] }`
+
+Because intelligence is event-sourced (2.16), these queries are trivial against `deal_events`. "Was there a discovery call in the last 3 hours?" is one query. "Has a demo been sent?" is another.
+
+**(c) Every surfacing path runs through the gate.**
+
+Call prep, intervention cards, intelligence dashboard sections, observation routing, close-lost hypothesis generation — all ask the applicability engine first. Nothing reads candidate experiments/patterns/flags and surfaces them directly.
+
+**Hypothesis validation (close-lost specifically).** The close-lost analysis also verifies its generated hypotheses against the event stream. If the hypothesis claim is contradicted by events (e.g., "we should have sent a demo earlier" when a demo event exists), the hypothesis is suppressed or the AI is re-prompted.
+
+**Logging.** When a candidate surface is rejected by the gate, the rejection reason is logged. This supports debug UIs and future learning ("did we correctly suppress this? did it turn out to matter?").
 
 ---
 
@@ -317,69 +340,82 @@ Sequencing rationale: run 5, 6, 7, 7.5 first (mechanical extraction) so the qual
 
 ### 3.1 Visual Rebrand — Anthropic → OpenAI Aesthetic (LOCKED)
 
-**Context:** Current Nexus uses an Anthropic-flavored palette (sand `#E8DDD3`, coral `#E07A5F`, page bg `#FDFAF7`, DM Sans typography). Rebuild needs to move away from Anthropic brand cues given the build is now for OpenAI.
+Current Nexus uses an Anthropic-flavored palette. Rebuild moves away from Anthropic brand cues.
 
-**Approach:**
-- Design work happens in a **separate Claude chat**, not in Codex. Claude handles design; Codex handles build.
-- Aesthetic direction: "in the spirit of" OpenAI's visual language (calm, minimal, confident, restrained) without literally cloning ChatGPT's palette. Interviewer should recognize kinship, not photocopy.
-- Do NOT copy `#10A37F` (OpenAI's literal green). Use a distinct accent color that feels like it could belong in their ecosystem.
+Design work happens in a separate Claude chat. Aesthetic direction: "in the spirit of" OpenAI's visual language without cloning ChatGPT. Do NOT copy `#10A37F`.
 
-**Deliverable:** `docs/handoff/DESIGN-SYSTEM.md` produced in a dedicated Claude chat, containing:
-- Color palette (primary, accent, text, backgrounds, borders, states)
-- Typography scale (font family, sizes, weights)
-- Component primitives (buttons, cards, inputs, chips) with all 5 visual states per Framework 6
-- Spacing and radius system
-- Shadow and elevation
-- Any patterns needed to re-skin Framework 21's conversational UI components
+Deliverable: `docs/handoff/DESIGN-SYSTEM.md`. Timing: between Codex Phase 1 (foundation) and Phase 2 (UI work).
 
-**Timing:** Produce this between Codex Phase 1 (foundation) and Codex Phase 2 (UI work starts). Hand to Codex as input for Phase 2+.
-
-**What transfers vs. what changes:**
-- **Preserve:** Framework 21 interaction patterns — numbered chip cards, inline responses, sparkle header give-backs, research-interview framing. These are product IP.
-- **Change:** All color values. Typography family if needed. Component styling details. Brand voice if any.
-
-**Codex instruction when design system is ready:**
-> "Read `DESIGN-SYSTEM.md`. Apply this palette, typography, and component styling throughout. The interaction patterns from Framework 21 (in the handoff package) are preserved — only the visual skin changes."
+Preserve Framework 21 interaction patterns. Change color values, typography, component styling.
 
 ---
 
 ## Part 4 — Remaining Conversations Required
 
-Before the future-state vision doc and rebuild plan can be written, these conversations must happen:
+1. **Surfacing prioritization / frequency (Part B of 2.5)** — to resolve after Prompt 8.
+2. **Resolve 2.1, 2.2, 2.3 PENDING items** — can happen in the same conversation.
 
-1. **Surfacing mechanics** (see 2.5) — how Nexus proactively surfaces insight without being overbearing
-2. **Infrastructure decision** (see 2.6) — dependent on 1
-3. **Confirm 2.1, 2.2, 2.3** pending decisions
-
-Resolve these in the planning chat after Prompt 8 completes, before writing Prompts 8.5, 8.75, 9, and 10.
-
-The design system (3.1) is produced in a separate chat on its own timeline — does not block the rebuild plan.
+Design system (3.1) is on a separate timeline.
 
 ---
 
-## Part 5 — Guardrails for Codex
+## Part 5 — Updated Claude Code Prompt Sequence
 
-When the rebuild plan hands off to Codex, enforce these non-negotiables:
+- ✅ Prompt 0 — Setup
+- ✅ Prompt 1 — Inventory
+- ✅ Prompt 2 — Schema
+- ✅ Prompt 3 — API Routes
+- ✅ Prompt 4 — Prompt Registry
+- ✅ Prompt 5 — Rivet Actors
+- ⏳ Prompt 6 — UI Structure
+- Prompt 7 — Data Flows
+- Prompt 7.5 — Context Assembly Audit
+- Prompt 4.5a — Prompt Quality Audit (prompts 1-13)
+- Prompt 4.5b — Prompt Quality Audit (prompts 14-25)
+- Prompt 4.6 — Prompt Dependency Graph
+- Prompt 4.7 — Prompt Rewrites + Principles
+- Prompt 7.6 — CRM Data Boundary Mapping
+- Prompt 7.7 — HubSpot Property and Integration Design
+- Prompt 8 — Source Copy
+- **[Planning chat: Surfacing Part B conversation + resolve 2.1/2.2/2.3]**
+- Prompt 9 — Critique
+- Prompt 10 — Rebuild Plan
+- Prompt 11 — Final Packaging
 
-1. Prompts from 04-PROMPTS.md are preserved verbatim except those explicitly rewritten in 04C-PROMPT-REWRITES.md.
-2. Schema-first design. No workarounds like `getEffectiveType()`. If the schema needs to change, migrate first.
+---
+
+## Part 6 — Guardrails for Codex
+
+1. Prompts from 04-PROMPTS.md are preserved verbatim except those rewritten in 04C-PROMPT-REWRITES.md.
+2. Schema-first design. No workarounds. Migrate schema before code.
 3. Every capture moment is a research interview, not a form.
-4. No dual persistence. One source of truth per data type.
-5. Long-running operations are background jobs. UI polls or subscribes; never blocks on a synchronous call.
+4. No dual persistence except the explicit HubSpot/Nexus split defined in 2.19.
+5. Long-running operations are background jobs. UI polls or subscribes.
 6. oDeal and experiments share a data pipeline but present separate UI narratives.
-7. Soft-mode experiments only. No enforcement, no surveillance framing.
-8. "Nexus Intelligence" is the voice. Never frame AI outputs as coming from a person (e.g., "Marcus is asking...").
+7. Soft-mode experiments only. No enforcement.
+8. "Nexus Intelligence" is the voice. Never frame AI outputs as coming from a person.
 9. Inline rendering for all AI responses. No toasts for meaningful content.
-10. Cost is not a constraint in this phase. Build the heavy version. Optimize later.
-11. When `DESIGN-SYSTEM.md` is provided, treat it as authoritative for all visual decisions. Framework 21 interaction patterns remain; only visual skin changes.
-12. Every route declares `maxDuration` explicitly. No route ships on Vercel's default (per 2.9).
-13. Any domain concept with 2+ write sites goes through a service function. Routes never insert directly into tables with downstream observers (per 2.10).
-14. No client-controlled trust flags. Server decides what's verified, what runs classification, what's internal (per 2.11).
-15. Server-to-server work is a function call, not HTTP. Internal `fetch()` to your own routes is banned (per 2.12).
-16. All Claude calls go through the unified client wrapper. No direct SDK calls anywhere outside that wrapper (per 2.13).
-17. Structured outputs use tool use, not JSON-in-text regex parsing (per 2.13).
-18. Temperature is set explicitly per call based on task type; never unset (per 2.13).
-19. Prompts live as `.md` files loaded at runtime, not string literals inline in routes.
-20. One formatter module for currency/dates/names/stages. Prompts never see raw fields.
-21. One transcript preprocessing pass produces the canonical analyzed-transcript object. All downstream prompts read from it.
-22. Single source-of-truth enum for signal types, referenced everywhere.
+10. Cost is not a constraint in this phase. Build the heavy version.
+11. When `DESIGN-SYSTEM.md` is provided, treat it as authoritative for visual decisions.
+12. Every route declares `maxDuration` explicitly.
+13. Any domain concept with 2+ write sites goes through a service function.
+14. No client-controlled trust flags.
+15. Server-to-server work is a function call, not HTTP.
+16. All Claude calls go through the unified client wrapper.
+17. Structured outputs use tool use, not JSON-in-text regex parsing.
+18. Temperature is set explicitly per call by task type; never unset.
+19. Prompts live as `.md` files loaded at runtime.
+20. One formatter module for currency/dates/names/stages.
+21. One transcript preprocessing pass produces the canonical analyzed-transcript object.
+22. Single source-of-truth enum for signal types.
+23. All deal/contact/company data access goes through `CrmAdapter`.
+24. Intelligence state is event-sourced. `deal_events` is append-only.
+25. `DealIntelligence` service is the only interface for intelligence data.
+26. The coordinator runs in both scheduled and on-demand modes using the same code. Call prep must query it.
+27. `people` table exists from day one even if unused in v1.
+28. Rivet is removed. Background work is Postgres `jobs` + Next.js worker + `pg_cron`.
+29. HubSpot cache read-through. Nexus continues demoing against cached data if HubSpot is unavailable.
+30. Architecture decisions must not preclude any of the eight Future State Capabilities in 1.11.
+31. Nothing surfaces to a user without passing the applicability gate (2.21). Candidate experiments, patterns, risk flags, and recommendations are always filtered through `DealIntelligence.getApplicable*()` before reaching any surfacing path.
+32. Applicability rules on experiments and patterns are structured data (JSONB schema per 2.21), never prose in a description field. Any experiment or pattern shipped without structured applicability is a bug.
+33. The close-lost hypothesis generator verifies claims against the event stream before surfacing. Contradicted hypotheses are suppressed or the model is re-prompted. Close-lost never tells Sarah "we should have done X" when events show X was done.
