@@ -754,8 +754,893 @@ Early patterns observed across the first 13 prompts. A full cross-cutting analys
 
 ---
 
-END OF 4.5a (prompts 1-13 covered).
-Session 4.5b will APPEND entries 14-25 and the full Cross-Cutting Analysis section below this line.
+END OF 4.5a. Entries 14-25 and full Cross-Cutting Analysis continue below.
 
 ---
 
+## Transition Note (4.5b)
+
+The audit below was produced by session 4.5b. It covers prompts 14-25 using the same structure as 4.5a, then replaces the Interim Cross-Cutting Observations section with the full Cross-Cutting Analysis at the end of the document. The interim section above stays in place as a record of mid-audit thinking; the authoritative cross-cutting view is the final section below.
+
+Special items in this batch: prompt #15 (Deal Fitness) gets a proportionally longer treatment given its 250-line scope and 16K output cap; prompt #25 (Coordinator Synthesis) gets a substantive improvement block to address the `system: ""` anomaly; prompts #12 and #24 are cross-flagged as the "two email drafters" per DECISIONS.md 2.13 LOCKED.
+
+---
+
+## 14. Close Analysis (Win/Loss)
+
+**Task Summary**
+
+When a rep selects Closed Won or Closed Lost in the stage modal, this prompt analyzes the full deal history (MEDDPICC, contacts + engagement, transcripts + analyses, observations, recent activities, stage history, system intelligence) and produces three outputs: (a) a structured `summary` + `factors[]` array of specific win/loss factors with evidence and confidence, (b) 0-2 `questions[]` about things the AI suspects but can't confirm from data, with chip options, (c) `meddpicc_gaps[]` and `stakeholder_flags[]`. Drives the close-capture modal's research-interview UX (DECISIONS.md 1.2 LOCKED) and seeds `deals.closeFactors`/`winFactors` + feeds win/loss patterns to every future call prep (#11). **Per DECISIONS.md 1.1 LOCKED, the current single-pass implementation does NOT meet v2's spec** — v2 requires continuous pre-analysis on every transcript/email plus a final deep pass. Rated CRITICAL in 07A §14.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** ADEQUATE. "You are analyzing a sales deal that just closed ${outcome}. You have access to the complete deal history — transcripts, observations from the field, MEDDPICC scores, stakeholder engagement patterns, stage velocity, and competitive intelligence." Task-first, doesn't invoke "strategic VP of Sales conducting a post-mortem" framing despite that being the LOCKED target per 1.1 ("a strategic-VP-of-Sales-grade hypothesis — an argument with depth, not a summary").
+- **Task specificity.** STRONG. Three numbered outputs, each with explicit sub-rules. "Each factor must cite specific evidence from the data (a transcript quote, an observation, a MEDDPICC gap, a stakeholder pattern). Do not speculate beyond what the data shows." Clear success criteria.
+- **Reasoning structure.** ABSENT. Three outputs, one JSON. No "first inspect the evidence, hypothesize causes, then validate each against the data" scaffolding — ironic given DECISIONS.md 1.1 describes this prompt's target as "an argument with depth."
+- **Output structure.** ADEQUATE on shape, WEAK on type discipline. `factors[].category` interpolates the pipe-separated enum literal (`"competitor|stakeholder|process|product|pricing|timing|internal|champion"`) directly into the spec line — model sometimes returns the pipe string itself as the value (04-PROMPTS #14 known issue #2). `confidence` is an informal "high|medium|low" string — no evidence-strength calibration beyond the three buckets.
+- **Examples / few-shot.** ADEQUATE. Inline examples for DYNAMIC_CHIPS ("CompetitorX undercut pricing by 20% (from transcript mention)") and anti-examples ("NOT generic things like 'Lost to competitor'"). Decent density, but no example of the full three-output structure — the hardest-to-reproduce part.
+- **Edge-case coverage.** WEAK. What if the deal has zero transcripts? Zero observations? The prompt explicitly asks for evidence citation but the user-message fallbacks are plain strings ("No transcript analyses", "No observations") — model can produce factors without evidence when the whole deal has no data. Doesn't address: won deal closed by a teammate (who gets credit?), deal that bounced between stages repeatedly, deal that was closed_lost and reopened.
+- **Anti-hallucination.** ADEQUATE. "Do not speculate beyond what the data shows" is the load-bearing rail. But the model is explicitly asked to propose DYNAMIC_QUESTIONS about "things you suspect but can't confirm from data alone" — which sanctions a carefully-scoped form of speculation. No instruction for "if the evidence for a factor is thin, set confidence: low rather than omitting the factor." A factor with confidence: high and a vague evidence field is technically valid output.
+- **Tone / voice control.** WEAK. Two-to-three-sentence `summary` is specified but no tone ("strategic and direct, not cheerleading"). Factor `label`s should be "Short chip label (under 8 words)" — length but no voice. For a VP-grade hypothesis, the voice target matters.
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 2000`, summary "2-3 sentences," factors labels "under 8 words," questions "0-2 questions with 3-4 chip options." Per-item sized but no structural cap on factor count — prompt doesn't say "2-6 factors" so model emits anywhere from 1 to 15.
+
+**Output Schema Quality**
+
+Five top-level fields: `summary` (string), `factors[]` (id + label + category + evidence + confidence), `questions[]` (id + question + chips[] + why), `meddpicc_gaps[]` (string array), `stakeholder_flags[]` (string array). Schema matches downstream consumers loosely — `factors[].category` flows into observations' `aiClassification.signals[0].type` via a category-to-signal-type map; `questions[]` drives UI chips; `summary` renders in the modal.
+
+Schema issues:
+- `category` string literal enum is interpolated by outcome ("lost" → 8-value enum, "won" → 6-value enum). Valid v1 shortcut; brittle for tool-use.
+- `meddpicc_gaps` is narrative text (e.g., "Economic Buyer confidence was only 20%"), not structured (e.g., `{ dimension: "economic_buyer", score: 20, issue: "unclear" }`) — downstream code can only display, not act.
+- Per 07-DATA-FLOWS Flow 8 issue #2, `meddpicc_gaps` are DISPLAYED and that's all — not written back to `meddpiccFields`, not captured as observations. Output field with no action.
+- `stakeholder_flags[]` is similarly prose-only; no dimension or contactId to act on.
+- No overall `confidence` at the analysis level — just per-factor confidence. The "am I confident in my overall story?" signal that a VP would want is absent.
+
+Under v2 tool-use per DECISIONS.md 2.13, the schema becomes typed: `factors[].{id, label, category: enum, evidence: {source: "transcript"|"observation"|"meddpicc"|"activity", ref_id: string, quote: string}, confidence: number 0-1}`. Questions become `questions[].{id, question, chips: string[], why, dimension: meddpicc_key | null}`. MEDDPICC gaps become `meddpicc_gaps[].{dimension: enum, current_score, concern}`. Every field actionable.
+
+**Known Failure Modes**
+
+- **Single-pass analysis violates DECISIONS.md 1.1 LOCKED.** The LOCKED spec requires continuous pre-analysis on every transcript/email updating a rolling "deal theory," plus a final deep pass at close. Current prompt runs once at close from raw data with no theory to build on. 04-PROMPTS #14 known issue #1 notes this; 07A §14 rates it CRITICAL.
+- **Taxonomy promotion logic absent.** DECISIONS.md 1.1 requires: "When hypotheses surface uncategorized reasons, flag as candidates. If 3+ deals accumulate similar uncategorized reasons, surface to Jeff/Marcus." No code implements this. Model is forced to pick from the hardcoded category enum every time.
+- **Hypothesis verification against event stream absent.** DECISIONS.md 2.21 LOCKED requires hypotheses be verified against the event stream before surfacing. Today the factors are returned verbatim to the UI.
+- **Transcript TEXT not passed.** Per 07A §14: prompt receives `call_analyses.summary`/`painPoints`/`competitiveMentions`/`nextSteps` — summaries of summaries — but not the raw transcript text. The quotes that would ground a factor ("Henrik said: 'If security takes another month, we go with Microsoft'") are absent. Model makes up plausible-sounding evidence fields.
+- **Category enum pipe-string drift.** Per 04-PROMPTS #14 known issue #2: the literal `"competitor|stakeholder|process|..."` line sometimes returned as a value.
+- **MEDDPICC trajectory missing.** Per 07A §14: current score snapshot only, no delta arc. "Economic Buyer confidence dropped 60→20 two weeks before close" is the story the loss analysis is supposed to tell; the prompt doesn't see the arc.
+- **No prior briefs, no agent memory, no coordinator patterns.** Per 07A §14. Each loss analysis treats the deal as if it had never been analyzed before — even though the system has been analyzing it continuously for months.
+- **Fallback returns empty at 200 status.** Claude parse failure returns `{ summary: "", factors: [], ... }` at success code. UI renders the empty modal; rep doesn't know the analysis failed.
+
+**Rewrite Priority**
+
+**MUST REWRITE.** Two independent reasons. (1) Current implementation fundamentally does not match DECISIONS.md 1.1 LOCKED spec. Re-scoping (not patching) is required: the continuous-pre-analysis pipeline step + a final-pass prompt that reads the rolling deal theory. (2) The prompt's text itself lacks role framing worthy of "VP-grade hypothesis," lacks chain-of-thought structure, has category pipe-drift issues, and the `meddpicc_gaps[]` output field is dead weight (displayed, not acted on). The hero surface for DECISIONS.md's flagship research-interview product pattern is the prompt most out-of-spec with the LOCKED plan.
+
+**Specific Improvement Suggestions**
+
+1. **Re-scope into two prompts.** A lightweight "deal theory update" prompt runs on every transcript/email (part of the pipeline or an event handler per 2.16) and updates a rolling `deal_events` / `deal_snapshot`. A final "deep close analysis" prompt reads the theory + final context and produces the three-output hypothesis. Current prompt becomes the latter.
+2. **Upgrade role framing.** "You are a strategic VP of Sales conducting a deal post-mortem with the full history of this opportunity at your disposal. Your goal is to produce an argument with depth — a diagnosis grounded in evidence — not a summary."
+3. **Add chain-of-thought scaffolding.** "Before emitting JSON, silently work through: (1) what is the single most plausible story of what happened? (2) what evidence in the provided data supports each step? (3) where is the evidence thin enough that a question to the rep would sharpen the diagnosis?"
+4. **Pass full transcript text per 07A §14** — the quotes are the argument.
+5. **Pass deal theory + MEDDPICC trajectory + prior briefs + agent memory + coordinator patterns** per 07A §14. Without the arc, depth is impossible.
+6. **Upgrade schema to typed tool-use.** Structured `evidence` object per factor (source + ref_id + quote), numeric confidence, structured `meddpicc_gaps[]`. Eliminates category pipe-drift.
+7. **Add taxonomy-promotion awareness.** "If the best category for a factor doesn't fit the enum, use `category: 'candidate'` and provide a proposed new category name in `candidate_name`." A separate job promotes candidates when 3+ deals accumulate similar ones (DECISIONS.md 1.1).
+8. **Add hypothesis-verification hook per 2.21.** Before the hypothesis surfaces, a verification pass checks each factor against `deal_events`. Low-verification factors are filtered or flagged.
+
+**Blast Radius Recap**
+
+Confirmed factors write to `deals.closeFactors`/`winFactors` AND create `observations` rows AND feed `/api/intelligence` Close Intelligence tab AND feed prompt #11's Win/Loss Intelligence section for every future deal in the same vertical. A weak close analysis propagates into every future call prep. Per 07A §14 CRITICAL, this is one of the highest-leverage prompts in the system — only #11 comes close in downstream reach.
+
+---
+
+## 15. Deal Fitness Analysis (The oDeal Framework)
+
+**Task Summary**
+
+Given a chronological timeline of a deal's transcripts + emails, detect which of 25 canonical "inspectable events" (buyer behaviors in four fit categories: business, emotional, technical, readiness) have occurred, with status `detected | not_yet | negative`. Also produce: commitment tracking (promise → follow-through pairs), language progression (ownership-language % per call), buying committee expansion, response-time pattern, overall assessment. **Longest prompt in the registry at ~250 lines; highest max_tokens at 16,000.** Feeds `deal_fitness_events` (25 rows per deal, delete-and-re-insert per analysis) and `deal_fitness_scores` (per-category + overall scores, plus jsonb narratives). Output is consumed by the `/deal-fitness` page + prompt #11's fitness-context section. Triggered by `/api/deal-fitness/analyze` after transcript pipeline completion or on-demand. Rated HIGH in 07A §15.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** STRONG. "You are an expert deal intelligence analyst implementing the oDeal framework — a methodology for measuring BUYER behavior in enterprise sales deals." Domain-specific, methodology-anchored, establishes the single hardest-to-hold distinction (buyer vs. seller behavior) up front. One of the strongest openers in the registry.
+- **Task specificity.** STRONG. 6 "Critical Principles" numbered explicitly, 4 "Commitment Tracking Rules" separately, 25 events enumerated with paired DETECT-WHEN / NOT-THIS clauses, language-progression methodology specified, schema example with realistic data. More structural discipline than any other prompt.
+- **Reasoning structure.** PARTIAL. The 25-event enumeration is itself a kind of scaffolding — model processes each event in turn. But no explicit "first pass: scan timeline; second pass: match events; third pass: track commitments across calls; fourth pass: compute language progression" chain. For 16K output + 25 events + commitment pairing + language trajectory, more explicit multi-pass structure would tighten consistency.
+- **Output structure.** STRONG. Detailed nested JSON schema with concrete example values. `events[]` structure is uniform per event; `commitmentTracking[]`, `languageProgression`, `buyingCommitteeExpansion`, `responseTimePattern`, `overallAssessment` are each distinct shapes. Downstream code writes 25 rows to `deal_fitness_events` and the narrative jsonb to `deal_fitness_scores`.
+- **Examples / few-shot.** STRONG. One full worked event (buyer_shares_kpis with evidence snippet + quote + context + description) and one not_yet event (`buyer_assigns_day_to_day_owner` with coaching note). Commitment tracking example with promise → resolution. Language progression example with actual call labels + percentages + sample quotes. Committee expansion example with introducer tracking. Few-shot density is the highest in the registry. **Critical defect, however:** the worked not_yet example uses `buyer_assigns_day_to_day_owner` — an event key that is NOT in the canonical 25-event list (04-PROMPTS #15 known issue). An unreachable example the model may still emit.
+- **Edge-case coverage.** PARTIAL. Handles empty-history explicitly (`existingKeysText` falls back to "None — this is the first analysis"). 6 confidence bands for evidence strength. But does NOT address: what if a transcript has no clear buyer speakers? What if participants list is wrong? What if a commitment was made by a seller listed in participants (edge case: some teams have the CSM on the buyer side)? What about cross-cultural language patterns (ownership language in non-English)?
+- **Anti-hallucination.** STRONG. "Events must be supported by specific evidence — a quote, a described action, or an observable behavior. No assumptions." Paired with DETECT-WHEN / NOT-THIS clauses per event. Commitment rules explicitly separate buyer from seller. Language progression methodology is quantitative. Best anti-hallucination discipline in the registry.
+- **Tone / voice control.** ADEQUATE. "Brief 2-3 sentence assessment of deal health" for `overallAssessment`; `coachingNote` for not_yet events are seller-facing prose. No explicit voice (e.g., "crisp, diagnostic, not cheerleading") — some coaching notes drift into generic advice when the seller could benefit from tactic-specific framing.
+- **Length / verbosity control.** ADEQUATE. 16K output cap; counts per category (6-7 events each); 2-3 sentence overallAssessment. Per-event structure bounds length implicitly. But the timeline input has no explicit truncation — a 6-transcript, 50-email deal at 3K chars per transcript + 1K per email = 68K input chars; plus the 250-line system prompt = context blow-out risk (04-PROMPTS #15 known issue "silent truncation").
+
+**Output Schema Quality**
+
+Five top-level structured fields: `events[]` (uniform shape), `commitmentTracking[]`, `languageProgression.{perCallOwnership, trend, overallOwnershipPercent}`, `buyingCommitteeExpansion.{contacts, expansionPattern, multithreadingScore}`, `responseTimePattern.{averageByWeek, trend, insight}`, `overallAssessment` (string).
+
+Schema matches consumer needs heavily — `events` → 25 `deal_fitness_events` rows, narrative jsonb columns written to `deal_fitness_scores.{stakeholderEngagement, buyerMomentum, conversationSignals}`. But:
+- **Narrative field drift.** The prompt's output has `buyingCommitteeExpansion` + `responseTimePattern`; the database writes `stakeholderEngagement` + `buyerMomentum`. Names differ; code maps them. Confusion hazard when reading either side.
+- **Hardcoded fallbacks poison good output.** Per 04-PROMPTS #15 known issue #4: code fills in `week: 0`, `benchmark.wonDealAvg: 60` defaults when Claude provided richer data. The output schema trusted the model; code overrode it.
+- **25-event count enforced by fallback.** Model instructed to "Return ALL 25 events." If it omits some, code inserts canonical `not_yet` defaults. Silent: the model's "I couldn't determine" becomes indistinguishable from "this event has no evidence."
+- **The unreachable example (`buyer_assigns_day_to_day_owner`) can be emitted.** Delete-then-insert writes arbitrary event_key values; downstream UI renders whatever key comes in.
+- `languageProgression.perCallOwnership[].weOurPct + yourProductPct` should sum to 100 but isn't enforced. Model sometimes violates.
+
+Under v2 tool-use per 2.13: typed sub-tools per section. `events` schema validates the event_key against the canonical 25-key enum, rejecting `buyer_assigns_day_to_day_owner` at parse time. Percentage sums enforced via constrained parameters.
+
+**Known Failure Modes**
+
+- **Silent input truncation under long histories.** Per 04-PROMPTS #15: no explicit cap on `timelineText`. Long-history deals silently hit model context limits; output `stop_reason` becomes `max_tokens` and the final 25-event JSON is truncated mid-stream. The 3-strategy JSON extraction (direct parse → fence extraction → first-brace-to-last-brace) is the most robust in the registry but cannot recover from mid-JSON truncation.
+- **Unreachable example emitted.** Known issue #3 above.
+- **Omitted events become silent "not_yet" defaults.** Known issue #2 above.
+- **Hardcoded narrative fallbacks override good output.** Known issue #4 above.
+- **Full-re-analysis drift on each pipeline run.** Per 07A §15: delete-then-insert means every run re-derives everything. Evidence snippets from prior runs are lost; score drift between runs is invisible to the user. `existingKeysText` lists keys but not evidence, so Claude re-reads the whole timeline and may judge previous strong detections as weaker.
+- **Context gaps per 07A §15:** no MEDDPICC, no deal stage history, no prior fitness scores' narrative jsonb, no observations, no agent memory, no coordinator patterns. Adjacent data that would sharpen detection is absent.
+- **Language-progression percentage arithmetic.** Model sometimes emits `weOurPct + yourProductPct != 100`. Percentages become decorative, not calculable.
+- **Seller/buyer attribution errors.** The prompt acknowledges this is "the single hardest-to-hold distinction" but the context-side fix (pass seller names explicitly per 07A §15) is not implemented.
+- **`negative` status defined but rarely emitted.** Schema supports `detected | not_yet | negative` but the prompt's 25-event definitions emphasize detect vs. not-detect; the contradictory-evidence case is underspecified.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** This is the best-crafted prompt in the registry text-wise — strong role framing, strong task specificity, strong few-shot examples, strong anti-hallucination. But specific issues are worth addressing: the unreachable example, the hardcoded fallbacks in downstream code, the full-re-analysis pattern that loses evidence continuity, the input truncation risk under long histories, the context gaps. A targeted rewrite (fix the known defects, tighten context, move to tool-use) beats a full rebuild. Not MUST REWRITE because the core prompt design is sound — no structural re-scoping is needed, unlike #14.
+
+**Specific Improvement Suggestions**
+
+1. **Fix the unreachable example.** Replace `buyer_assigns_day_to_day_owner` with a real canonical event key (e.g., `buyer_identifies_sponsor`). Trivial text change; prevents downstream garbage-key writes.
+2. **Add explicit input budget and truncation policy.** "The timeline below may contain up to N characters. Process chronologically; if the timeline is long, prioritize the most recent entries for events you've not yet detected."
+3. **Pass prior evidence snippets, not just keys** per 07A §15. Lets Claude incrementally strengthen detections rather than rediscover them.
+4. **Pass the canonical seller names** (rep + SA + BDR) per 07A §15. Resolves the hardest-to-hold buyer/seller distinction at context level rather than relying solely on prompt discipline.
+5. **Add a multi-pass reasoning scaffold.** "Before emitting JSON, work through four passes: (1) identify every participant in every call and mark each as buyer or seller; (2) for each of the 25 events, scan the timeline for evidence; (3) pair buyer commitments with later follow-through events; (4) compute ownership-language percentages per call."
+6. **Upgrade to typed tool-use.** `events[].event_key` validated against the canonical 25-key enum. Percentage sums constrained. `status` as enum including explicit `negative` handling guidance.
+7. **Rename output fields to match database columns** (stakeholderEngagement, buyerMomentum, conversationSignals) OR update database column names to match output. The inconsistency is unnecessary and confusing.
+8. **Pass MEDDPICC + observations + agent memory** per 07A §15. Adjacent context raises detection quality on events like `buyer_introduces_economic_buyer` (MEDDPICC has this) and signal-bearing observations (e.g., "CFO pulled out of the deal" directly disqualifies some events).
+
+**Blast Radius Recap**
+
+Writes `deal_fitness_events` (delete-then-insert 25 rows per run) + `deal_fitness_scores` (upsert). Feeds `/deal-fitness` page, feeds prompt #11's fitness-context section, should feed DECISIONS.md 2.16 event stream. Per 07A §15 HIGH: the best input-data quality of any pipeline prompt (full transcripts passed) but the full-re-analysis pattern means improvements compound slowly across runs. Moving to incremental updates (strengthen evidence rather than rediscover) would dramatically amplify the return on every pipeline run.
+
+---
+
+## 16. Customer Response Kit
+
+**Task Summary**
+
+Given an inbound customer message (email/support ticket/Slack/meeting note), generate a comprehensive "response kit" arming the AE to respond in under 60 seconds: message analysis, similar resolutions from other accounts, recommended knowledge-base articles, draft reply, and internal notes (risk assessment, follow-up recommendation, escalation flag). Runs in `POST /api/customer/response-kit` once per inbound message. Writes to `customer_messages.response_kit` jsonb + flips status to `kit_ready`. Core surface of the My Book feature. Rated HIGH in 07A §16.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** STRONG. "You are an AI assistant for an enterprise Account Executive who manages 100+ accounts with no Customer Success team. Your job is to analyze an inbound customer message and generate a comprehensive Response Kit that arms the AE with everything they need to respond effectively in under 60 seconds." Anchors the time constraint, the role constraint (no CSM backstop), the output purpose. Strong.
+- **Task specificity.** STRONG. Five numbered data sources listed ("customer's message and full account context," "internal knowledge base," "data from other accounts in the same vertical," "system intelligence"). "Actionable, specific, and reference concrete data. Never be generic. Always reference the customer's specific situation, their usage data, their stakeholders, and lessons from other accounts." Crisp.
+- **Reasoning structure.** ABSENT. Five-section output requested directly without intermediate scaffolding.
+- **Output structure.** STRONG. Nested JSON with 5 sections: `message_analysis` (category + urgency + sentiment + key_issues + underlying_concern), `similar_resolutions[]`, `recommended_resources[]`, `draft_reply` (subject + body + tone_notes), `internal_notes` (risk + follow_up + escalation). Aligned with My Book UI. Typed enums for category/urgency/sentiment/escalation_needed.
+- **Examples / few-shot.** ABSENT. For a kit that cross-references other accounts and KB articles, an example showing how "similar_resolutions" should cite a specific resolution would tighten the output.
+- **Edge-case coverage.** WEAK. What if no similar resolutions exist? Schema admits empty array but prompt doesn't say "return empty array rather than invent an account." What if no KB articles match? What if the message is auto-generated noise (a bounce notification)?
+- **Anti-hallucination.** WEAK. "Never be generic" is the primary rail. But per 04-PROMPTS #16 known issue #3: `similar_resolutions[].account_name` is free-form — model invents account names. The prompt doesn't constrain the model to choose from the `otherAccounts` list supplied in context. Also no rail against inventing KB article titles.
+- **Tone / voice control.** ADEQUATE. `draft_reply.tone_notes` is a meta-field explaining the tone chosen. Implicit that the reply itself matches the tone described. No explicit "match Sarah Chen's voice" (contrast with prompts #11 and #12).
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 2048`. No per-section word caps. `key_issues[]` and `similar_resolutions[]` have no item count.
+
+**Output Schema Quality**
+
+Five top-level sections, typed enums for category / urgency / sentiment / escalation_needed. Matches consumer closely: kit jsonb written verbatim to `customer_messages.response_kit`; rendered in the Response Kit modal.
+
+Schema issues:
+- `similar_resolutions[].account_name` is free-form (hallucination risk). Should be `account_id` or a constrained selector.
+- `recommended_resources[].title` is also free-form — model can invent KB article titles. Should be `article_id` or a constrained selector.
+- `message_analysis.underlying_concern` is one of the most valuable fields (what the customer is really worried about beyond the surface question) but is prose only, not linked to any structured classification.
+- `internal_notes.escalation_reason` only populated when `escalation_needed: true` — conditional field; straightforward.
+
+Under v2 tool-use per 2.13: sub-tool calls for similar-resolutions-lookup + resource-recommendation could ground those fields against the actual database. Schema becomes typed IDs + lookups.
+
+**Known Failure Modes**
+
+- **Hallucinated account names.** Per 04-PROMPTS #16 known issue #3. Documented failure.
+- **Role hardcoded.** Per 04-PROMPTS #16 known issue #1: "100+ accounts with no Customer Success team" + hardcoded sign-off are Sarah Chen-specific. Reuse blocker.
+- **KB article filtering happens in code before prompt.** Per 04-PROMPTS #16 known issue #2: route fetches all articles, filters by vertical/tags/type, passes pre-filtered list. Means prompt can't surface a relevant article outside the filter. If the filter is miscalibrated, relevance suffers silently.
+- **Cross-book context gaps per 07A §16:** no prior customer messages for this account, no prior response kits, no contracted_use_cases, no expansion_map, no proactive_signals, no linked observations, no similar_situations jsonb. The adjacent data already on `account_health` is mostly unconsumed.
+- **Full KB article text unverified.** 07A §16 notes worth verifying whether `content` or just `summary` is in `articlesStr` — low confidence check. A summary-only pass could produce recommendations that don't address the issue.
+- **Draft reply voice drift.** No per-rep agent config consulted (vs. prompt #12 which does). "Sign off as Sarah" is hardcoded but style beyond that is model default.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Structurally solid but specific problems: hallucinated account names in similar_resolutions, hardcoded role, missing prior-conversation history, missing adjacent account_health jsonb, no agent voice. Rewrite consolidates anti-hallucination (constrain account/article selection to provided lists) + context expansion + voice parameterization. Not MUST REWRITE because the core output shape works and the hero surface renders useful kits today; the upgrades compound rather than re-scope.
+
+**Specific Improvement Suggestions**
+
+1. **Constrain similar_resolutions and recommended_resources to provided lists.** "`similar_resolutions[].account_name` must exactly match one of the accounts listed under SIMILAR ACCOUNTS. If no account has a clearly similar situation, return an empty array. Do not invent account names." Same for article titles.
+2. **Pass prior customer messages + prior response kits** per 07A §16. Conversation continuity is the single biggest quality gap.
+3. **Pass the adjacent account_health jsonb** (contracted_use_cases, expansion_map, proactive_signals, similar_situations, recommended_resources) per 07A §16. Already computed, already stored, not consumed.
+4. **Parameterize role framing.** "You are an AI assistant for {rep.name}, an Account Executive managing {bookSize} accounts..." instead of Sarah-hardcoded.
+5. **Consult the rep's agent config for voice.** Parallel to prompt #12's approach.
+6. **Add worked example** of a good similar_resolution citation (account-specific, with concrete outcome) vs. a bad one (generic "another healthcare account resolved this").
+7. **Upgrade to tool-use per 2.13** with typed account_id / article_id references — eliminates hallucination at schema level.
+
+**Blast Radius Recap**
+
+Kit saved to `customer_messages.response_kit` jsonb; cached on repeat opens. Rendered in Response Kit modal; feeds My Book priority scoring indirectly. Kit quality across accounts seeds "similar_resolutions" pattern-matching for future kits — one round of low-quality kits pollutes the pattern library.
+
+---
+
+## 17. QBR Agenda Generator
+
+**Task Summary**
+
+Given a QBR type (Renewal Defense | Expansion Pitch | Usage Review | Executive Re-engagement), a company name, and a client-supplied accountContext blob, generate a structured QBR brief: executive summary, agenda items with durations and talking points, stakeholder strategy, risk to address, success metric. Runs in `POST /api/customer/qbr-prep`. Not persisted — rendered inline in the My Book drawer. Rated MEDIUM in 07A §17.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** ADEQUATE. "You are an AI assistant preparing a QBR (Quarterly Business Review) agenda for an Account Executive who manages 100+ enterprise AI accounts with no Customer Success team." Same hardcoded role as #16. Anchors the task but not the strategic framing ("prepping a QBR is about shifting the relationship, not running through slides").
+- **Task specificity.** ADEQUATE. "Use the account data to make every talking point specific — reference actual stakeholder names, actual usage metrics, actual use case adoption status, and actual expansion opportunities. Never be generic." Direct. Four QBR types implicitly require different structures, but prompt doesn't enumerate how they differ.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ qbr_type, title, executive_summary, agenda_items[] (topic + duration_minutes + talking_points[] + data_to_prepare + desired_outcome), stakeholder_strategy, risk_to_address, success_metric }`. Reasonable shape.
+- **Examples / few-shot.** ABSENT. Four QBR types with four distinct structural emphases would each benefit from an example.
+- **Edge-case coverage.** WEAK. What if the account has no usage metrics? No stakeholders listed? Prompt assumes the accountContext blob is rich.
+- **Anti-hallucination.** PARTIAL. "Never be generic" + "reference actual stakeholder names, actual usage metrics" implies grounding but doesn't constrain inputs. If accountContext is thin, model invents numbers.
+- **Tone / voice control.** WEAK. No tone guidance. A renewal defense QBR should sound different from an expansion pitch; prompt treats them uniformly.
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 2048`. "2-3 sentences" executive summary. `agenda_items.duration_minutes` as a number implicitly bounds the meeting.
+
+**Output Schema Quality**
+
+Seven top-level fields, one nested array. Matches consumer (rendered inline). `duration_minutes` sum implies a meeting length but isn't constrained. `talking_points` is a string array without structure — no evidence pointers, no owner per point.
+
+Under v2 tool-use: typed, but structurally similar. The QBR-type branching is the main shape opportunity — four sub-tools rather than one prompt with 4-way branching would enforce each QBR type's structural emphasis.
+
+**Known Failure Modes**
+
+- **Client-trusted accountContext.** Per DECISIONS.md 2.11 LOCKED ("No client-controlled flags gate server-side trust decisions") spirit. Route performs no DB reads; server trusts whatever the client sends. A stale UI state poisons the brief. 07A §17 flags this — not strictly a trust-flag violation but close.
+- **Product-hardcoded prompt.** "Claude AI, Claude Code, and Cowork to mid-market companies (500-2500 employees) in regulated industries" is Anthropic-specific. Reuse blocker.
+- **Not persisted.** Prompt regenerates each time rendered; no caching, no continuity across QBRs for the same account.
+- **Context gaps per 07A §17:** no server-side account_health fetch, no customer_messages, no observations, no deal history, no health_factors trajectory, no competitive context.
+- **QBR types under-differentiated.** Same prompt structure for all 4 types; model differentiates based on `qbrType` string alone.
+- **Escalation and risk framing flat.** `risk_to_address` is "the elephant in the room if any — be direct" — good instruction but no example of how to frame directness vs. diplomacy.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Context fix is the biggest lever (server-side authoritative fetch + add adjacent account_health fields + prior QBRs if persisted). QBR-type branching needs structural support (4 sub-prompts OR explicit type-specific emphasis sections). Product hardcoding needs parameterization. Not MUST REWRITE because the shape works; the upgrades are refinements.
+
+**Specific Improvement Suggestions**
+
+1. **Re-fetch accountContext server-side.** Per DECISIONS.md 2.11 spirit — don't trust the client. Load from `account_health` + `companies` + `contacts` + `customer_messages` + `observations`.
+2. **Persist QBR output.** `qbr_briefs` table keyed by `{companyId, qbrType, createdAt}`. Enables continuity ("last QBR's risk was X; has it resolved?").
+3. **Branch the prompt by QBR type.** Four distinct agenda-shape emphases — at minimum pull them into named sections within the system prompt; ideally as sub-tools per 2.13.
+4. **Parameterize products.** "Products sold: {products.join(', ')}" instead of "Claude AI, Claude Code, and Cowork."
+5. **Add context per 07A §17:** health_factors trajectory, similar_situations, proactive_signals, recent customer_messages.
+6. **Add worked examples** for Renewal Defense vs. Expansion Pitch — show the structural + voice differences.
+
+**Blast Radius Recap**
+
+Not persisted; rendered inline; self-contained. No downstream prompts consume. Lowest-blast-radius heavy prompt in the batch. Upgrades here improve UX quality per-session but don't compound across the system.
+
+---
+
+## 18. Customer Outreach Email
+
+**Task Summary**
+
+Given a customer outreach type (`use_case_checkin` or `proactive_signal`), purpose tags (for check-in: `check_in | success_stories | explore_new | health_check`), a recipient, a specific use case OR signal, and accountContext, generate a concise outreach email (3-4 paragraphs max for check-in; 2-3 for signal-driven). Two-branch prompt; same input/output shape; different system prompts per branch. Runs in `POST /api/customer/outreach-email`. Not persisted; rendered inline in My Book drawer. Rated MEDIUM in 07A §18.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** ADEQUATE. Same pattern as #16/#17. "You are an AI assistant drafting a proactive outreach email for an Account Executive who manages 100+ enterprise AI accounts." Functional, Sarah-hardcoded.
+- **Task specificity.** STRONG. Per-branch rules:
+  - check-in: "Be warm, specific, and value-focused — never generic. Reference the team's specific use case and current adoption numbers. Share insights about similar success patterns in the same industry WITHOUT naming other customers."
+  - signal-driven: "Lead with the signal/news as the reason for reaching out — it should feel timely and relevant, not like a sales pitch. Connect it specifically to their business and use cases. Propose one clear next step."
+  - Plus per-purpose guidance lookup table injected into the check-in prompt.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ subject, body, purpose_notes | signal_notes }`. Simple, matches consumer.
+- **Examples / few-shot.** ABSENT.
+- **Edge-case coverage.** WEAK. What if the recipient has never been contacted before? What if the signal is stale? What if multiple purposes conflict (check_in + success_stories)? Prompt says "weave them together naturally" but doesn't show how.
+- **Anti-hallucination.** PARTIAL. "WITHOUT naming other customers" constrains one source of fabrication. "similar organizations in {vertical}" is a permissible anonymization. But no rail against inventing customer wins or specific numbers.
+- **Tone / voice control.** STRONG. "warm, specific, value-focused" + "not like a sales pitch" for signal-driven. Per-branch tone baked in. "Sign off as Sarah" — hardcoded but explicit.
+- **Length / verbosity control.** STRONG. 3-4 paragraphs (check-in) or 2-3 (signal); `max_tokens: 1024`.
+
+**Output Schema Quality**
+
+Three-field object. Branch-dependent third field name (`purpose_notes` vs. `signal_notes`). Technically fine for the renderer; slight schema polymorphism is awkward for typing.
+
+Under v2 tool-use: two typed tools, one per branch. Or unified `notes` field with an additional `notes_type` discriminator.
+
+**Known Failure Modes**
+
+- **Hardcoded "Sign off as Sarah."** Per 04-PROMPTS #18 known issue. Reuse blocker when another AE gets a book.
+- **Product-hardcoded.** Same as #16/#17.
+- **DB-less context.** Everything client-passed. 07A §18 MEDIUM: no recipient engagement history, no prior outreach emails sent to this contact, no prior customer messages from them, no agent config for voice.
+- **Multi-purpose conflict unguided.** "Weave them together naturally" without an example produces a kitchen-sink email that feels like every purpose at once.
+- **Signal-driven path assumes signal is non-stale.** No date check in the prompt; a 60-day-old product release still fires as "timely."
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Same pattern as #16/#17: context expansion + role parameterization + consolidation with other email-drafting paths. Not MUST REWRITE — the output shape is small and the issues are all refinements. Per 07A §18 and per DECISIONS.md 2.13's "one email-drafting service": this prompt, #12, and #24 should eventually consolidate.
+
+**Specific Improvement Suggestions**
+
+1. **Consolidate with #12 and #24 per DECISIONS.md 2.13.** One email-drafting service, three entry points (outbound to open-deal contact via #12; follow-up after transcript via #24; customer outreach via #18). Shared voice calibration, shared guardrails.
+2. **Parameterize the sign-off** — pull from `team_members.name` for the sending AE, not hardcoded Sarah.
+3. **Add recipient context per 07A §18:** engagement history, prior outreach, prior customer messages.
+4. **Add agent config voice consultation.** Each AE's agent_config.instructions applies here too.
+5. **Guard against stale signals.** "If `signal.daysAgo` exceeds 30, reframe the opener away from 'timely' language."
+6. **Add worked example** of a multi-purpose email (e.g., check_in + explore_new) vs. a single-purpose one, demonstrating the "weave" operation.
+
+**Blast Radius Recap**
+
+Not persisted; rendered inline; self-contained. No downstream prompts. Same UX-only blast radius as #17.
+
+---
+
+## 19. Pipeline Step — Extract Actions (Actor)
+
+**Task Summary**
+
+First of three parallel Claude calls in the transcript pipeline's `parallel-analysis` step. Given a transcript (truncated at 15K chars) and a company name, extract all action items, commitments, and key decisions. Output feeds prompt #22 (synthesize learnings), prompt #24 (draft follow-up email), and the `deal-agent-state` `lastInteractionSummary`. Runs in the Rivet actor via `callClaude()` helper (not SDK). Rated MEDIUM in 07A §19 — low cost to fix, moderate impact.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** WEAK. "You are a sales call analyst. Extract all action items, commitments, and key decisions from the transcript. Return valid JSON only — no markdown, no explanation." Single-sentence role; no expertise anchor.
+- **Task specificity.** WEAK. "Extract all action items, commitments, and key decisions" — three categories bundled. Differences between "commitment" and "action item" unspecified; the model treats them interchangeably and emits only `actionItems[]`.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ actionItems: [{ item, owner, deadline }] }`. Simple, matches consumer.
+- **Examples / few-shot.** ABSENT.
+- **Edge-case coverage.** WEAK. What if no action items in the call? Model emits `actionItems: []` (implicit). What if the owner isn't identifiable ("someone will check")? What if a commitment is conditional ("if pricing lands, we'll proceed")? Unspecified.
+- **Anti-hallucination.** ABSENT. No "only extract explicit commitments" rail. Model routinely infers action items from discussion without explicit assignment.
+- **Tone / voice control.** N/A.
+- **Length / verbosity control.** ADEQUATE. Default 4096 max tokens from callClaude helper — ample for the output shape.
+
+**Output Schema Quality**
+
+Two-field nested object. Downstream consumers: #22 gets `JSON.stringify(actions)` for synthesis; #24 gets `JSON.stringify(actions)` for email drafting; `deal-agent-state` records count-only. No consumer reads `owner` or `deadline` structurally — both are passed as stringified blobs into downstream prompts. Means the typed fields exist for model discipline but add no structural value beyond that.
+
+Under v2 tool-use per 2.13: straightforward typed conversion. Could add `commitment_type: "seller" | "buyer" | "mutual"` to align with fitness prompt #15's commitment tracking.
+
+**Known Failure Modes**
+
+- **Buyer/seller attribution conflated.** Unlike prompt #15 which explicitly separates buyer commitments (engagement signal) from seller commitments (expected behavior), this prompt's `actionItems[].owner` is free-text and treated uniformly downstream. Valuable signal lost.
+- **15K-char truncation drops late-transcript content.** Per 07A §19. Action items often appear in the final minutes ("here's what we'll do next...") — truncation risk on long calls.
+- **No prior-action-items context** per 07A §19. Prior action items not-yet-closed are never passed; every call re-extracts from zero. Actions never close.
+- **Context gaps per 07A §19:** no deal stage, no MEDDPICC, no existing contacts structure, no active experiments. All available in `input` (other parallel calls use them) — just not passed to this call.
+- **Thin role framing reduces model discipline.** Paired with absent CoT, output is sometimes over-inclusive (extracts vague statements as action items).
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Small prompt, multiple low-cost wins: role framing upgrade, buyer/seller attribution, prior action items context, anti-hallucination rail. Not MUST REWRITE because the prompt is functional and the transcript-pipeline architecture (per DECISIONS.md 2.13 "One transcript preprocessing pass") will consolidate #19/#20/#21/#22 into a shared preprocessing step anyway.
+
+**Specific Improvement Suggestions**
+
+1. **Strengthen role framing.** "You are an expert deal analyst extracting explicit commitments and action items from a sales call transcript. You distinguish buyer commitments (engagement signals) from seller commitments (professional defaults)."
+2. **Split commitment types.** `actionItems[].type: "action_item" | "buyer_commitment" | "seller_commitment" | "decision"` with definitions.
+3. **Pass deal stage + MEDDPICC + prior-open-actions + contacts** per 07A §19. All free from `input`.
+4. **Add anti-hallucination rail.** "Only extract items with explicit commitments. If an owner is unclear, set `owner: 'unassigned'`. Do not infer action items from discussion."
+5. **Dedup against prior actions.** "If an action item in this call matches a prior-open action, mark `fulfills_prior: <id>` rather than re-extracting."
+6. **Consolidate truncation via DECISIONS.md 2.13 canonical preprocessing.** One transcript-processing pass feeds #19/#20/#21/#22 from shared structured output; eliminates varied truncation.
+
+**Blast Radius Recap**
+
+Output feeds #22 (synthesize learnings), #24 (draft email), deal-agent-state. A missed action item becomes a missed follow-up email item becomes a missed learning becomes a missed call-prep item. Per 07A §19 MEDIUM, low-cost fix compounds downstream.
+
+---
+
+## 20. Pipeline Step — Score MEDDPICC (Actor)
+
+**Task Summary**
+
+Second of three parallel Claude calls in the pipeline's parallel-analysis step. Given current MEDDPICC scores (confidence-only, comma-separated) and a truncated transcript (15K chars), return delta updates per dimension where new evidence exists. Output PATCHed to `/api/deals/[id]/meddpicc-update` which writes `meddpicc_fields` + logs a delta activity. Rated HIGH in 07A §20.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** ADEQUATE. "You are a MEDDPICC scoring expert for enterprise sales." Method-anchored. Reasonable.
+- **Task specificity.** ADEQUATE. "Only update dimensions where the transcript provides NEW evidence" is the critical instruction. Per-dimension output fields listed. "Only include dimensions with new evidence" re-emphasized — the single most important behavioral guardrail in the prompt.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ updates: Record<dimensionName, { score, evidence, delta }> }`. Dimension keys are the 7 MEDDPICC fields. `delta` is "change from current score" — implies signed integer. Downstream code re-validates via `validateMeddpiccScore`.
+- **Examples / few-shot.** ABSENT. For "NEW evidence" the distinction between "fresh information" and "same information restated" is the prompt's hardest call — examples would help.
+- **Edge-case coverage.** WEAK. What if the transcript mentions a dimension but adds nothing new? Prompt implies skip, but without examples the model sometimes re-scores anyway. What if two dimensions are jointly relevant? What if evidence contradicts an existing score (should lower it)?
+- **Anti-hallucination.** WEAK. "Only include dimensions with new evidence" is the rail but the prompt only shows Claude the current confidence numbers, not the existing evidence text (07A §20). So Claude can't reliably judge "new vs. same" — leading to re-scoring of dimensions based on quotes already in the DB.
+- **Tone / voice control.** N/A.
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 4096` default. Per-dimension evidence is "quote or observation from the transcript" — no explicit cap.
+
+**Output Schema Quality**
+
+Record-valued jsonb with dimension-name keys. Matches consumer. `delta` vs. `score` redundancy (delta = score - currentScore) — one derivable from the other; code uses delta to decide whether to upsert.
+
+Under v2 tool-use: typed dimension enum, numeric score bounds 0-100. The Record shape is awkward for tool schemas — convert to `updates: [{ dimension: enum, score, evidence, delta }]` array.
+
+**Known Failure Modes**
+
+- **Re-scoring dimensions based on already-recorded quotes** — the biggest quality issue. Per 07A §20 HIGH: current evidence text not passed; Claude can't judge "new" vs. "same." Every pipeline run may produce duplicate deltas.
+- **Contradictory evidence handling.** If a transcript contradicts a prior score, should delta be negative? Prompt permits it ("positive or negative") but offers no discipline — model routinely emits only positive deltas, creating ratcheting-up bias.
+- **Contact role context missing.** Per 07A §20: a statement from an `economic_buyer` role scores Economic Buyer differently from the same statement by an `end_user`. Context doesn't include contact roles.
+- **15K truncation same as #19.**
+- **No manager-directive awareness.** Per 07A §20: some directives specify minimum thresholds; model doesn't know.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Evidence-aware context fix is load-bearing. Prompt text upgrades (contradiction handling, example of new vs. same) compound. Per 07A §20 HIGH, MEDDPICC is the core qualification object; quality drift here degrades every downstream prompt. Not MUST REWRITE because consolidation via DECISIONS.md 2.13 preprocessing pass will naturally fold this with #19/#21.
+
+**Specific Improvement Suggestions**
+
+1. **Pass existing evidence text per dimension**, not just confidence. Per 07A §20. Single biggest fix.
+2. **Add contradiction handling.** "If new evidence contradicts the existing score (e.g., champion defined → champion disengaged), emit a negative delta with evidence citing both the prior signal and the new contradiction."
+3. **Pass contact roles + deal stage** per 07A §20.
+4. **Add new-vs-same example.** "`currentEvidence: 'CTO Priya stated 2h/physician/day documentation burden'`. If transcript mentions 'physicians spend 2 hours on notes' — NO new evidence (same quote). If transcript mentions 'CFO backed the 2h finding and added $400/hr opportunity cost' — NEW evidence (economic framing)."
+5. **Consolidate via canonical preprocessing per 2.13.** Shared transcript analysis emits structured extracts per dimension; this prompt scores against the extract + existing evidence.
+6. **Switch Record to array shape** for typed tool-use.
+
+**Blast Radius Recap**
+
+Writes `meddpicc_fields` (upsert) + `activities` (delta). Read by prompts #8, #11, #14, MCP tools, `/intelligence`, UI. Per 07A §20 HIGH, every downstream prompt that relies on MEDDPICC confidence reads the output of this prompt. Quality drift here propagates silently across the system.
+
+---
+
+## 21. Pipeline Step — Detect Signals (Actor)
+
+**Task Summary**
+
+Third of three parallel Claude calls in the pipeline's parallel-analysis step. Given a transcript (15K truncated), deal vertical, deal name, and known contacts, classify every meaningful signal into 7 types (competitive_intel, process_friction, deal_blocker, content_gap, win_pattern, field_intelligence, process_innovation) and extract per-stakeholder sentiment/engagement/priorities. Output feeds observation creation (one observation per signal via `/api/observations` with `preClassified: true`) and is forwarded to the intelligence coordinator actor for cross-deal pattern detection. Rated HIGH in 07A §21.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** STRONG. "You are analyzing a sales call transcript for a deal in the ${input.vertical} vertical. Extract every meaningful signal from this conversation." Vertical-binding is strong. Task specificity framing via the 7-type enumeration is detailed.
+- **Task specificity.** STRONG. 7 signal types each with a crisp definition ("competitive_intel: Any mention of competitors, competitive positioning, pricing comparisons, feature comparisons"). Second output (stakeholder sentiment) also well-specified (sentiment/engagement/keyPriorities/concerns/notableQuotes).
+- **Reasoning structure.** ABSENT.
+- **Output structure.** STRONG. Two top-level arrays, each with uniform per-item shape. Typed enums for type/urgency/sentiment/engagement.
+- **Examples / few-shot.** ABSENT. Per-type definitions are specific but no worked example showing the JSON shape populated.
+- **Edge-case coverage.** WEAK. What if the transcript has no signals? Empty arrays (implicit OK). What if the signal fits two types? Prompt says "exactly one" — model picks one but without guidance on tiebreaks. What if a stakeholder sentiment is mixed within the call? Unspecified.
+- **Anti-hallucination.** ADEQUATE. "Only include signals where there is clear evidence in the transcript. Do not invent or infer signals that aren't supported by what was said." Strong rail. But per 07A §21 notes: without MEDDPICC context, a signal like "pricing pushback" can be mis-categorized in a Discovery vs. Negotiation deal.
+- **Tone / voice control.** N/A for machine-consumed output. Stakeholder insights' `keyPriorities[]` feel mechanical when surfaced in UI.
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 2048` (explicitly set higher than the parallel-analysis default). `quote` field capped at "under 30 words."
+
+**Output Schema Quality**
+
+Two arrays:
+- `signals[].{type (enum of 7), content, context, urgency, source_speaker, quote}`
+- `stakeholderInsights[].{name, title, sentiment, engagement, keyPriorities[], concerns[], notableQuotes[]}`
+
+Both well-formed. Downstream code writes one observation per signal via `POST /api/observations` with `preClassified: true` (bypassing prompt #1's classifier). Stakeholder insights recorded via `dealAgent.recordInteraction` per matched stakeholder. No consumer reads `context` field structurally — passes through as observation metadata.
+
+Under v2 tool-use: typed. Signal-type enum should source from a single shared enum (per DECISIONS.md 2.13).
+
+**Known Failure Modes**
+
+- **7-vs-9 signal-type drift with prompt #1.** Flagged multiple times (07-DATA-FLOWS Flow 1 issue #3; 04-PROMPTS #21 known issue #1). Pipeline observations can NEVER have signal type `agent_tuning` or `cross_agent` — so the agent-config auto-mutation path (#4) never fires from pipeline-detected signals. Lost functionality by enum drift.
+- **Signal misattribution when speaker isn't in known contacts.** `source_speaker: "Name of person who said it"` — but `validateSignal()` (in `lib/validation.ts`) maps this against known contacts; unknown speakers are dropped or genericized. Per CLAUDE.md S13 note on field mapping.
+- **Same 15K truncation.**
+- **Context gaps per 07A §21:** no MEDDPICC, no deal stage, no active experiments, no existing open signals, no coordinator patterns. Signal classification is context-poor.
+- **Over-enumeration on high-density calls.** Prompt says "every meaningful signal" — a dense transcript produces 15+ signals, each written as an observation. Intelligence dashboard flooded.
+- **Stakeholder insights duplicate across pipeline runs.** Each transcript for the same deal re-derives sentiment for the same stakeholders; no incremental update.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Two specific drivers: (a) close the 7-vs-9 enum drift with prompt #1 per DECISIONS.md 2.13 — single source of truth enum; (b) add MEDDPICC + stage + coordinator context per 07A §21 — sharpens classification. Not MUST REWRITE because the prompt text itself is one of the stronger actor prompts. Upgrades are surgical.
+
+**Specific Improvement Suggestions**
+
+1. **Source signal-type enum from single location per 2.13.** Include all 9 types + align with `/api/observations` classifier.
+2. **Add MEDDPICC + stage + active experiments + open signals** per 07A §21.
+3. **Add a per-signal confidence field** to enable downstream severity filtering.
+4. **Add coordinator pattern awareness.** "If this signal matches an existing active coordinator pattern for this vertical, set `matches_pattern: <pattern_id>`." Lets downstream routing skip or batch.
+5. **Add worked example** of a signal that tightroeps between two types (e.g., competitive_intel vs. deal_blocker for "CFO said Microsoft is cheaper and we need to revisit") with the tiebreak rationale.
+6. **Bound signal count by severity** — "Return up to 10 signals ranked by urgency. Lower-urgency signals beyond 10 can be omitted."
+7. **Incremental stakeholder sentiment** — pass prior-transcript stakeholder sentiment as baseline; model emits only changes.
+
+**Blast Radius Recap**
+
+Per signal: one `observations` row → one `observation_routing` row → possibly one `observation_clusters` match/creation → possibly one `coordinator_patterns` signal → possibly surfaced in every future call prep in the vertical. Per 07A §21 HIGH: "Highest blast radius per-output-item of any pipeline step."
+
+---
+
+## 22. Pipeline Step — Synthesize Learnings (Actor)
+
+**Task Summary**
+
+After the parallel-analysis step completes (#19/#20/#21 outputs available), this prompt synthesizes strategic learnings from the parsed outputs + a shorter transcript excerpt (8K chars). Specifies that each learning must combine specific evidence (name/number/quote) + broader context (why it matters + how to act). Output feeds `deal_agent_states.learnings` jsonb — the agent's long-term memory. Rated HIGH in 07A §22.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** WEAK. "You are a deal strategist. Synthesize the transcript analysis into key learnings. Return valid JSON only." Two-sentence system prompt; "deal strategist" anchors the task but not the target quality bar.
+- **Task specificity.** STRONG. User-prompt specifies the compound requirement: "Each learning MUST combine: (1) Specific evidence from the transcript (a person's name, a number, a stated preference, a direct quote); (2) Broader context explaining WHY this matters and HOW to act on it." Good example + two anti-examples demonstrate the distinction. Plus focus areas ("stakeholder preferences, decision criteria, competitive positioning, relationship dynamics, process obstacles"), output count (3-7), length (1-2 sentences each).
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ learnings: string[] }`. Simple. Per-learning shape enforced by the "must combine" instruction + examples.
+- **Examples / few-shot.** STRONG. Good example ("GDPR compliance is a hard gate — Henrik stated it is non-negotiable, and the team chose Anthropic over OpenAI specifically because of data privacy controls. Lead with compliance positioning in all stakeholder conversations.") + two bad examples ("The customer cares about compliance" / "Henrik said GDPR is important"). Strong pattern of show-the-shape discipline.
+- **Edge-case coverage.** WEAK. What if upstream parsed outputs are empty (no actions, no meddpicc, no signals)? What if they contradict each other? Prompt assumes synthesis succeeds.
+- **Anti-hallucination.** ADEQUATE. Evidence-citation requirement + 8K truncated transcript + upstream structured outputs. But without access to existing learnings, model can re-emit the same learning paraphrased differently — duplicates accumulate.
+- **Tone / voice control.** WEAK. Learnings are the deal agent's memory surfaced in call prep. No voice specified — output reads as analytical rather than strategic.
+- **Length / verbosity control.** STRONG. 3-7 learnings, 1-2 sentences each. Tight.
+
+**Output Schema Quality**
+
+Single-field object with string array. Matches consumer — `deal_agent_states.learnings` stored as jsonb string array. Per-learning structure (evidence + context + action) is enforced by prompt discipline, not schema. Under v2 tool-use: `learnings[].{evidence: string, context: string, action: string, scope: enum}` — structured per-element schema would enforce the compound requirement.
+
+**Known Failure Modes**
+
+- **8K truncation is smaller than the 15K upstream steps.** Per 04-PROMPTS #22 known issue + 07A §22: synthesis sees LESS context than the step it synthesizes from. Absurd. A learning about late-transcript content is lost.
+- **Prior learnings not passed.** Per 07A §22. Duplicates accumulate; merge happens via string equality — paraphrased duplicates bypass dedup.
+- **Upstream outputs JSON-stringified.** Per 07A §22: wall of JSON text; model re-parses and re-prioritizes instead of consuming structured input. Better as named sections.
+- **parseJSON fallback to `{ learnings: [] }` on failure.** 04-PROMPTS Gaps section: silent failure indistinguishable from "no learnings."
+- **Context gaps per 07A §22:** no prior risk signals, no existing MEDDPICC evidence text, no observation cluster memberships for the deal, no stage history.
+- **Thin role framing + absent CoT** means learning quality depends on the upstream parsed outputs being rich — when they're sparse, learnings are generic.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Strong existing examples + evidence-citation discipline mean the prompt text is reasonable; the fixes are: truncation consistency (match upstream 15K), prior-learnings dedup, upstream outputs as structured sections not JSON blobs, context expansion. Not MUST REWRITE — the prompt is one of the better-specified actor prompts; upgrades compound rather than re-scope.
+
+**Specific Improvement Suggestions**
+
+1. **Match upstream truncation (15K or canonical preprocessing per 2.13).** Synthesis should see at least as much context as detection did.
+2. **Pass existing `deal_agent_states.learnings`** per 07A §22. "Do not re-emit learnings already in the existing set. Only add net-new strategic insights."
+3. **Pass existing risk_signals + MEDDPICC evidence text** per 07A §22.
+4. **Render upstream outputs as structured sections**, not JSON.stringify blobs. Named headers per category.
+5. **Upgrade role framing.** "You are a strategic deal analyst translating call evidence into durable deal intelligence. Each learning you emit becomes part of the agent's long-term memory used in every future call prep."
+6. **Structured per-learning schema** — `{ evidence, context, action, scope }` — enforces the compound requirement at parse time.
+7. **Distinguish failure from no-learnings.** Return `{ learnings: [], reason: "no new insights" }` vs. `{ learnings: [], reason: "parse error" }`.
+
+**Blast Radius Recap**
+
+Writes `deal_agent_states.learnings`; directly consumed by prompt #11 (call prep) via `formatMemoryForPrompt`. Persistent across sessions. Per 07A §22 HIGH: low-quality learnings degrade every future call prep for this deal. Duplicate-accumulation problem is especially insidious — memory grows even when quality plateaus.
+
+---
+
+## 23. Pipeline Step — Experiment Attribution (Actor, Conditional)
+
+**Task Summary**
+
+Conditional pipeline step. When the AE is in the test_group of one or more active (`status='testing'`) experiments, this prompt analyzes the transcript (12K truncated) for evidence that the rep used the experiment's tactics. For each active experiment, returns whether evidence was found, the tactic used, customer response, and sentiment. Output PATCHes `/api/playbook/ideas/[experimentId]` with appended `experiment_evidence[]`. Evidence accumulation drives graduation decisions (DECISIONS.md 1.3-1.6 experiment lifecycle). Rated MEDIUM in 07A §23 (becomes HIGH in v2 context with applicability gating).
+
+**Engineering Quality Assessment**
+
+- **Role framing.** WEAK. "You are checking whether a sales call transcript contains evidence relevant to active A/B experiments." Task-first, no persona.
+- **Task specificity.** ADEQUATE. Three numbered sub-questions: "Did the rep use any of the tactics? What specific evidence supports or contradicts? What was the customer's response?" Experiments enumerated with `id`, `title`, `hypothesis`, `category`.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** ADEQUATE. `{ attributions: [{ experimentId, evidenceFound, tacticUsed, evidence, customerResponse, sentiment }] }`. Clean shape.
+- **Examples / few-shot.** ABSENT. Applying an experiment hypothesis to a transcript is judgment-heavy work; an example showing a match vs. a near-miss would sharpen attribution.
+- **Edge-case coverage.** WEAK. What if the experiment's hypothesis is vague ("close more aggressively")? What if the rep used a related-but-different tactic? What if evidence partially supports it? The prompt offers no guidance.
+- **Anti-hallucination.** ADEQUATE. "Only include experiments where you found clear evidence. Do not guess." Clear rail. Holds reasonably well in practice.
+- **Tone / voice control.** N/A (machine-consumed).
+- **Length / verbosity control.** ADEQUATE. Default 4096 max_tokens; per-experiment evidence is a description, no explicit cap.
+
+**Output Schema Quality**
+
+Per-attribution fields cover the "did the tactic appear, and what happened" question. No confidence field — "evidenceFound: true" is binary. No `applicability` check — the prompt runs against all active experiments for the AE regardless of deal stage or vertical fit.
+
+Under v2 tool-use with DECISIONS.md 2.21 applicability gating: this prompt shouldn't even see experiments whose `applicability.stage` doesn't include the current deal's stage. Context-side fix more than prompt-side.
+
+**Known Failure Modes**
+
+- **No applicability gate per DECISIONS.md 2.21 LOCKED.** All active experiments the AE is in test_group for are checked, regardless of deal stage, vertical, or precondition fit. Attribution is polluted with experiments that can't apply.
+- **12K truncation middle-ground.** Smaller than signal detection (15K), larger than learnings (8K). Consistency debt.
+- **Experiment format bare.** `- "${title}" (ID: ${id}): ${hypothesis} (Category: ${category})` — no success_thresholds, no current_metrics, no per-experiment test instructions. Model infers from hypothesis alone.
+- **Context gaps per 07A §23:** no prior experiment evidence for dedup, no deal contact roles (attribution sometimes depends on who's in the meeting), no AE's prior attributions across other deals.
+- **Conditional presence creates UX inconsistency.** Pipeline UI shows different step counts when experiments are present vs. absent.
+- **Non-deterministic graduation decision.** Prompt outputs evidence; graduation is manual (manager clicks Graduate). No automatic threshold evaluation.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Core issue is applicability gating (context fix per DECISIONS.md 2.21) + prior-evidence dedup. Prompt text upgrades are secondary. Not MUST REWRITE — the prompt's task is well-scoped; the v2 architectural shift (2.21 + 2.16) does the heavy lifting.
+
+**Specific Improvement Suggestions**
+
+1. **Apply 2.21 applicability gating upstream.** Only experiments whose `applicability.{stage, vertical, precondition}` matches the current deal's state reach this prompt. Eliminates polluted attributions.
+2. **Pass existing experiment_evidence** per 07A §23. "If similar evidence already exists for an experiment, only emit if this call provides materially new information."
+3. **Add success_thresholds + current_metrics** to per-experiment context. Lets the attribution note calibrate ("this gets us closer to the 20% velocity threshold").
+4. **Add per-experiment worked example** — one evidenceFound=true case and one evidenceFound=false-because-near-miss case.
+5. **Confidence field per attribution** — enables downstream filtering of weak attributions from graduation calculations.
+6. **Pass contact roles.** Some experiments depend on stakeholder presence ("build prototype during Discovery with Technical Evaluator").
+
+**Blast Radius Recap**
+
+Writes `playbook_ideas.experiment_evidence` jsonb. Evidence aggregation drives graduation decisions → graduated experiments inject into prompt #11's proven-plays section → shape every future call prep. Per 07A §23: MEDIUM today (relatively low frequency), HIGH in v2 context once applicability gating makes attribution trustworthy.
+
+---
+
+## 24. Pipeline Step — Draft Follow-Up Email (Actor)
+
+**Task Summary**
+
+Last content-generation step in the pipeline. Given action items (from #19), stakeholder insights (from #21), and the rep's agent config instructions, draft a professional follow-up email. Output stored on `loopCtx.state.followUpEmail`; rendered in workflow tracker; NOT persisted unless the rep saves. **Schema-conflicts with prompt #12** (on-demand email drafting) — per DECISIONS.md 2.13 LOCKED: "One email-drafting service." Wrapped in try/catch so pipeline continues on failure. Rated HIGH in 07A §24.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** WEAK. "You are a sales email writer. Draft a professional follow-up email incorporating key action items from the call. Return valid JSON only." Generic. No rep-voice binding (contrast with prompt #12's strong "Write in the rep's voice, following their communication style exactly").
+- **Task specificity.** WEAK. "Keep it professional, concise, and reference specific commitments from the call." One sentence of direction. No length target, no CTA requirement, no opener guidance.
+- **Reasoning structure.** ABSENT.
+- **Output structure.** WEAK. `{ subject, body }`. Two fields. Compare to prompt #12's `{ subject, body, to, notes_for_rep }` — missing `to` (recipient) and `notes_for_rep` (advisory meta-field). Downstream consumer stores subject + body only; the advisory value of `notes_for_rep` is lost.
+- **Examples / few-shot.** ABSENT.
+- **Edge-case coverage.** WEAK. What if no action items? What if stakeholder insights is empty? Prompt doesn't handle.
+- **Anti-hallucination.** WEAK. No grounding rails. Model can invent content not in the passed actions/stakeholders.
+- **Tone / voice control.** PARTIAL. `input.agentConfigInstructions` passed conditionally with "Rep's communication style preferences:" prefix — better than nothing. But "follow this rep's voice" isn't emphasized as in #12.
+- **Length / verbosity control.** WEAK. Default 4096 max_tokens. No sentence/paragraph target. Output can run long.
+
+**Output Schema Quality**
+
+Two fields. Matches consumer (subject + body written to activity metadata). Schema inconsistency with #12 violates DECISIONS.md 2.13 LOCKED. Fallback on parse failure returns `{ subject: "Follow-up: ${dealName} Discussion", body: "Thank you for taking the time to meet today." }` — generic placeholder that masks Claude outages.
+
+Under v2 consolidation with #12 + #18 per 2.13: one shared email-drafting service, three invocation contexts. Shared schema, shared voice calibration, shared guardrails.
+
+**Known Failure Modes**
+
+- **Duplication with prompt #12.** Per 04-PROMPTS #24 known issue. Same conceptual task, different system prompts, different output shapes. DECISIONS.md 2.13 explicit violation.
+- **Stakeholders reduced to names only.** Per 07A §24: `signals.stakeholderInsights.map(s => s.name)` — titles/roles/priorities dropped. Email can't target specific stakeholders meaningfully.
+- **Action items passed as JSON.stringify blob.** Per 07A §24. Structured owner → commitment → deadline would read more clearly.
+- **No recipient context** per 07A §24: no existing contacts, no prior email thread, no engagement history, no MEDDPICC, no agent memory, no manager directives, no relevant resources.
+- **Generic fallback masks outages.** Reps see "Thank you for taking the time to meet today." as a valid draft when the API actually failed.
+- **No guardrail check.** Prompt #12 has guardrails from agent config; this prompt doesn't consult them.
+
+**Rewrite Priority**
+
+**SHOULD REWRITE.** Consolidation with prompt #12 (and #18) per DECISIONS.md 2.13 LOCKED is the load-bearing change. Once consolidated, this becomes "pipeline-invocation context of the shared email service" rather than a standalone prompt. Not MUST REWRITE in isolation — the consolidation IS the rewrite.
+
+**Specific Improvement Suggestions**
+
+1. **Consolidate with prompts #12 and #18 per DECISIONS.md 2.13.** Shared email-drafting service; pipeline invokes it with pipeline-specific pre-assembled context.
+2. **Align output schema with #12.** `{ subject, body, to, notes_for_rep }` — already a proven schema.
+3. **Pass rich stakeholder data** (titles/roles/concerns) not just names.
+4. **Pass recipient context** per 07A §24: existing contacts (with engagement), prior email thread, MEDDPICC, agent memory, manager directives, relevant resources.
+5. **Parameterize length + tone** via agent config.
+6. **Remove generic fallback; surface error.** Let the workflow tracker show "email draft unavailable" when it actually failed, rather than a misleading placeholder.
+
+**Blast Radius Recap**
+
+Rendered in workflow tracker; not persisted unless rep saves. Self-contained surface today. Post-consolidation per 2.13, this path folds into the shared email service — quality compounds with #12 and #18.
+
+---
+
+## 25. Coordinator Pattern Synthesis (Actor)
+
+**Task Summary**
+
+When the intelligence coordinator actor detects 2+ signals of the same type (+ same competitor for competitive_intel) across different deals in the same vertical, this prompt synthesizes the pattern: a 2-3 sentence summary of what's happening across these deals, 2-3 specific actionable recommendations, and an estimated ARR impact multiplier. Output persists to `coordinator_patterns` table AND is pushed to affected deal agents via `addCoordinatedIntel()` (broken no-op per 07-DATA-FLOWS Flow 6). Surfaces on Intelligence dashboard "Agent-Detected Patterns" section. **THIS IS THE LARGEST `system: ""` ANOMALY in the registry** — flagged in DECISIONS.md 2.14 OPEN. The coordinator is Act 2 of the demo narrative; this prompt's quality determines whether cross-deal intelligence reads as meaningful or noise. Rated HIGH in 07A §25.
+
+**Engineering Quality Assessment**
+
+- **Role framing.** ABSENT at the system level (`system: ""`). The role declaration is in the user message: "You are an AI sales intelligence analyst." One-sentence role, placed AFTER the vertical/signal-type framing of the request — structurally the model reads "the task is this, oh and by the way you're an analyst" rather than "you are an analyst doing this task." Weakest role framing in the entire registry, not by omission but by placement.
+- **Task specificity.** ADEQUATE. Three numbered outputs: "concise synthesis (2-3 sentences)," "2-3 specific, actionable recommendations," "estimated ARR impact multiplier." Output is structured but the synthesis quality bar ("what's the pattern and why does it matter?") is named without examples or rubric.
+- **Reasoning structure.** ABSENT. For a cross-deal synthesis task — which is inherently multi-step reasoning (identify shared mechanism → assess portfolio impact → recommend action) — the absence is especially damaging.
+- **Output structure.** ADEQUATE. `{ synthesis, recommendations[], arrImpactMultiplier: number }`. Matches consumer. `arrImpactMultiplier` is an unusual field — documented as "how many times the individual deal ARR is the total portfolio risk" — but without calibration.
+- **Examples / few-shot.** ABSENT.
+- **Edge-case coverage.** WEAK. What if the 2+ signals are superficially similar but mechanistically different (two deals flagged competitive_intel about two unrelated competitors in the same vertical)? What if the pattern is already-known and just a restatement of an existing `coordinator_patterns` row for this signal type? What if the signals are from an anomaly spike that won't repeat?
+- **Anti-hallucination.** WEAK. No "ground recommendations in the specific signals provided" instruction. Recommendations routinely are generic playbook advice ("build a competitive battlecard for Microsoft") rather than specific to the portfolio pattern ("all three deals mentioned pricing in Negotiation; prepare the Microsoft price-hold bundle for the NordicMed close meeting Tuesday").
+- **Tone / voice control.** WEAK. Recommendations are rep-facing (surfaced in Intelligence dashboard + should-be-in call prep per 2.17 LOCKED) but no tone specified.
+- **Length / verbosity control.** ADEQUATE. `max_tokens: 1024`; explicit 2-3 sentences synthesis + 2-3 recommendations.
+
+**Output Schema Quality**
+
+Three fields. `synthesis` is prose; `recommendations` is string array; `arrImpactMultiplier` is a number. No confidence field — pattern synthesis quality is invisible. No `pattern_type` or classification beyond the already-known `signalType` from the coordinator state. The rich per-signal detail (urgency, sourceSpeaker, quote) from prompt #21 is stripped before this prompt sees it — per 07A §25: "only `.content` is shown."
+
+Under v2 tool-use: typed synthesis schema with structured recommendations (including `priority`, `time_horizon`, `owner_role`), structured ARR impact ({individual_deal_average, portfolio_multiplier, confidence}), pattern classification ({type, lineage_from_pattern_id, severity_trend}).
+
+**Known Failure Modes — including the `system: ""` anomaly investigation**
+
+**Why `system: ""` specifically hurts this prompt:**
+
+The Anthropic Claude API treats the `system` parameter as conversation-level framing — it tells the model "this is your persistent identity" separate from the turn-by-turn dialogue. The `messages[]` parameter is what the user says THIS turn. When `system: ""`:
+1. **Role discipline collapses.** Without system framing, the model treats the user message as a standalone request. The "You are an AI sales intelligence analyst" sentence at the top of the user message is structurally weaker — it reads as "context the user provided about themselves" rather than "the identity the assistant holds."
+2. **Temperature-style sampling increases.** Absent a system-anchored identity, the model samples more variably across calls — synthesis quality becomes inconsistent across pattern types.
+3. **Instruction following weakens.** The prompt's numbered outputs (1, 2, 3) compete with the surrounding data (signal summary, deal names). With system framing, task instructions dominate; without it, data can dominate.
+4. **Safety and style constraints drift.** Anthropic's post-training anchors "you are a helpful assistant" discipline at the system level. Empty system = weaker anchor for the broader assistant behavior (helpfulness, grounding, refusal patterns).
+
+**Empirical effects observed in output quality per 07-DATA-FLOWS Flow 6:**
+- Generic recommendations unmoored from the specific signals (the "build a battlecard" problem).
+- Arbitrary `arrImpactMultiplier` values — 1.5, 2.0, 3.0 without evident calibration.
+- Synthesis text that paraphrases the signals rather than synthesizing a mechanism.
+
+**Other known failure modes:**
+- **Thin signal representation.** Per 07A §25: each signal rendered as `"- ${dealName} (${companyName}): ${content}"` — urgency, speaker, quote dropped. Model has less to work with than the per-signal detection produced.
+- **No stage context per signal.** A pattern across 3 Discovery deals is a different beast than one across 3 Negotiation deals.
+- **No ARR per deal.** Model asked for ARR impact multiplier but not given individual ARRs. Guessing.
+- **No stakeholder context per deal.** Pattern where CFOs pushed back vs. end users complained — indistinguishable in current context.
+- **No prior synthesized patterns** per 07A §25. Pattern lineage ("this is a re-emergence of last week's pattern") invisible.
+- **No existing playbook experiments** addressing the pattern. Recommendations can contradict already-in-flight tactics.
+- **Broken downstream wire.** Per 07-DATA-FLOWS Flow 6 BROKEN + DECISIONS.md 2.17 LOCKED: `addCoordinatedIntel` is a no-op on the deal agent; `dealAgentStates.coordinatedIntel` never gets written; call prep reads from that unwritten column. So even perfect synthesis here doesn't reach call prep until the wiring is fixed.
+
+**Rewrite Priority**
+
+**MUST REWRITE.** Three independent reasons, each sufficient on its own. (1) The `system: ""` anomaly is a direct violation of DECISIONS.md 2.14 (OPEN flag) and undermines the prompt's output quality in model-behavior-predictable ways. (2) The context is dangerously thin — urgency/speaker/quote/stage/ARR/stakeholder all dropped before the model sees signals — and the prompt has no rails against generic recommendations. (3) This is Act 2 of the demo narrative and per DECISIONS.md 2.17 LOCKED this prompt's output must become a required input to call prep; quality here is load-bearing for the system's external story.
+
+**Specific Improvement Suggestions (substantive — this prompt is highest-leverage MUST REWRITE in the batch)**
+
+1. **Move role framing into `system` with stronger anchoring.**
+   > "You are the Intelligence Coordinator for Nexus — a sales-intelligence analyst with visibility across an entire enterprise sales portfolio. When a pattern appears across multiple deals, you diagnose the underlying mechanism and recommend specific actions each affected deal's AE should take. Your recommendations are specific to the actual deals involved, grounded in the signals provided. You do not restate surface observations as insights. You do not offer generic playbook advice."
+
+2. **Add chain-of-thought scaffolding.**
+   > "Before emitting JSON, silently work through: (1) what specific mechanism is common across these deals? (Competitive pressure from the same vendor? Process friction with the same regulatory framework? Content gap on the same artifact?) (2) what would change if each AE applied a different tactic? (3) what is the portfolio-level lesson vs. the per-deal application?"
+
+3. **Enrich signal representation.** Per 07A §25: include urgency, source_speaker, quote, deal stage, deal ARR, deal stakeholder context. Currently only `.content`.
+
+4. **Pass prior synthesized patterns** for lineage-awareness. "If this pattern is an extension or re-emergence of an existing pattern, note the lineage in your synthesis and adjust recommendations accordingly."
+
+5. **Pass related existing experiments.** "If an active experiment addresses this pattern, recommend amplifying/extending it rather than proposing a novel tactic."
+
+6. **Add worked examples** paired:
+   - **Good:** "Microsoft DAX pricing pushback across 3 healthcare Negotiation-stage deals (total €4.2M). All three buyers cited Microsoft's aggressive discount in the past 10 days. The mechanism is not product-fit but commercial urgency — Microsoft appears to be closing Q-end. Recommendations: [1] NordicMed closes Tuesday — deploy the Microsoft price-hold bundle before the meeting. [2] MedVista's CFO is the most price-sensitive; prep a 3-year TCO comparison referencing SOC 2 compliance retained value. [3] Escalate pricing authority to Marcus for same-quarter matchmaking."
+   - **Bad:** "Three healthcare deals are mentioning Microsoft competitively. Recommendations: [1] Build a Microsoft competitive battlecard. [2] Train reps on Microsoft positioning. [3] Flag to leadership." (Generic; not actioned on specific deals; multiplier implied not justified.)
+
+7. **Structure `recommendations[]` as objects.** `{ priority: "urgent" | "this_week" | "queued", application: "deal_specific" | "vertical_wide" | "org_level", target_deal: deal_id | null, action: string }`. Enables UI to sort, filter, and attribute.
+
+8. **Calibrate `arrImpactMultiplier`.** "Multiplier should reflect HOW MUCH additional ARR is at risk portfolio-wide compared to a single affected deal. Example: if 3 deals at $500K each are affected by the pattern and 4 more deals in the vertical are at risk of similar exposure, multiplier ≈ (3+4)/3 = 2.3. Provide calculation in `arrImpactCalculation` field."
+
+9. **Wire to call prep per DECISIONS.md 2.17 LOCKED.** Separate from prompt text, but the synthesis IS useless until call prep reads it. Either fix `coordinator → addCoordinatedIntel → dealAgentStates` wire (per 07-DATA-FLOWS Flow 6 SHOULD BE) or have call prep query `coordinator_patterns` directly.
+
+**Blast Radius Recap**
+
+Output persists to `coordinator_patterns` (working) + should flow into every affected deal's call prep per 2.17 (broken today). Intelligence dashboard renders the synthesized patterns as the Act 2 demo narrative. Per 07A §25 HIGH: when the downstream wire is fixed per 2.17, this prompt's output shapes every future call prep for every deal in the affected pattern — CRITICAL blast radius. Fixing the `system: ""` anomaly + context + downstream wire is the single highest-leverage rewrite in the entire system.
+
+---
+
+## Cross-Cutting Analysis (Full — supersedes the Interim Observations above)
+
+This analysis spans all 25 prompts. It builds on 4.5a's Interim Observations (mid-audit thinking about prompts 1-13) but is the authoritative cross-cutting view.
+
+### 1. Engineering Dimensions Patterns Across All 25 Prompts
+
+Ratings were assigned on a four-point scale per dimension: STRONG, ADEQUATE, WEAK, ABSENT. Counts below are approximations collapsed across all 25 entries.
+
+| Dimension | STRONG | ADEQUATE | WEAK | ABSENT |
+|---|---|---|---|---|
+| Role framing | 5 | 12 | 6 | 2 |
+| Task specificity | 11 | 10 | 4 | 0 |
+| Reasoning structure | 0 | 2 | 0 | 23 |
+| Output structure | 10 | 11 | 4 | 0 |
+| Examples / few-shot | 3 | 4 | 5 | 13 |
+| Edge-case coverage | 0 | 4 | 17 | 4 |
+| Anti-hallucination | 2 | 9 | 10 | 4 |
+| Tone / voice control | 5 | 7 | 9 | 4 |
+| Length / verbosity control | 11 | 10 | 3 | 1 |
+
+**Consistently strong dimensions:**
+- **Task specificity (11/25 STRONG, 10/25 ADEQUATE).** Most prompts specify what they want with decent precision. This is Nexus's foundational prompt-engineering strength — the model usually knows the task.
+- **Length/verbosity control (11/25 STRONG, 10/25 ADEQUATE).** Explicit sentence counts, item counts, and max_tokens budgets are applied defensively almost everywhere.
+- **Output structure (10/25 STRONG, 11/25 ADEQUATE).** Every prompt emits a literal JSON schema block; quality varies but the intent is universal.
+
+**Consistently weak or absent dimensions:**
+- **Reasoning structure (23/25 ABSENT).** The single most consistent gap. Almost every prompt jumps from task statement to JSON answer with no intermediate scaffolding. Only #5 and #11 partially invite structured reasoning. For the heavy analytical prompts (#11, #14, #15, #25) this is a structural miss worth a category in the principles section.
+- **Examples / few-shot (13/25 ABSENT, 5/25 WEAK).** Over 70% of prompts lack usable examples. The best-performing prompts on this dimension (#5, #15, #22, and partially #2) show it can be done without token bloat.
+- **Edge-case coverage (4/25 ABSENT, 17/25 WEAK).** Empty-data cases, ambiguous-data cases, conflicting-evidence cases are systematically underspecified.
+- **Anti-hallucination (10/25 WEAK, 4/25 ABSENT).** Only #15 and #22 score STRONG. Many prompts ask the model to cite evidence ("reference specific data") without providing data to cite (#9 "cite numbers" with no numbers passed; #12 "reference recent activity" with subject-only activity list).
+
+**Correlations observed:**
+- **Prompts with strong role framing tend to have stronger few-shot examples** (#5, #15, #22). Suggests role + example are co-invested by prompt authors.
+- **Prompts that write to live persistent state (#4, #11, #20, #22) have weaker anti-hallucination** than prompts with human-in-the-loop confirmation (#13, #14's close modal). The highest-consequence paths are the least-guarded — an inverted correlation that is specifically dangerous.
+- **Pipeline actor prompts (#19-#25) have uniformly weaker role framing** than SDK route prompts — they're often just 1-2 sentence openers. The callClaude helper's minimal-config style invited minimal framing.
+- **Context-rich prompts don't correlate with higher anti-hallucination discipline.** #11 receives 14+ parallel queries and still has "stakeholders_in_play" invention risk when contact list is thin.
+
+### 2. Prompt Engineering Anti-Patterns Recurring Across the Codebase
+
+Patterns observed in 3+ prompts:
+
+1. **Cite-evidence-but-no-evidence-provided.** Present in #9 ("cite numbers"), #11 (proven plays "specific to THIS deal"), #14 ("cite specific evidence"). The prompt text demands grounding; the context doesn't include the material to ground in. Model fills the gap with plausible-sounding fabrications.
+
+2. **Enum interpolated into prompt text as pipe-separated literal.** Present in #14 (`"competitor|stakeholder|process|..."` as category spec), #15 (status enum), #11 (fitness category in multiple places). Model occasionally returns the literal pipe-string as a value. Fix: tool-use enums OR explicit "choose one of: A | B | C".
+
+3. **Same task, different system prompts across call sites.** #12 + #24 + #18 are all email drafting; #5 + #19-22 all analyze transcripts; #1 and #21 both classify signals with different enum sizes (9 vs. 7). DECISIONS.md 2.13 LOCKED calls for one service per task.
+
+4. **Silent fallback on parse failure = silent failure.** #14 returns empty analysis at 200 status; #19/#20/#21/#22 have parseJSON fallbacks to `{}` or `[]`; #24 returns a generic "Thank you" email. In no case does the UI distinguish "model returned nothing actionable" from "model call failed." Operators see degraded-but-live UX with no diagnostic.
+
+5. **Chain-of-thought not invited.** 23/25 prompts jump to JSON. For analytical prompts this is the single largest output-quality lever.
+
+6. **Inline prompts in route handlers rather than .md files.** 24/25 prompts are template literals inside TypeScript (#5 is the exception). DECISIONS.md Guardrail #4 flags this universally.
+
+7. **Fence-strip-and-JSON-parse fragility.** At least 4 different regex patterns for stripping Markdown fences across the codebase (documented in 04-PROMPTS.md Prompt Engineering Patterns). Only #15 has the 3-strategy robust extractor. Everywhere else: regex-and-hope.
+
+8. **JSON.stringify as a cross-prompt handoff format.** #22 receives `JSON.stringify(actions)` + `JSON.stringify(meddpicc)` + `JSON.stringify(signals)` from upstream; #8 stringifies the whole dealContext; #10 stringifies the entire input. Wall-of-JSON inputs burn tokens and force the model to re-parse rather than reason.
+
+9. **Schema fields present but unread.** #1's `sensitivity`, `follow_up.clarifies`; #12's `notes_for_rep` (read but not persisted structurally); #14's `meddpicc_gaps[]` (displayed, not written back); #11's `competitive_context` (rendered if present but no enforcement). Bloat that should be pruned in 4.7.
+
+10. **Varied transcript truncation across pipeline steps.** 15K for #19/#20/#21, 12K for #23, 8K for #22. Downstream synthesis sees LESS context than upstream detection — an absurd gradient. Fix: DECISIONS.md 2.13 "One transcript preprocessing pass."
+
+11. **Currency/date format drift.** `€` in #1, #7, #9, #14; `$` in #15, #16, #18; `en-GB` in #11, #14; `en-US`/ISO in #15, #16. No shared formatter.
+
+12. **Emoji-prefixed output fields.** #11 uses 📊/🔴/🟡/🟢/📋/📉/🏆/⚠️; Claude drops unpredictably. Decorative, not load-bearing, but when code downstream expects prefixes for icon rendering it degrades.
+
+13. **`system: ""` anomaly.** Present in #25 (explicit empty) and #8 (omitted, equivalent). Flagged in DECISIONS.md 2.14 OPEN. Role discipline weakens; instruction following drifts.
+
+14. **Auto-persistence without human review.** #4 auto-writes to `agent_configs`. Only confirmed in this audit batch, but the pattern risks replication elsewhere when prompts move from "draft for review" to "apply automatically."
+
+15. **Hardcoded product/role names in reusable prompts.** #16/#17/#18 all hardcode "Sarah," "100+ accounts," "Claude AI, Claude Code, Cowork." Reuse blockers when another AE or another product context emerges.
+
+### 3. Tiered Rewrite Priority Summary
+
+All 25 prompts grouped by rewrite priority.
+
+**MUST REWRITE (4):**
+- **#4 Agent Config Change Suggestion** — auto-writes live config without review (DECISIONS.md 2.25 #3 violation); 500-char truncation; unbounded instruction growth.
+- **#11 Call Prep Brief Generator** — CRITICAL-rated per 07A §11; coordinator gap blocks Act 2 (DECISIONS.md 2.17 LOCKED); monolithic 200-line conditional structure blocks evolution.
+- **#14 Close Analysis** — fundamentally does not meet DECISIONS.md 1.1 LOCKED spec (single-pass vs. required continuous pre-analysis + final deep pass); no VP-grade hypothesis possible from current context.
+- **#25 Coordinator Pattern Synthesis** — `system: ""` anomaly (DECISIONS.md 2.14); thin signal representation; recommendations mostly generic; downstream wire broken per 2.17.
+
+**SHOULD REWRITE (19):**
+- **#1 Observation Classification** — anti-hallucination rails thin; reasoning structure absent; 9-vs-7 signal enum drift with #21.
+- **#3 New Cluster Detection** — 120-char truncation; no observer diversity context.
+- **#6 Field Query Analysis** — missing coordinator + prior field queries; schema conflict between direct-answer and fanout cases.
+- **#7 AE Question Generator** — no MEDDPICC; one-deal hardcoding; no examples for a voice-critical prompt.
+- **#8 Deal-Scoped Manager Question** — second `system: ""` anomaly (role framing in user message); plain-text + sentinel parsing fragile.
+- **#9 Give-Back Insight** — "cite numbers" rail without numbers in context; hallucinated stats; no peer responses visible.
+- **#10 Aggregated Answer Synthesis** — 1-sentence system prompt; plain-text output throws away structure; thin context.
+- **#12 Email Draft Generator** — prior email bodies missing; duplication with #24 per DECISIONS.md 2.13.
+- **#13 NL Agent Config Interpretation** — no history/role/directives context; no worked examples.
+- **#15 Deal Fitness Analysis** — unreachable example in prompt; full-re-analysis drift; input truncation risk; specific hardcoded fallbacks override good output.
+- **#16 Customer Response Kit** — hallucinated account names in similar_resolutions; hardcoded role; missing prior-conversation history.
+- **#17 QBR Agenda Generator** — client-trusted context; product-hardcoded; not persisted.
+- **#18 Customer Outreach Email** — Sarah-hardcoded sign-off; no recipient engagement history.
+- **#19 Pipeline Extract Actions** — thin role framing; buyer/seller attribution conflated; 15K truncation.
+- **#20 Pipeline Score MEDDPICC** — existing evidence text not passed; contradiction handling absent.
+- **#21 Pipeline Detect Signals** — 7-vs-9 signal enum drift with #1; highest per-output-item blast.
+- **#22 Pipeline Synthesize Learnings** — 8K truncation smaller than upstream; no prior learnings context.
+- **#23 Pipeline Experiment Attribution** — no applicability gating (DECISIONS.md 2.21); no prior-evidence dedup.
+- **#24 Pipeline Draft Follow-Up Email** — schema conflict with #12; duplicate drafting path per 2.13.
+
+**PRESERVE WITH MINOR EDITS (2):**
+- **#2 Cluster Semantic Match** — small, tightly focused; core issues are context-shaped (07A §2), not prompt-text.
+- **#5 Streaming Transcript Analysis** — strongest prompt in the registry; minor additions (chain-of-thought scaffold for long transcripts, quote grounding, optional dealId context).
+
+**PRESERVE AS-IS (0):**
+No prompt survives the audit without recommended changes. Every prompt at minimum benefits from tool-use schema migration per DECISIONS.md 2.13.
+
+**Total: 4 + 19 + 2 + 0 = 25.** ✓
+
+### 4. Top 8 Candidates for Full Rewrite in Prompt 4.7
+
+Selected using the combined criterion (priority + blast radius + demo-criticality + text-shape fixability). Prompt 4.7 will produce full rewrites of exactly these 8.
+
+1. **#4 Agent Config Change Suggestion.** MUST REWRITE. Highest-risk prompt in the registry — writes live agent config without human review, degrading every future #11 and #12 output for the affected member. DECISIONS.md 2.25 #3 mandates re-scoping as an event-sourced proposal. Text rewrite: re-shape output to proposal + approval fields; add anti-hallucination "default to requires_approval: true"; pass full instructions + history + directives; add worked examples of good/bad proposals. **Rewrite should accomplish:** convert auto-apply path into a guarded proposal emitter that targets real gaps with evidence and rationale.
+
+2. **#11 Call Prep Brief Generator.** MUST REWRITE. Hero surface of the product; CRITICAL-rated in 07A §11. The 200-line conditional system prompt resists evolution; the coordinator gap blocks Act 2; MEDDPICC trajectory + prior briefs + full fitness jsonb are absent. Text rewrite: decompose into composable sub-prompts (per DECISIONS.md 2.13), wire coordinator per 2.17 LOCKED, add chain-of-thought per section, add per-section length budgets. **Rewrite should accomplish:** a composable brief generator where each section is a typed sub-call with applicability gating — call prep becomes orchestration of smaller diagnosable prompts, not a monolith.
+
+3. **#14 Close Analysis.** MUST REWRITE. Fundamentally does not meet DECISIONS.md 1.1 LOCKED spec — single-pass vs. required continuous pre-analysis + final deep pass. The flagship research-interview prompt cannot produce VP-grade hypotheses from a one-shot pass on summaries. Text rewrite: re-scope into two prompts — a rolling deal-theory updater running per transcript/email, and a final deep-pass prompt reading the theory. Add hypothesis-verification hook per 2.21. Strengthen role framing ("strategic VP conducting a post-mortem"). Add taxonomy-promotion awareness per 1.1. **Rewrite should accomplish:** an evidenced, depth-first hypothesis that earns the "argument not summary" bar DECISIONS.md 1.1 demands.
+
+4. **#25 Coordinator Pattern Synthesis.** MUST REWRITE. `system: ""` anomaly (DECISIONS.md 2.14) + thin signal representation (urgency/speaker/quote/stage/ARR dropped) + generic recommendations + broken downstream wire. Act 2 of demo narrative. Text rewrite: move role framing to `system` with strong anchoring; add chain-of-thought; enrich signal shape; add worked examples (good specific-to-deals vs. bad generic); structure recommendations as objects. Wire to call prep per 2.17 LOCKED (architectural follow-through, not prompt-text). **Rewrite should accomplish:** portfolio-level diagnoses that name the mechanism, tie to specific deals, and drive specific AE actions — stopping the "build a battlecard" generic-recommendation problem.
+
+5. **#1 Observation Classification.** SHOULD REWRITE — front-door to the entire intelligence-capture system; HIGH blast per 07A §1; issues are text-shaped. Text rewrite: add anti-hallucination rails ("if no entity clearly matches, return empty array"); source the 9 signal types from the shared enum per 2.13 (resolves drift with #21); document `needs_clarification` explicitly; break "decide follow-up" into a reasoning step; add worked examples of should-ask vs. shouldn't-ask. **Rewrite should accomplish:** a classification layer that grounds its entity links in provided data and produces deterministic, tool-use-validated structured output.
+
+6. **#9 Give-Back Insight.** SHOULD REWRITE — hero surface for the "smart colleague tip" voice. Text-shaped problem: prompt asks to "cite numbers" with no numbers in context → consistent hallucinated stats. Text rewrite: replace "cite numbers" with conditional instruction ("cite if provided, else strategic observation grounded in context"); add worked examples of good vs. generic; drop `source` field or restructure as cited_data; add opt-out `applies: boolean`; role-frame as peer. Context fix (peer responses, coordinator patterns, system intelligence) compounds. **Rewrite should accomplish:** give-backs that either cite real cross-portfolio data or provide strategic observations grounded in the deal — never invent statistics.
+
+7. **#15 Deal Fitness Analysis.** SHOULD REWRITE — longest prompt (250 lines, 16K output cap), most ambitious schema, specific known text defects (unreachable example key, percentage arithmetic not enforced, full-re-analysis pattern loses prior evidence). Downstream through #11's fitness-context section makes this a leverage point. Text rewrite: fix unreachable example; add explicit input budget + truncation policy; add multi-pass reasoning scaffold; pass canonical seller names; pass prior evidence snippets for incremental update; rename output fields to match DB columns. **Rewrite should accomplish:** an incrementally-updating oDeal analysis that strengthens evidence rather than rediscovering it, with deterministic schema validation.
+
+8. **#21 Pipeline Detect Signals.** SHOULD REWRITE — "highest blast radius per-output-item" per 07A §21; text-fixable 7-vs-9 signal enum drift directly breaks the agent-config auto-mutation path (#4). Signal detection seeds observations + coordinator + routing + future call prep. Text rewrite: source signal-type enum from shared location per 2.13; add MEDDPICC + stage + coordinator context; add per-signal confidence; add worked example of tiebreak. **Rewrite should accomplish:** signal classification that respects the system-wide enum, anchors severity via confidence, and surfaces the right signals to the right downstream consumers.
+
+**Close misses (not in top 8 but meaningful 4.7 candidates if slack exists):**
+- **#8 Deal-Scoped Manager Question** — second `system: ""` anomaly + sentinel parsing. Text-only fix; moderate blast.
+- **#20 Pipeline Score MEDDPICC** — highest-downstream-reach pipeline prompt (feeds #8, #11, #14, UI, MCP) but principal fix is context-shaped (pass existing evidence), less of a 4.7 text lift.
+
+### 5. Prompt Engineering Principles Emerging from the Audit
+
+Eight principles seeded by the audit. These will be refined into the "Prompt Principles for Codex" section in Prompt 4.7.
+
+1. **Every analytical prompt opens with a `system` role framing that invokes domain expertise.** "You are a strategic VP of Sales," "you are an expert deal intelligence analyst," "you are the Intelligence Coordinator." Never `system: ""`. Never defer role to the user message. Rationale: the `system: ""` anomaly in #25 and the structural equivalent in #8 measurably weakens role discipline and instruction following.
+
+2. **Every analytical prompt invites structured intermediate reasoning.** Either an explicit chain-of-thought scaffold ("first identify X, then Y, then emit JSON") or a multi-pass structure. 23/25 current prompts omit this — the single most consistent gap in the registry.
+
+3. **Every prompt that produces structured output uses tool-use schemas, not JSON-in-text.** Ties to DECISIONS.md 2.13 LOCKED. Schema validation at the tool boundary eliminates enum drift, field-omission ambiguity, and 4 different fence-strip regexes across the codebase.
+
+4. **Every prompt that makes claims about a deal cites evidence from provided data; never asserts freely.** Evidence means a transcript quote (verbatim), an observation ID, a MEDDPICC dimension + score, or a named stakeholder action. The "cite evidence" instruction is paired with context that contains the evidence to cite — inverse of #9's "cite numbers" problem.
+
+5. **Every prompt that writes to live persistent state emits a proposal, not a direct write.** DECISIONS.md 2.25 #3. Auto-apply paths (#4 today) become event-sourced proposals that humans approve or that require explicit autonomy grants.
+
+6. **Every prompt that emits a structured collection uses worked examples.** One good exemplar + one anti-example pair, each annotated. 13/25 prompts currently have no examples; 5 have weak examples.
+
+7. **Every prompt that can produce nothing useful emits an explicit "no output" shape rather than a silent fallback.** Structured `{ applies: false, reason: ... }` replaces `{}` or `[]`. Silent failures are indistinguishable from operational silence.
+
+8. **Prompts that operate on transcripts or other long text declare their truncation budget, and the budget is consistent across the pipeline.** Per DECISIONS.md 2.13 LOCKED "one transcript preprocessing pass." No more 15K / 12K / 8K drift within a single pipeline run.
+
+Additional candidates for 4.7 to refine:
+- "Every prompt referencing the rep uses the rep's agent config for voice calibration."
+- "Every prompt rendering user-facing prose specifies tone (strategic and diagnostic, not cheerleading)."
+- "Every prompt uses the shared signal-type enum; no per-site re-enumeration."
+
+### 6. Alignment with DECISIONS.md
+
+Audit findings validate and reinforce specific LOCKED decisions:
+
+- **#4 MUST REWRITE reinforces DECISIONS.md 2.25 #3** ("AI-driven config mutations are proposals, not direct writes"). The auto-apply path the audit identifies as highest-risk is exactly what 2.25 #3 locks in.
+- **#11 MUST REWRITE reinforces DECISIONS.md 2.17 LOCKED** ("Call prep MUST query the coordinator"). The Act 2 demo narrative gap is a direct consequence of this LOCKED spec not being implemented yet.
+- **#14 MUST REWRITE reinforces DECISIONS.md 1.1 LOCKED** ("Continuous pre-analysis on every transcript and email... Close Lost triggers a final deep pass"). Current single-pass implementation is the specific gap 1.1 addresses.
+- **#25 MUST REWRITE reinforces DECISIONS.md 2.14 OPEN** (coordinator synthesis `system: ""` anomaly). Audit investigates and substantiates the anomaly's cost.
+- **#12/#24/#18 consolidation recommendation reinforces DECISIONS.md 2.13 LOCKED** ("one email-drafting service"). The three email-drafting prompts today violate 2.13 in spirit.
+- **#19-22 truncation drift reinforces DECISIONS.md 2.13 LOCKED** ("one transcript preprocessing pass produces the canonical analyzed-transcript object"). Per-step truncation inconsistency is the exact class of drift 2.13 eliminates.
+- **#21 signal-type enum drift reinforces DECISIONS.md 2.13 LOCKED** ("Single source-of-truth enum for signal types").
+- **#23 absent applicability gating reinforces DECISIONS.md 2.21 LOCKED** ("Every surface passes three gates: stage applicability, temporal applicability, precondition applicability").
+
+Net: the audit findings are not independent critiques — they map cleanly onto the LOCKED architecture. v2 is already targeting the right problems.
+
+### 7. v2 Impact Projection
+
+If all 4 MUST REWRITE prompts are rewritten per the Top 8 plan, the 19 SHOULD REWRITE prompts are rewritten or consolidated per 4.7, and all context gaps from 07A-CONTEXT-AUDIT are closed via the DealIntelligence service (2.16) + canonical analyzed-transcript object (2.13) + coordinator wiring (2.17) + applicability gating (2.21) + event-sourced deal theory (1.1 + 2.16), the v2 AI quality looks materially different from current Nexus in four concrete ways:
+
+(1) **Close-lost analysis produces a VP-grade hypothesis an argument with depth.** Continuous pre-analysis across every transcript and email accumulates a rolling deal theory in `deal_events` / `deal_snapshots`. The final close-lost prompt reads the theory plus full history and produces an evidenced diagnosis — citing specific quotes, named stakeholder actions, and MEDDPICC trajectory — not a one-shot summary of summaries. The rep reacts to the hypothesis, not a blank form, and the reconciliation becomes the highest-signal training data the system collects.
+
+(2) **Call prep becomes the composed output of specialized sub-prompts rather than a 200-line monolith.** Each section (talking points, questions, fitness insights, proven plays, risks) is a typed tool call whose applicability is gated per 2.21. Coordinator patterns flow in per 2.17. MEDDPICC trajectory + prior briefs + full fitness jsonb enrich the context. The Act 2 demo story actually works — cross-deal intelligence shows up in the next call prep, not just on the Intelligence dashboard.
+
+(3) **Observation and signal quality is systemically tightened.** Single shared 9-type signal enum eliminates the 7-vs-9 drift between #1 and #21. Anti-hallucination rails prevent entity invention. Cluster matching sees full unstructured quotes + severity + ARR impact. Coordinator synthesis reads enriched per-signal context and produces specific-to-deals recommendations (not "build a battlecard") with calibrated ARR multipliers.
+
+(4) **Silent failures surface; hallucinated confidence disappears.** Tool-use schemas enforce field presence and enum membership. Anti-hallucination rails ground every cited number/account/article in provided context. "If evidence is thin, return `applies: false`" replaces the cascade of empty-fallback returns at 200 status. Operators see real failure modes when the model cannot produce quality output, not degraded-but-live UX masking outages.
+
+The net effect is a product that earns the "AI that diagnoses deals" positioning — not the current "AI that summarizes deals." The research-interview pattern DECISIONS.md 1.2 names becomes the norm rather than the exception; the "Nexus Intelligence voice" DECISIONS.md Guardrail #8 requires becomes consistent across every prompt; and the coordinator's Act 2 narrative ships with the plumbing that makes it true.
+
+---
