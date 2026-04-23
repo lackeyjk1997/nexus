@@ -416,12 +416,23 @@ Each phase: goal, deliverables, exit criteria, scope, dependencies, references. 
 
 ### Phase 3 — AI Features
 
+> **Reconciliation banner (Phase 3 Day 2 Session B, 2026-04-22).** Status: deliverable 1's prompt-number references drifted from the PORT-MANIFEST.md structure during 04C authoring. Corrections authoritative below; original body preserved as the design-intent trail:
+>
+> **Step 3 parallel-analysis prompts (corrected numbering per PORT-MANIFEST.md):**
+> - (a) **MEDDPICC scoring → prompt #20** (`pipeline-score-meddpicc.md`, PORT-WITH-CLEANUPS). Original text says "#15 / rewritten" — that's Deal Fitness, NOT MEDDPICC (see below).
+> - (b) signal detection → prompt #21 (`01-detect-signals.md`, REWRITTEN). ✓ accurate.
+> - (c) **action extraction → prompt #19** (`pipeline-extract-actions.md`, PORT-WITH-CLEANUPS). Original text says "#2 / ported" — that's Cluster Semantic Match, a distinct prompt for the observation-clustering pipeline, NOT action extraction.
+>
+> **Deal Fitness (#15 → `05-deal-fitness.md`, REWRITTEN) is a separate on-demand analysis track**, NOT part of the per-transcript pipeline step 3. Invoked on demand against a deal's full conversation history (via a dedicated job type or direct service call when the Deal Fitness page renders), not as part of the transcript_pipeline job.
+>
+> v2-canonical wiring lives in `packages/shared/src/jobs/handlers.ts` (landed Phase 3 Day 2 Session B `7f1b3f8`). Day 2 shipped step 3 detect-signals-only; score-meddpicc + extract-actions ports Phase 3 Day 3+.
+
 - **Goal:** Pillar 1. Transcript processing pipeline runs. Call prep assembles. Email drafts work. Observations classify. The 8 rewritten prompts ship.
 - **Deliverables:**
   1. Transcript pipeline as a `jobs` row of type `transcript_pipeline`. 7 sequential steps, each writing a `job_results` row:
      - **Step 1 — `ingest`:** Load transcript from `transcripts`; validate length + speaker count; write `transcript_ingested` event.
      - **Step 2 — `preprocess`:** `TranscriptPreprocessor` service runs once, writes canonical `analyzed_transcripts` row (speaker-turn segmented, competitor mentions normalized, company/contact entities resolved to HubSpot IDs). Consumed by every subsequent step — no re-parsing.
-     - **Step 3 — `analyze` (parallel):** Three Claude calls via `Promise.all` — (a) MEDDPICC scoring (prompt #15 / rewritten), (b) signal detection (prompt #21 / rewritten), (c) action extraction (prompt #2 / ported). Each uses tool-use schemas.
+     - **Step 3 — `analyze` (parallel):** Three Claude calls via `Promise.all` — (a) MEDDPICC scoring (prompt #15 / rewritten), (b) signal detection (prompt #21 / rewritten), (c) action extraction (prompt #2 / ported). Each uses tool-use schemas. _[See reconciliation banner above — corrected numbering is #20 / #21 / #19; Deal Fitness #15 is a separate track.]_
      - **Step 4 — `persist`:** Write `meddpicc_scores` updates; write `signal_detected` events (one per signal); write HubSpot custom properties via `CrmAdapter.updateDealCustomProperties`. Idempotent by `(deal_id, dimension)` for MEDDPICC, by `(transcript_id, signal_hash)` for signals.
      - **Step 5 — `coordinator-signal`:** Send all `signal_detected` events from this transcript to the coordinator via direct service call (`IntelligenceCoordinator.receiveSignals(signals)`). Coordinator schedules its synthesis as a separate `coordinator_synthesis` job — pipeline does not block.
      - **Step 6 — `synthesize-theory`:** Prompt #14A continuous deal-theory update. Reads full event stream for the deal. Writes `deal_theory_updated` event.
