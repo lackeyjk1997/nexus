@@ -1,5 +1,40 @@
 # 09 — Architectural Critique
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Historical reasoning trail — preserved.** This document captures *why* v2 looks the way it does. Every §3 finding has a v2 resolution; this doc is the record of what the v2 architecture is solving.
+>
+> **Live status across the §3 + §4 + §5 + §6 findings:**
+>
+> | Section | Finding | v2 resolution | Status |
+> |---|---|---|---|
+> | §3.1 | Rivet dismantled in place | §2.6 Rivet REMOVED; jobs table + pg_cron + Realtime | **Resolved — Phase 1 Day 3** |
+> | §3.2 | Coordinator → call-prep broken edge | §2.17 call prep reads coordinator_patterns directly | **Resolved by design — Phase 4 Day 2 wires it** |
+> | §3.3 | Close Lost single-pass | §1.1 continuous pre-analysis + final deep pass + §2.16 event sourcing | **Ahead — Phase 5 Day 1** |
+> | §3.4 | AgentIntervention hardcoded to one deal | §1.14 data-driven + §2.21 applicability gating | **Ahead — Phase 5 Day 1** |
+> | §3.5 | Deal creation missing | §1.13 first-class + CrmAdapter.createDeal | **Resolved — Phase 1 Day 5 + Phase 2 Day 2** |
+> | §3.6 | Experiment creation UI + no backend | §1.3 POST /api/experiments + attribution pipeline | **Ahead — Phase 5 Day 1** |
+> | §3.7 | Pipeline step 9 = 15 no-op RPCs | §2.6 Rivet removed + §2.24 pipeline simplification | **Resolved — Phase 1 Day 3** |
+> | §3.8 | Brief Ready browser-dependent | §2.6 jobs table + worker + pg_cron | **Resolved — Phase 1 Day 3** |
+> | §3.9 | Coordinator system prompt empty | 04C Rewrite 4 non-empty system + reasoning_trace | **Resolved — Rewrite 4 already done; port at Phase 3 Day 1** |
+> | §3.10 | Agent config auto-mutates | Guardrail 43 proposals not direct writes | **Ahead — Phase 5 Day 1** |
+> | §3.11 | Stage audit bypass | §2.10 single write-path + shared stage-change action | **Resolved — Phase 2 Day 4 Session B** |
+> | §3.12 | preClassified trust flag | §2.11 + §2.12 function calls not HTTP | **Resolved by design — v2 has no such flag** |
+> | §3.13 | demo-guide.tsx missing | §2.23 dead code discipline | **Resolved — not rebuilt in v2** |
+> | §4.x Fragility | Various | §2.2 hygiene, §2.9 maxDuration, §2.13 unified Claude | **Resolved — Phase 1 Days 1-5** |
+> | §5.x Incidental complexity | Various | Covered across §2.2 / §2.6 / §2.13 / §2.22 / §2.23 / §2.25 | **Resolved — Phase 1-2** |
+> | §6 Prompt debt | Various | §2.13 unified layer + 8 rewrites in 04C | **Resolved by design; 1/8 ported, 7/8 port at Phase 3 Day 1** |
+> | §7 Context gaps | Various | §2.16 DealIntelligence + §2.17 coordinator + §2.21 applicability | **Service layer building through Phase 3-5** |
+> | §8 Security | No auth / no RLS | §2.1 Supabase Auth + RLS Day 1 | **Resolved — Phase 1 Day 2** |
+> | §9 UI debt | 1019 inline hex / 113 DM Sans / no primitives | §2.22 tokens/caps/registry/primitives + DESIGN-SYSTEM.md | **Resolved — Phase 2 Day 1** |
+> | §10 Cost/scale | Per-transcript Claude cost | §2.6 Rivet removed + §2.13 unified client | **Measurable via prompt_call_log Phase 3 Day 1** |
+> | §11 CLAUDE.md drift | Stale everywhere | v2 CLAUDE.md rewritten against actual code | **Resolved — ongoing discipline** |
+> | §12 Demo paradox | Narrative exceeds execution | §1.9 narrative preserved; code built first | **In progress across all phases** |
+>
+> Each finding's "diagnosis only" intent is preserved — this doc doesn't get retrofitted with solutions inline, and the §3/§4/§5 bodies below stay as the original critique. The table above is the accountability ledger.
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` + `~/nexus-v2/docs/BUILD-LOG.md`. Handoff-edit policy per §2.13.1.
+
+---
+
 Synthesis of findings from extraction sessions 01–08 and DECISIONS.md. Every claim cites its evidence. No solutions here — diagnosis only.
 
 **Reading guide.** Sections are ordered roughly by severity rather than by area. A reader who only has time for the verdict should read §1; ten minutes gets §1–§3; twenty minutes gets the full document. Every cross-reference to `DECISIONS.md` points at a LOCKED decision where v2 already resolves the issue — that mapping is summarized at the end. Every claim names a file, line, or upstream extraction document. Where an observation is a judgment call rather than a fact, the text says so.

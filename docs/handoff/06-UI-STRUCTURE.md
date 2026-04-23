@@ -1,5 +1,9 @@
 # 06 — UI Structure
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN v1 snapshot.** 17 pages / 1,019 inline hex / 113 unresolved DM Sans / 5 × 1500-LOC client files described here is v1 state. v2 UI is rebuilt per §2.22 (design tokens, ≤400-LOC cap, declarative nav registry, one UI primitive library, fonts load) and `docs/design/DESIGN-SYSTEM.md` (Graphite & Signal). See `~/nexus-v2/docs/BUILD-LOG.md` Phase 2 Day 1 for the v2 design foundation ship; Phase 2 Day 2+ for per-page implementations. Consult this doc when researching why a v2 component choice was made or when porting v1 patterns.
+
+---
+
 Frontend map at commit `c71d2b6`. 17 pages, 2 layouts, 25 shared components (7,783 LOC), 12 per-route client components (14,412 LOC). **Total TSX under `apps/web/src`: ~22,200 LOC** excluding the API routes covered in 03.
 
 The dominant architectural pattern is **server-fetches-then-passes-to-client**: each dashboard page is a `"use server"` RSC that runs Drizzle queries in parallel and hands the results as props to a single massive `-client.tsx` file. Client components then fetch additional data via the API routes documented in 03. The `/analyze` route is the exception — it's a pure client page.

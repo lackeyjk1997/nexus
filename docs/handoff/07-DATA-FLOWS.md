@@ -1,5 +1,17 @@
 # 07 — Data Flows
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN v1 snapshot.** The 8 v1 lifecycles below are preserved as the "what v2 replaces" reference. Key Known Issues resolved by v2:
+>
+> - **Flow 2 "Brief Ready" browser-dependent** → §2.6 jobs table + pg_cron worker + Supabase Realtime (shipped Phase 1 Day 3; no browser-polling dependency).
+> - **Flow 6 coordinator → call-prep broken edge** → §2.17 call prep reads `coordinator_patterns` directly (wiring lands Phase 4 Day 2; no actor hop).
+> - **Flow 1 pipeline step 9 = 15 no-op RPCs** → §2.6 Rivet removed + §2.24 pipeline simplification (Phase 3 Day 2 ships 7-step pipeline with no no-ops).
+> - **Flow 7 Known Issue #1 NordicMed-name-hardcoded intervention** → §1.14 + §2.21 applicability gating (lands Phase 5 Day 1).
+> - **Flow 7 Known Issue #2 healthScore has no column** → event-sourced per §2.16 + applicability flags per §2.21.
+>
+> Phase 3+ sessions read this doc as the v1 baseline for understanding what v2 is replacing flow-by-flow. Not a current-state reference.
+
+---
+
 End-to-end lifecycles for the 8 major features. Uses Framework 1 vocabulary: CREATE → STORE → PROCESS → RETRIEVE → RENDER → UPDATE/DELETE → KNOWN ISSUES.
 
 References to other docs:

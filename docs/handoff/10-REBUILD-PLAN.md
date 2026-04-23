@@ -1,5 +1,60 @@
 # 10 — Rebuild Plan
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Phases 1 + 2 shipped, Phase 3+ ahead.** This document was authored as the full 6-phase blueprint; the active rebuild now has two phases complete, a pre-Phase-3 fix plan executed, and Phases 3-6 as the forward plan. Read with the amendments below in mind; do not re-litigate LOCKED decisions that have since landed.
+>
+> **Phase status as of 2026-04-22 (HEAD `4e5d281`):**
+>
+> | Phase | Status | Notes |
+> |---|---|---|
+> | 1 Foundation | **Complete** | Days 1-5 shipped; exit criteria all pass. See `~/nexus-v2/docs/BUILD-LOG.md` Phase 1 Day 1-5 entries. |
+> | 2 Core CRUD | **Days 1-4 Sessions A+B shipped.** Sessions C (deal edit) + D (polish) deferred until after Phase 3 lands per `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md` §7. |
+> | **Pre-Phase-3 fix plan** | **Complete (inserted between Phase 2 and Phase 3).** 21/21 foundation-review items closed across 3 sessions (0-A, 0-B, 0-C). See `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md` and `~/nexus-v2/docs/FOUNDATION-REVIEW-2026-04-22.md`. |
+> | 3 AI Features | **Ahead.** Phase 3 Day 1 kickoff is the next milestone. First step: move 7 remaining rewrites (02-08) from `source/prompts/` → `packages/prompts/files/` per fix plan §6. |
+> | 4 Intelligence | Ahead. |
+> | 5 Agent Layer | Ahead. |
+> | 6 Polish | Ahead. |
+>
+> **Section 8 "The First Week" — divergences that have been resolved by amendments:**
+>
+> - **Day 2 schema size.** Document said "33-table v2 migration"; actual shipped schema is 36 tables at Phase 1 Day 2 (plus 3 more via migration 0005 → 41 total). The extras (`experiment_assignments`, `experiment_attributions`, `experiment_attribution_events`, and later `prompt_call_log`, `transcript_embeddings`, `sync_state`) are per §2.2 hygiene + §2.16.1 preservation pull-forwards. Schema.ts is the source of truth.
+> - **Day 2 admin-role shape (§2.2.1 LOCKED — Phase 1 Day 2).** `users.is_admin boolean` + `public.is_admin()` SECURITY DEFINER helper instead of a roles table or Supabase JWT claims. Single seam for future multi-role expansion.
+> - **Day 2 four RLS patterns (§2.2.1).** Canonical patterns A/B/C/D — own-rows / team-lookup / read-all-update-own / read-all-authenticated+service-role-writes. Two tables (`agent_config_proposals`, `field_queries`) ship with read-all-authenticated and tighten in Phase 5 Day 1.
+> - **Day 3 pg_cron secret handling (§2.6.1 LOCKED — Phase 1 Day 3).** Supabase denies `ALTER DATABASE ... SET` for custom GUCs; URL + Bearer embedded as SQL literals inside the `cron.job.command` body. Rotation via Vercel env + `pnpm configure-cron`.
+> - **Day 4 Claude wrapper clarifications (§2.13.1 LOCKED — Phase 1 Day 4).** `01-detect-signals` max_tokens at 6000 (not 3000); dotenv `override: true` convention for Claude-calling scripts; reasoning_trace calendared resolutions for 01/03/06a/08; telemetry as prompt-quality early warning.
+> - **Day 5 HubSpot config path (§2.18.1 LOCKED — Phase 1 Day 5).** All HubSpot-specific config under `packages/shared/src/crm/hubspot/` — not `apps/web/src/config/` (Day-5 brief) or `packages/seed-data/` (07C). Resolves a disagreement in the original handoff docs.
+> - **Day 5 additional CrmAdapter methods.** `getCompany` + `createCompany` + `createContact` were stubbed in Day-5 brief but went live on Day 5 because `/pipeline` needs company name resolution + the minimal seed needs company/contact creation. Live vs stub list in `~/nexus-v2/packages/shared/src/crm/hubspot/adapter.ts` header.
+>
+> **Section 4 data-model additions since this plan was authored:**
+>
+> - `prompt_call_log` (§2.16.1 decision 3 locked Pre-Phase 3 Session 0-A, 19-column shape) — Claude wrapper telemetry, lands Session 0-B.
+> - `transcript_embeddings` (§2.16.1 decision 1, `vector(1536)` + voyage-large-2 + HNSW index Phase 3 Day 2) — corpus-intelligence preservation.
+> - `deal_events.event_context jsonb` nullable (§2.16.1 decision 2 pulled-forward) — Phase 3 Day 2 event writers populate; Phase 4 Day 1 flips to NOT NULL.
+> - `experiments.vertical` + composite index (foundation-review A6).
+> - `fitness_velocity` proper enum + column cast (A11 first half; `ai_category` second half defers to Phase 5 Day 3-4).
+> - `experiment_attributions.transcript_id` FK + `deal_events (hubspot_deal_id, created_at DESC)` composite index (A12, A13).
+> - `sync_state` table (A8) — pg_cron wiring Phase 4 Day 2.
+>
+> **Creative additions shipped or scheduled since this plan was authored:**
+>
+> - **C1** `pnpm enum:audit` — shipped Session 0-C. Three-way drift gate across TS/schema/HubSpot. Would have caught the ContactRole + MEDDPICC drifts by hand in Phase 2 Day 2 + pre-Phase-3 foundation review.
+> - **C5** demo-reset manifest — shipped Session 0-B (skeleton); every migration that adds a Nexus-owned table adds a manifest entry in the same commit. Actual demo-reset script walking the manifest lands Phase 6 Polish.
+> - **C2** applicability DSL + shared evaluator service — Phase 4 Day 1 per foundation review.
+> - **C3** MockClaudeWrapper — Phase 3 Day 1 alongside wrapper wiring.
+> - **C4** telemetry dashboard `/admin/claude-telemetry` — Phase 3 Day 2 (optional capstone; may defer to Day 3 for first real data).
+>
+> **§2.1.1 Supabase auth hotfix + three defense-in-depth layers (LOCKED — Phase 2 Day 2 hotfix).** Dashboard Site URL + Redirect URLs allowlist + `NEXT_PUBLIC_SITE_URL` on Vercel (all three scopes) + explicit `emailRedirectTo` + `/` page forwarding stray `?code=` to `/auth/callback`. Operational notes and resolution in `~/nexus-v2/docs/BUILD-LOG.md`.
+>
+> **Current v2 authoritative sources:**
+> - `~/nexus-v2/docs/BUILD-LOG.md` — day-by-day execution history + current state.
+> - `~/nexus-v2/docs/DECISIONS.md` — 51 guardrails + v2-era amendments (§2.1.1, §2.2.1, §2.2.2, §2.6.1, §2.13.1, §2.16.1, §2.18.1).
+> - `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md` — pre-Phase-3 fix plan (now closed out).
+> - `~/nexus-v2/docs/FOUNDATION-REVIEW-2026-04-22.md` — foundation review that motivated the fix plan.
+> - `~/nexus-v2/docs/PRODUCTIZATION-NOTES.md` — productization arc + corpus-intelligence second-product thesis; informs the "designed-for not built-for" sequencing in Section 7.
+>
+> Sections 1-12 below are unchanged from the original handoff. Read them as the blueprint with the status + amendments above factored in.
+
+---
+
 **Audience:** Codex (primary), Jeff (reviewer).
 **Purpose:** Operationalize [DECISIONS.md](DECISIONS.md) into an executable, phase-by-phase build plan for Nexus v2.
 **Status:** Authoritative. Every recommendation cites evidence from earlier handoff docs. No floating claims.

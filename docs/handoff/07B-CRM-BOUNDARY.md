@@ -1,5 +1,27 @@
 # 07B — CRM Data Boundary Mapping
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Active Phase 3+ consumer.** The shipped `CrmAdapter` interface + `HubSpotAdapter` implementation at `~/nexus-v2/packages/shared/src/crm/` follow Section 2's specification. Phase 3+ sessions reading this doc for sync architecture, per-table classification, and adapter-method specs should read with the amendments below in mind.
+>
+> **What shipped matches this document:** 31-method CrmAdapter interface (Section 2) + 5 error subclasses + read-through cache + `people` table + `observation_deals` / `coordinator_pattern_deals` / `experiment_attributions` / `experiment_attribution_events` join tables (§2.3 pattern) + dropped-tables list (`deal_agent_states`, `agent_actions_log`, `deal_stage_history`) + HubSpot v3 webhook receiver.
+>
+> **v2-era amendments that supersede specific Section details:**
+>
+> 1. **Association-labels + ContactRole (Section 4 + DECISIONS.md §2.13.1 + §2.18).** HubSpot Starter has no custom association labels; per-deal role metadata lives in the Nexus `deal_contact_roles` table (this doc already specifies this via `setContactRoleOnDeal`). ContactRole canonical is 9 values (locked §2.13.1 Phase 2 Day 2, not 6/7). Single write-path goes through `StakeholderService`; adapter's `setContactRoleOnDeal` delegates to it (Guardrail 13).
+> 2. **Config path convention (§2.18.1 LOCKED — Phase 1 Day 5).** `pipeline-ids.json`, `properties.ts`, adapter/client/webhook-verify modules all live under `packages/shared/src/crm/hubspot/` — not `apps/web/src/config/` or a nonexistent `packages/seed-data/`. The Day-5 brief + some references in this doc used the older paths; §2.18.1 supersedes.
+> 3. **Schema-side updates (Session 0-B migration 0005).** `deal_events.event_context jsonb` nullable (§2.16.1 decision 2 pulled-forward), `experiments.vertical` denormalized column (foundation-review A6), `fitness_velocity` proper enum replacing the text column, `experiment_attributions.transcript_id` FK added, `observations.signal_type` DROP NOT NULL (§2.13.1 nullable invariant), `deal_events (hubspot_deal_id, created_at DESC)` composite index, `prompt_call_log` + `transcript_embeddings` + `sync_state` tables added. This document's table classifications are unchanged; the column + index changes are additive.
+> 4. **MEDDPICC dimensionality at 8 (§2.13.1 Pre-Phase 3 Session 0-A).** 8 score properties on HubSpot Deal (v1 had 7; Session 0-C W1 provisioned the 8th `nexus_meddpicc_paper_process_score`). v2 total: 39 custom properties on the live portal (was 38). Any caller still computing "average across 7" should now average across 8 non-null dimensions (MeddpiccService.upsert already does this).
+> 5. **Webhook echo dedup (Session 0-C A9).** `HubSpotAdapter.handleWebhookEvent` skips the expensive HubSpot refetch when the event is `<type>.propertyChange` with a `nexus_*` property name — it patches the cached payload in-place from `event.newValue`. Closes 07C §5.1's documented intent ("Update cache only — these are our own writes; we already know").
+> 6. **Section 7.7 additions.** The shipped webhook signature verifier uses `HUBSPOT_CLIENT_SECRET` not a separately-generated "webhook secret" (07C §5.5 was ambiguous; operational-notes confirmation). Canonical host for signing uses `VERCEL_PROJECT_PRODUCTION_URL` (stable) not `VERCEL_URL` (per-deployment).
+>
+> **Current v2 authoritative sources:**
+> - `~/nexus-v2/packages/shared/src/crm/adapter.ts` — CrmAdapter interface (31 methods, 6 error classes including `CrmNotImplementedError`).
+> - `~/nexus-v2/packages/shared/src/crm/hubspot/adapter.ts` — HubSpot implementation (18 live + 13 stub methods).
+> - `~/nexus-v2/packages/shared/src/services/` — Nexus-only services (MeddpiccService, StakeholderService, ObservationService, DealIntelligence skeleton).
+> - `~/nexus-v2/packages/db/src/schema.ts` — shipped schema (41 Nexus-owned tables).
+> - `~/nexus-v2/docs/DECISIONS.md` §2.18 / §2.18.1 / §2.19 / §2.13.1 / §2.16.1 — authoritative decisions.
+>
+> Handoff-edit policy per §2.13.1: banner added with explicit Jeff approval via reconciliation session.
+
 ## Preamble
 
 **Purpose.** Definitive mapping from the 37 current Nexus tables (02-SCHEMA.md) to the v2 HubSpot/Nexus split mandated by DECISIONS.md 2.18 (CRM strategy) and 2.19 (data boundary). Every table is classified — HubSpot, Nexus, Split, or Drop — with full field-by-field destinations, sync direction, and an access pattern that the v2 codebase will use to read and write the data.

@@ -1,5 +1,30 @@
 # 07C — HubSpot Workspace and Integration Setup
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Phase 1 shipped; Phase 3+ reference.** The provisioning playbook in Section 8 ran successfully during Phase 1 Day 5 + Session 0-C against live portal `245978261`. Phase 3+ sessions read this doc for webhook contract, property shapes, rate limits, and data-flow semantics.
+>
+> **What shipped matches this document:** pipeline "Nexus Sales" with 9 stages (Section 2); `nexus_intelligence` property group (Section 3); webhook subscriptions (Section 5) with 6 anticipatory cache-refresh triggers added beyond the documented 12 (total 18 live); rate-limited HTTP client honoring 100/10s burst + 250k/day (Section 7); read-through cache with TTLs (Section 7); `CrmAdapter.bulkSync*` + periodic pg_cron reconciliation pattern (Section 7.5, pg_cron wiring deferred to Phase 4 Day 2 per `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md` §7.4).
+>
+> **v2-era amendments + operational resolutions that supersede specific Section details:**
+>
+> 1. **Total custom properties: 38 → 39 (Section 3.4, Section 8 Step 5).** Session 0-C W1 added `nexus_meddpicc_paper_process_score` to close the schema/HubSpot 7-vs-8 MEDDPICC drift. Live portal now carries 28 Deal + 5 Contact + 5 Company = 39 total (was 38). Section 3.1's `nexus_meddpicc_score` description "0-100 average across 7 dimensions" is now "average across 8 non-null dimensions" (`MeddpiccService.upsert` already averages 8).
+> 2. **`fieldType` taxonomy correction (§2.13.1 operational-notes — Phase 1 Day 5 Finding C).** Section 3.1's documented `single_line_text | multi_line_text | datetime` values are REJECTED by HubSpot's v3 Properties API. Correct values: `text | textarea | date`. The `HubSpotFieldType` TS union at `packages/shared/src/crm/hubspot/properties.ts` enumerates all 12 valid HubSpot-accepted types; consult it before adding new properties.
+> 3. **Property-label uniqueness (Phase 1 Day 5 Finding D).** Custom labels must be globally unique across native + custom fields on the portal. `"LinkedIn URL"` collided with native `hs_linkedin_url`; renamed to `"Nexus LinkedIn URL"`. Convention: prefix any ambiguous custom label with `"Nexus "`.
+> 4. **Section 5.3 webhook subscription API is wrong.** `POST /webhooks/v3/{appId}/subscriptions` with a private-app Bearer token returns 401 — private-app subscriptions are **UI-only** per current HubSpot docs. The `subscribe:hubspot-webhooks` script prints the canonical subscription list + deep link for an operator to paste/click through. Takes ~5 minutes. Documented in `~/nexus-v2/docs/BUILD-LOG.md` Phase 1 Day 5 Finding B.
+> 5. **Section 5.5 webhook signature verification uses `HUBSPOT_CLIENT_SECRET` directly** (the private app's client secret). There is no separately-generated "webhook secret"; 07C §5.5 was ambiguous. `.env.example`'s `HUBSPOT_WEBHOOK_SECRET` was retired on Day 5. Signing host uses `VERCEL_PROJECT_PRODUCTION_URL` (stable production alias), NOT `VERCEL_URL` (per-deployment) — Day-5 Finding E.
+> 6. **Section 2.5 config artifact paths.** `pipeline-ids.json` lives at `packages/shared/src/crm/hubspot/pipeline-ids.json` per §2.18.1 (the Day-5 brief's `apps/web/src/config/` + 07C's `packages/seed-data/` were both wrong; §2.18.1 is the canonical path). Artifacts must be imported via ESM JSON import (`import ... with { type: "json" }`), not `readFileSync`, to survive Vercel serverless bundling (Day-5 Finding F).
+> 7. **v4 `default` association endpoint (Phase 2 Day 4 Session A Finding A).** Numeric association typeIds via v3 (`PUT /crm/v3/objects/deals/{id}/associations/contacts/{id}/<typeId>`) returned 400 on portal `245978261`. Switched to v4's `PUT /crm/v4/objects/deals/{id}/associations/default/contacts/{id}` which auto-resolves the HubSpot-defined default label and works on Starter. Applies to `associateDealContact` + `dissociateDealContact`.
+> 8. **Email-domain auto-association (Phase 2 Day 4 Session A Finding B).** HubSpot auto-associates contacts to companies by email-domain matching; convenient for Session A's "create new stakeholder" flow but not guaranteed on all portals. Parked: add explicit contact↔company association call in `upsertContact` when `companyId` is provided.
+> 9. **Webhook echo dedup on `nexus_*` property-change (Session 0-C A9).** `handleWebhookEvent` skips the full refetch when the event's `propertyName` starts with `nexus_` — patches the cached payload in-place instead. 07C §5.1's "Update cache only (these are our own writes; we already know)" is the documented intent this implements.
+>
+> **Current v2 authoritative sources:**
+> - `~/nexus-v2/packages/shared/src/crm/hubspot/properties.ts` — 39 property definitions + option enums.
+> - `~/nexus-v2/packages/shared/src/crm/hubspot/pipeline-ids.json` — 9-stage mapping captured from portal `245978261`.
+> - `~/nexus-v2/packages/shared/src/crm/hubspot/adapter.ts` — live adapter with all resolutions above wired in.
+> - `~/nexus-v2/docs/BUILD-LOG.md` Phase 1 Day 5 + Session 0-C — operational findings and their resolutions.
+> - `~/nexus-v2/docs/DECISIONS.md` §2.13.1 + §2.18 + §2.18.1 — authoritative decisions.
+>
+> Handoff-edit policy per §2.13.1: banner added with explicit Jeff approval via reconciliation session.
+
 ## Preamble
 
 **Purpose.** Concrete HubSpot-side design for the CRM boundary defined in 07B. This document specifies the pipeline, stages, custom properties, association labels, webhook subscriptions, auth model, rate budget, and the setup playbook an operator runs against a fresh HubSpot workspace to produce the v2 demo environment.

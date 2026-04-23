@@ -1,5 +1,20 @@
 # Nexus Rebuild — Decisions Log
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **FROZEN v1 baseline.** This is the baseline constitution captured at the end of the planning phase. The active working copy is at `~/nexus-v2/docs/DECISIONS.md`; that fork carries every v2-era amendment (§2.1.1, §2.2.1, §2.2.2, §2.6.1, §2.13.1, §2.16.1, §2.18.1) plus the 51 guardrails.
+>
+> **Do not update this file.** All future amendments land in the active copy at `~/nexus-v2/docs/DECISIONS.md` per the "Fork notice" at the top of that file. This handoff copy is read-only reference — read it only to see what changed, not to find current-state answers.
+>
+> **v2-era amendments to look up in the active copy:**
+> - **§2.1.1** Supabase Auth URL configuration + magic-link redirect discipline (Phase 2 Day 2 hotfix).
+> - **§2.2.1** Day-2 implementation clarifications — admin-role shape, experiment four-table structure, four RLS patterns A/B/C/D.
+> - **§2.2.2** `deal_fitness_scores` column set — `readness` typo resolved by elision.
+> - **§2.6.1** pg_cron secret handling — SQL literals inside cron.job.command body.
+> - **§2.13.1** Day-4 + v2-era unified-Claude-layer clarifications — `01-detect-signals` max_tokens at 6000; reasoning_trace calendared resolutions; dotenv `override: true` convention; ContactRole 9-value canonical; observations.signal_type nullable invariant (Session 0-A); MEDDPICC 8-dim canonical (Session 0-A).
+> - **§2.16.1** Corpus-intelligence preservation — 5 decisions with shape locks for transcript_embeddings (vector(1536) + voyage-large-2 + HNSW), deal_events.event_context (nullable → NOT NULL flip at Phase 4 Day 1), prompt_call_log (19-col shape locked Session 0-A), speaker-turn preservation, extensible tool schemas.
+> - **§2.18.1** HubSpot config path convention — `packages/shared/src/crm/hubspot/`.
+
+---
+
 **Purpose:** Single source of truth for product and architectural decisions made during the Nexus → Codex rebuild planning. Both Claude (planning chat) and Claude Code (extraction sessions) read this file for context.
 
 **Status key:**

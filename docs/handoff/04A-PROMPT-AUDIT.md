@@ -1,5 +1,18 @@
 # 04A — Prompt Quality Audit
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Historical v1 audit + input to 04C rewrites.** Phase 3+ sessions rarely read this directly; 04C's Section 1 (8 rewrites) + Section 2 (16 principles) already operationalized this audit's findings. Read as the "why" behind 04C's per-prompt disposition (MUST REWRITE / SHOULD REWRITE / PRESERVE).
+>
+> **v2-era resolutions for findings in this doc:**
+> - 4 MUST REWRITE prompts (#4, #11, #14, #25) — all covered by 04C Rewrites 3/4/6/8.
+> - `reasoning_trace` absent on 23/25 — §2.13.1 calendars per-prompt resolutions: 02 + 04 + 05 + 06b have it; 01 + 03 land before Phase 3 Day 2 / Phase 5 Day 1 respectively; 06a + 08 reviewed at Phase 5 Day 1 kickoff.
+> - JSON-in-text parsing anti-pattern — resolved by §2.13 + Guardrails 16-18 (tool-use schemas forced via the Claude wrapper).
+> - Signal-type enum drift (9 in #1 vs 7 in #21) — closed by single-sourced `SIGNAL_TAXONOMY` tuple imported by both schema pgEnum + tool-use schema + Rewrite 1.
+> - `preClassified: true` trust flag (#4 upstream) — resolved by §2.11 + Guardrail 14.
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` §2.13 / §2.13.1; `~/nexus/docs/handoff/04C-PROMPT-REWRITES.md` Section 1. Handoff-edit policy per §2.13.1.
+
+---
+
 ## Preamble
 
 This document evaluates the **text** of each Claude prompt in Nexus for structural quality, output schema fitness, known failure modes, and rewrite priority. It is the complement to [07A-CONTEXT-AUDIT.md](./07A-CONTEXT-AUDIT.md), which evaluated what context each prompt receives. Together, the two documents diagnose why the current prompts produce the output they do — and what to change.

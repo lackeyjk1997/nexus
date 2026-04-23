@@ -1,5 +1,20 @@
 # Nexus → Codex Handoff Package
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Historical packaging intro.** This README describes the handoff package as prepared for a then-hypothetical Codex rebuild. The rebuild is now **live and well underway** at `~/nexus-v2/`; Phase 1 shipped, Phase 2 Days 1-4 Sessions A+B shipped, pre-Phase-3 fix plan shipped. Read this README as historical context for how the handoff was shaped, not as current orchestration guidance.
+>
+> **Current state pointers:**
+> - Active v2 repo: `~/nexus-v2/` (GitHub: `lackeyjk1997/nexus-v2`).
+> - Current CLAUDE.md with required reading order: `~/nexus-v2/CLAUDE.md`.
+> - Day-by-day build history: `~/nexus-v2/docs/BUILD-LOG.md`.
+> - Current constitution (fork of this package's DECISIONS.md + v2 amendments): `~/nexus-v2/docs/DECISIONS.md`.
+> - Productization arc + corpus-intelligence thesis: `~/nexus-v2/docs/PRODUCTIZATION-NOTES.md`.
+> - Pre-Phase-3 foundation review + closed-out execution plan: `~/nexus-v2/docs/FOUNDATION-REVIEW-2026-04-22.md` + `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md`.
+> - Oversight-session meta (rhythm, Jeff's style, handoff-prompt template): `~/nexus-v2/docs/OVERSIGHT-META.md`.
+>
+> The Table of Contents below remains accurate as a handoff-package inventory; each entry's own reconciliation banner names its current Phase 3+ relevance and v2-era amendments.
+
+---
+
 **Source commit:** 39bd044
 **Generated:** 2026-04-22
 **Source repo:** https://github.com/lackeyjk1997/nexus

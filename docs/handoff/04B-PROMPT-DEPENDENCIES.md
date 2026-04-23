@@ -1,5 +1,16 @@
 # 04B — Prompt Dependency Graph
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Reference for Phase 3+ scheduling.** The dependency graph and upstream-first ordering (Section 4) still drives Phase 3 Day 2's pipeline wiring sequence.
+>
+> **v2-era resolution of the CRITICAL finding:**
+> - **Finding 1 — coordinator → call-prep broken edge (v1).** Resolved by §2.17 LOCKED: "call prep MUST query the coordinator; `coordinator_patterns` is the authoritative table." v2 eliminates the actor-hop entirely; call prep reads `coordinator_patterns` directly via `DealIntelligence.getApplicablePatterns()`. No addCoordinatedIntel relay.
+>
+> **Use this document as:** a map of which prompts consume which others' outputs, so Phase 3 Day 2 transcript pipeline sequencing + Phase 4 Day 2 coordinator wiring order + Phase 5 Day 1 agent-config-proposal flow each check themselves against the dependency edges here.
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` §2.17 (coordinator) + `~/nexus/docs/handoff/04C-PROMPT-REWRITES.md` Section 3 (rewrite ordering). Handoff-edit policy per §2.13.1.
+
+---
+
 Per DECISIONS.md 2.15, this is the third of the four-session prompt analysis phase (4.5a → 4.5b → **4.6** → 4.7). Having audited every prompt's text (04A-PROMPT-AUDIT.md) and every prompt's context inputs (07A-CONTEXT-AUDIT.md), this document maps the full dependency graph across all 25 prompts — which prompts consume which other prompts' outputs, how quality propagates, and in what order rewrites should land.
 
 **How to read this document:**

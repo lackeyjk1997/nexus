@@ -1,5 +1,18 @@
 # 04 — Prompt Registry
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Active Phase 3+ consumer for PORT-VERBATIM prompts.** 8 of 25 are rewritten in 04C (Rewrites 1-8 covering prompts 1, 4, 9, 11, 14, 15, 21, 25 with #14 splitting into 14A/14B = 9 files). The other 17 port verbatim per `04C Section 2` + `~/nexus/docs/handoff/source/prompts/PORT-MANIFEST.md`.
+>
+> **v2-era amendments affecting this document:**
+> - **ContactRole taxonomy** referenced in prompts is locked at 9 values (§2.13.1 Phase 2 Day 2). `ciso` + `other` retired.
+> - **MEDDPICC dimensionality** is 8 (§2.13.1 Pre-Phase 3 Session 0-A). Prompts that iterate MEDDPICC dimensions should cover all 8 including `paper_process`.
+> - **Signal taxonomy** is the 9-value canonical in `packages/shared/src/enums/signal-taxonomy.ts` — prompts that enumerate signal types must import from there (via the tool-use schema).
+> - **Prompt file canonical location.** Rewrite 1 lives at `~/nexus-v2/packages/prompts/files/01-detect-signals.md` (v1.1.0, max_tokens 6000); Rewrites 2-8 move at Phase 3 Day 1 kickoff per `docs/PRE-PHASE-3-FIX-PLAN.md` §6.
+> - **Tool-use structured output** (§2.13 + Guardrails 16-18). All prompt responses must be parsed via tool-use schemas, not regex JSON extraction.
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` §2.13.1; `~/nexus-v2/packages/prompts/files/`. Handoff-edit policy per §2.13.1.
+
+---
+
 Every Claude API call in Nexus, extracted verbatim. **These prompts are the product IP** (per DECISIONS.md 2.7 LOCKED — preserve text verbatim in the rebuild; refactor code around them).
 
 **25 total call sites** (matches 01-INVENTORY.md §6):

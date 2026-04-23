@@ -1,5 +1,24 @@
 # 07A — Context Assembly Audit
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Phase 3-5 reference for context-assembly services.** This document is the list of what Phase 3-5 context-assembly services (DealIntelligence, TranscriptPreprocessor, CallPrepOrchestrator, EmailDrafter) must deliver to each prompt. Still authoritative for gap identification.
+>
+> **v2-era resolutions for the two CRITICAL gaps:**
+> - **#11 Call Prep — CRITICAL.** Coordinator gap resolved by §2.17 + §2.16 (DealIntelligence is the single interface for event-stream + coordinator-pattern reads). MEDDPICC trajectory + prior briefs + full fitness narrative available via event sourcing.
+> - **#14 Close Analysis — CRITICAL.** Resolved by §1.1 (continuous pre-analysis + final deep pass) + §2.16 (event-sourced deal theory). Split into 14A continuous + 14B final deep pass per 04C Rewrite 6.
+>
+> **Top 5 highest-leverage context fixes** (this doc's Cross-Cutting Findings):
+> 1. Wire `coordinator_patterns` into 7 prompts at once → §2.17 direct-read from the authoritative table.
+> 2. `DealIntelligence` service returning canonical deal-context object → §2.16, skeleton shipped Session 0-B (`buildEventContext`); full surface lands Phase 4.
+> 3. Full transcript text (not summaries) to synthesis → `TranscriptPreprocessor.getCanonical()` Phase 3 Day 2.
+> 4. Continuous deal-theory accumulation → §1.1 + §2.16 event sourcing; `deal_theory_updated` events emitted by Rewrite 6a during Phase 3 Day 2+.
+> 5. Applicability gating → §2.21 + C2 applicability DSL (Phase 4 Day 1 per `docs/PRE-PHASE-3-FIX-PLAN.md` §7.3).
+>
+> Duplication patterns (8 enumerated in this doc's Cross-Cutting section) are closing as the v2 service layer lands: MeddpiccService.formatForPrompt, CrmAdapter.listDealContacts, TranscriptPreprocessor.getCanonical, Formatter module (§2.13 LOCKED), DealIntelligence for event-sourced reads.
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` §2.13 / §2.16 / §2.17 / §2.21; `~/nexus-v2/packages/shared/src/services/`. Handoff-edit policy per §2.13.1.
+
+---
+
 For every Claude call site in 04-PROMPTS.md, this doc diagnoses the gap between the context the prompt currently receives and the context it should receive for VP-of-Sales-grade output. Per DECISIONS.md 2.8, this feeds Prompts 4.5a/b (quality audit) and Prompt 10 (rebuild plan).
 
 **Scope:** 25 prompts (matches 04-PROMPTS.md and 01-INVENTORY §6). Diagnosis only — no rewrites (that's Prompt 4.7).

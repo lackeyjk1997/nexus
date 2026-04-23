@@ -1,5 +1,9 @@
 # 08 — Source Index
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN — archival index.** 138 files under `source/` are the v1 codebase snapshot at commit `246c45f`. Read-only reference — v2 does not import from here. Section 3's v2-ready prompts (9 rewrites + PORT-MANIFEST.md) will have moved to `~/nexus-v2/packages/prompts/files/` at Phase 3 Day 1 kickoff per `docs/PRE-PHASE-3-FIX-PLAN.md` §6; handoff copies stay archival.
+
+---
+
 Index of every source file copied into `docs/handoff/source/` plus the v2-ready prompt staging. Per DECISIONS.md 2.7, copied source files are identical to originals — do not modify. Per DECISIONS.md 2.10 / 2.12 / 2.13, many of these routes/components get replaced by service functions in v2; cross-references below point to the applicable decision.
 
 Generated 2026-04-21 from commit `246c45f` (see `README.md` header).

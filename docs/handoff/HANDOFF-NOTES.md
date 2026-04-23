@@ -1,5 +1,13 @@
 # Handoff Notes — For Jeff
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Historical — superseded by the v2 oversight rhythm.** These notes were for handing the package to Codex as an external rebuilder. The actual rebuild runs via Claude Code in `~/nexus-v2/` with oversight via a separate chat — rhythm captured in `~/nexus-v2/docs/OVERSIGHT-META.md`. The "First Codex prompt" template below is **not** the current kickoff shape.
+>
+> **Current kickoff rhythm:** `~/nexus-v2/docs/OVERSIGHT-META.md` "Handoff prompt for a fresh oversight chat" section. Oversight reads META → CLAUDE.md → DECISIONS → BUILD-LOG → PRODUCTIZATION → FOUNDATION-REVIEW → PRE-PHASE-3-FIX-PLAN; per-session kickoff prompts are drafted from the fix plan or rebuild plan sections.
+>
+> **What's still useful here:** the "If Codex goes off-script" guardrails (conceptually apply to any Claude Code session — redirect to LOCKED decisions, don't re-litigate); the Mode 2 design-session discipline (Mode 1 shipped Phase 2 Day 1 via `docs/design/DESIGN-SYSTEM.md`; Mode 2 hero-page sessions remain per §3.2).
+
+---
+
 These are the notes you use when you upload this package to Codex. Not for Codex — for you. Keep them tight and actionable.
 
 ---

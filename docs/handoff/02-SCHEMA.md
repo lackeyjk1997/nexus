@@ -1,5 +1,9 @@
 # 02 — Database Schema
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN v1 schema analysis.** 37 tables / 25 enums / no RLS / 4 unique indexes described here is the v1 baseline that v2 rebuilt against per §2.2 hygiene. v2 schema lives at `~/nexus-v2/packages/db/src/schema.ts` (41 tables as of migration 0005, RLS 4-pattern across all tables, all FKs with explicit ON DELETE semantics, all enum-shaped columns promoted to Postgres enums). Not load-bearing for Phase 3+; preserved as the "what v2 replaces" reference. Use only when researching why a specific v2 schema choice was made.
+
+---
+
 Schema at commit `c71d2b6` (2026-04-21). Single file: [packages/db/src/schema.ts](../../packages/db/src/schema.ts) (1110 lines). DB export: [packages/db/src/index.ts](../../packages/db/src/index.ts). Migrations: `packages/db/drizzle/0000_*.sql` through `0011_*.sql` plus `meta/` snapshots.
 
 **Top-line facts:**

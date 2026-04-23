@@ -1,5 +1,20 @@
 # 05 — Rivet Actors
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Historical diagnosis — Rivet is REMOVED in v2.** Per §2.6 LOCKED, Rivet is not installed; `rivetkit`, `@rivetkit/next-js`, `@rivetkit/react` are not dependencies. Long-running work runs as `jobs` rows + `pg_cron` + Supabase Realtime (shipped Phase 1 Day 3).
+>
+> **This doc's purpose today:** explain *why* Rivet was removed. The "gutted stub" + "dismantled in place" findings in §1 + §4 are the concrete evidence that drove §2.6. Future readers who wonder "could we have kept Rivet?" should read this to see the honest answer (no — it was already half-migrated away by v1's team).
+>
+> **v2 replacements for each Rivet responsibility** (from Section 5 of 10-REBUILD-PLAN.md):
+> - Per-deal state accumulation → `deal_events` append-only + `DealIntelligence.getDealState()` (§2.16; skeleton shipped Session 0-B).
+> - Durable transcript workflow → Postgres `jobs` row per transcript; worker executes sequential steps per §2.24 (Phase 3 Day 2 wiring).
+> - Scheduled health checks → pg_cron.
+> - Cross-deal coordinator → `coordinator_patterns` table + pg_cron + direct reads from call prep (§2.17; Phase 4 Day 2).
+> - WebSocket broadcasts → Supabase Realtime on `jobs` status (shipped Phase 1 Day 3).
+>
+> Current v2 authoritative sources: `~/nexus-v2/docs/DECISIONS.md` §2.6; `~/nexus-v2/packages/db/src/schema.ts` jobs + job_results; `~/nexus-v2/apps/web/src/app/api/jobs/worker/route.ts`. Handoff-edit policy per §2.13.1.
+
+---
+
 This document is deliberately blunt. Jeff's framing was: "we don't actually have a true understanding of what some of these things do, and they're not really working as well as they could be in production." After reading every line of actor code, the situation is worse than that framing suggests — Rivet has been **progressively dismantled in place** to work around production failures, while the package remains a dependency and the CLAUDE.md narrative still talks about Rivet as if it's the architecture.
 
 ---

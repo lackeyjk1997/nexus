@@ -1,5 +1,20 @@
 # Prompt Port Manifest
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Still authoritative for Phase 3 Day 1 prompt-port kickoff.**
+>
+> **Move decision (resolved `~/nexus-v2/docs/PRE-PHASE-3-FIX-PLAN.md` §6).** Phase 3 Day 1's first executed step is:
+> 1. Copy the 7 remaining rewrites (02-observation-classification.md through 08-call-prep-orchestrator.md) from this directory into `~/nexus-v2/packages/prompts/files/`.
+> 2. Wiring pass per-file: add `tool_name` front-matter; verify max_tokens vs production watch items (coordinator-synthesis at 2500 and give-back at 600 are watch items; call-prep-orchestrator 4000 likely tight); bump version 1.0.0 → 1.1.0 where edits are non-trivial.
+> 3. Handoff copies here become archival. Canonical v2 prompts live at `~/nexus-v2/packages/prompts/files/`.
+>
+> Precedent: `01-detect-signals.md` already at `~/nexus-v2/packages/prompts/files/01-detect-signals.md` (v1.1.0, max_tokens 6000) per Phase 1 Day 4; §2.13.1 locks "the .md front matter in packages/prompts/files/01-detect-signals.md is the source of truth — do not re-sync back to 04C Rewrite 1's 3000."
+>
+> **ContactRole 9-value + MEDDPICC 8-dim alignments are already reflected** in rewrites 05-deal-fitness.md line 291 + 08-call-prep-orchestrator.md line 260 via nexus commit `533d3eb` (explicit Jeff approval Phase 2 Day 2; §2.13.1). Rewrites 06a + 06b carry the 8-dim MEDDPICC from initial authoring.
+>
+> **Port-checklist reference** (Section "Port checklist (from 04C Section 2)" below) is still authoritative for the 17 PORT-WITH-CLEANUPS / PORT-VERBATIM / CONSOLIDATE prompts.
+
+---
+
 All 25 original prompts from `04-PROMPTS.md`, mapped to their v2 disposition. Per DECISIONS.md 2.7, prompts not rewritten in `04C-PROMPT-REWRITES.md` are ported **verbatim** (preserving model instructions) but get mechanical cleanups per the Section 2 "Prompt Principles for Codex" checklist: move from inline string literal to `.md` file, port to tool-use schemas, wire shared enums (`SignalTaxonomy`, `OdealTaxonomy`, `CloseFactorTaxonomy`), set explicit temperatures, route context through services (`DealIntelligence`, `CrmAdapter`, `IntelligenceCoordinator`, `TranscriptPreprocessor`, `Formatter`).
 
 Status legend:

@@ -1,5 +1,9 @@
 # 01 — Inventory
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN v1 snapshot.** Counts below describe the v1 codebase at commit `c71d2b6`. v2 counts diverge — see `~/nexus-v2/docs/BUILD-LOG.md` "Current state" block and `~/nexus-v2/packages/db/src/schema.ts` for current reality. Not load-bearing for Phase 3+ decisions; preserved as the "what v2 replaces" reference.
+
+---
+
 Project scope at commit `c71d2b6` (2026-04-21). Counts and paths only — no narrative. Everything derived from the current repo state.
 
 ---

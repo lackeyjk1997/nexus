@@ -1,5 +1,16 @@
 # 03 — API Routes
 
+> **Reconciliation banner (added 2026-04-22).** Status: **FROZEN v1 snapshot.** 41 routes described here is v1 state. v2 routes list lives at `~/nexus-v2/apps/web/src/app/` (13 routes as of Phase 2 Day 4 Session B); the rebuild explicitly dropped 5 dead routes per §1.10 + added jobs infrastructure routes + `/api/dev-login` + `/api/hubspot/webhook`. Consult this doc when porting v1 route behavior into v2 services/routes; don't use it as a current-state reference.
+>
+> **Universal gaps noted here are all resolved in v2:**
+> - No auth → §2.1 Supabase Auth + RLS Day 1 (Phase 1 Day 2).
+> - No rate limiting → still parked for productization (PRODUCTIZATION-NOTES Stage 2+).
+> - `preClassified: true` trust flag → §2.11 (no client-controlled trust flags).
+> - Internal fetch hops → §2.12 (server-to-server is a function call).
+> - Silent error swallowing → v2 pipelines fail loudly per §2.24 (no "graceful degradation" faking success).
+
+---
+
 41 `route.ts` files under `apps/web/src/app/api/`, alphabetical by path. Total LOC: 9,305.
 
 ## Universal gaps (do NOT repeat per route)

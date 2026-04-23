@@ -1,5 +1,26 @@
 # 04C — Prompt Rewrites + Principles for Codex
 
+> **Reconciliation banner (added 2026-04-22 during the Pre-Phase 3 reconciliation pass).** Status: **Active Phase 3+ consumer** — this document is read heavily at Phase 3 Day 1 kickoff and throughout the pipeline wiring. Read alongside the amendments below, which supersede specific details in this doc.
+>
+> **v2-era amendments affecting this document (all LOCKED in `~/nexus-v2/docs/DECISIONS.md`):**
+>
+> 1. **Prompt-file canonical location (`docs/PRE-PHASE-3-FIX-PLAN.md` §6, resolved Pre-Phase 3).** The 8 rewritten prompts move into `~/nexus-v2/packages/prompts/files/` at Phase 3 Day 1 kickoff as their canonical home. `01-detect-signals.md` already lives there (Phase 1 Day 4 precedent at `1.1.0`, max_tokens 6000). The `~/nexus/docs/handoff/source/prompts/` directory remains archival read-only — do not edit there without §2.13.1 approval.
+> 2. **ContactRole canonical locked at 9 values (§2.13.1 LOCKED — Phase 2 Day 2).** Values: `champion, economic_buyer, decision_maker, technical_evaluator, end_user, procurement, influencer, blocker, coach`. Retires `ciso` (v1 title-encoded) + `other` (closed-taxonomy code smell). Already reflected in Rewrite 5 (05-deal-fitness.md line 291) + Rewrite 8 (08-call-prep-orchestrator.md line 260) via nexus commit `533d3eb`; the 04C text at line 1450 + 2483 was updated in the same commit. Front-matter versions bumped 1.0.0 → 1.1.0.
+> 3. **MEDDPICC dimensionality locked at 8 (§2.13.1 LOCKED — Pre-Phase 3 Session 0-A).** Values: `metrics, economic_buyer, decision_criteria, decision_process, identify_pain, champion, competition, paper_process`. 04C text already consistent with 8; closes a drift vector where HubSpot only carried 7 of the properties (resolved by Session 0-C W1 which provisioned `nexus_meddpicc_paper_process_score` to bring live portal to 39 properties).
+> 4. **`01-detect-signals.md` max_tokens 3000 → 6000 (§2.13.1 LOCKED — Phase 1 Day 4).** The Rewrite 1 annotation "raised from 2048 to accommodate per-signal confidence + rationale field" was empirically insufficient — 1448-word fixture hit `stop_reason: max_tokens` at 2999 output tokens. The `.md` front matter in `packages/prompts/files/01-detect-signals.md` is the source of truth; do not re-sync back to 3000.
+> 5. **reasoning_trace calendared resolutions (§2.13.1).** 04C Principle 6 requires reasoning-first for classification/synthesis/hypothesis prompts. Audit: present on 02, 04, 05, 06b; CLEAR GAP on 01 (must land before Phase 3 Day 2) + 03 (must land before Phase 5 Day 1); judgment call on 06a + 08 (review Phase 5 Day 1 kickoff). Per-prompt front-matter version bumps at resolution.
+> 6. **Tool-use schema wiring (§2.13.1 Day-4 clarifications).** Prompt 01's tool `record_detected_signals` is the precedent. Rewrites 2-8 land their tool schemas at Phase 3 Day 1 move time (kickoff first step per PRE-PHASE-3-FIX-PLAN.md §6).
+>
+> **Current v2 authoritative sources:**
+> - `~/nexus-v2/docs/DECISIONS.md` §2.13.1 — unified Claude layer + all prompt-level locks.
+> - `~/nexus-v2/packages/prompts/files/01-detect-signals.md` — first ported rewrite (canonical).
+> - `~/nexus-v2/packages/shared/src/claude/client.ts` — unified wrapper with tool-use forcing + retry + telemetry.
+> - `~/nexus-v2/docs/BUILD-LOG.md` Phase 1 Day 4 entry — integration test + max_tokens finding.
+>
+> Section 1 Rewrites 1-8 + Section 2 Principles + Section 3 Rationale below are unchanged from handoff. Read them with the amendments above in mind.
+
+---
+
 Per DECISIONS.md 2.15, this is the final session of the four-session prompt analysis phase (4.5a → 4.5b → 4.6 → **4.7**). It produces two deliverables:
 
 1. **Section 1** — Production-ready rewrites of the eight highest-leverage prompts in the upstream-first sequence established by 04B-PROMPT-DEPENDENCIES.md Section 4. Codex drops these into the v2 `prompts/` directory with minimal wiring work.
